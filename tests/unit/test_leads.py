@@ -158,6 +158,264 @@ class TestLeadsList:
         assert any(lead["id"] == test_lead.id for lead in data["items"])
 
 
+class TestLeadsListOrdering:
+    """Tests for the `?order_by=&order_dir=` allowlist on the list endpoint.
+
+    Exercises every column the /leads UI header lets a user click on so a
+    rename in LEAD_SORTABLE_FIELDS that silently breaks the URL contract
+    fails CI rather than landing as a no-op (build_order_clauses falls
+    back to default ordering on unknown keys, which would otherwise hide
+    a regression behind a still-200 response).
+    """
+
+    @pytest.mark.asyncio
+    async def test_list_leads_order_by_score_desc(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+    ):
+        for first, score in (("Alpha", 10), ("Bravo", 90), ("Charlie", 50)):
+            db_session.add(
+                Lead(
+                    first_name=first,
+                    last_name="Sort",
+                    email=f"{first.lower()}@score.example",
+                    status="new",
+                    score=score,
+                    owner_id=test_user.id,
+                    created_by_id=test_user.id,
+                )
+            )
+        await db_session.commit()
+
+        response = await client.get(
+            "/api/leads",
+            headers=auth_headers,
+            params={"order_by": "score", "order_dir": "desc"},
+        )
+        assert response.status_code == 200
+        scores = [lead["score"] for lead in response.json()["items"]]
+        assert scores == sorted(scores, reverse=True)
+
+    @pytest.mark.asyncio
+    async def test_list_leads_order_by_score_asc(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+    ):
+        for first, score in (("Alpha", 10), ("Bravo", 90), ("Charlie", 50)):
+            db_session.add(
+                Lead(
+                    first_name=first,
+                    last_name="SortAsc",
+                    email=f"{first.lower()}@asc.example",
+                    status="new",
+                    score=score,
+                    owner_id=test_user.id,
+                    created_by_id=test_user.id,
+                )
+            )
+        await db_session.commit()
+
+        response = await client.get(
+            "/api/leads",
+            headers=auth_headers,
+            params={"order_by": "score", "order_dir": "asc"},
+        )
+        assert response.status_code == 200
+        scores = [lead["score"] for lead in response.json()["items"]]
+        assert scores == sorted(scores)
+
+    @pytest.mark.asyncio
+    async def test_list_leads_order_by_name(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+    ):
+        # `name` sorts by (last_name, first_name) per LEAD_SORTABLE_FIELDS.
+        for last in ("Zenith", "Alvarez", "Marquez"):
+            db_session.add(
+                Lead(
+                    first_name="N",
+                    last_name=last,
+                    email=f"{last.lower()}@name.example",
+                    status="new",
+                    owner_id=test_user.id,
+                    created_by_id=test_user.id,
+                )
+            )
+        await db_session.commit()
+
+        response = await client.get(
+            "/api/leads",
+            headers=auth_headers,
+            params={"order_by": "name", "order_dir": "asc"},
+        )
+        assert response.status_code == 200
+        last_names = [
+            lead["last_name"]
+            for lead in response.json()["items"]
+            if lead.get("last_name") in {"Zenith", "Alvarez", "Marquez"}
+        ]
+        assert last_names == ["Alvarez", "Marquez", "Zenith"]
+
+    @pytest.mark.asyncio
+    async def test_list_leads_order_by_company(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+    ):
+        for company in ("Zeta Corp", "Alpha LLC", "Mid Co"):
+            db_session.add(
+                Lead(
+                    first_name="C",
+                    last_name="Sort",
+                    email=f"{company.split()[0].lower()}@co.example",
+                    company_name=company,
+                    status="new",
+                    owner_id=test_user.id,
+                    created_by_id=test_user.id,
+                )
+            )
+        await db_session.commit()
+
+        response = await client.get(
+            "/api/leads",
+            headers=auth_headers,
+            params={"order_by": "company", "order_dir": "asc"},
+        )
+        assert response.status_code == 200
+        companies = [
+            lead["company_name"]
+            for lead in response.json()["items"]
+            if lead.get("company_name") in {"Zeta Corp", "Alpha LLC", "Mid Co"}
+        ]
+        assert companies == ["Alpha LLC", "Mid Co", "Zeta Corp"]
+
+    @pytest.mark.asyncio
+    async def test_list_leads_order_by_source(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+    ):
+        sources = []
+        for name in ("Zebra Source", "Alpha Source", "Mid Source"):
+            src = LeadSource(name=name, is_active=True)
+            db_session.add(src)
+            sources.append(src)
+        await db_session.commit()
+        for src in sources:
+            await db_session.refresh(src)
+
+        for src in sources:
+            db_session.add(
+                Lead(
+                    first_name="S",
+                    last_name="Src",
+                    email=f"{src.name.split()[0].lower()}@src.example",
+                    source_id=src.id,
+                    status="new",
+                    owner_id=test_user.id,
+                    created_by_id=test_user.id,
+                )
+            )
+        await db_session.commit()
+
+        response = await client.get(
+            "/api/leads",
+            headers=auth_headers,
+            params={"order_by": "source", "order_dir": "asc"},
+        )
+        assert response.status_code == 200
+        source_names = [
+            lead["source"]["name"]
+            for lead in response.json()["items"]
+            if lead.get("source")
+            and lead["source"]["name"]
+            in {"Zebra Source", "Alpha Source", "Mid Source"}
+        ]
+        assert source_names == ["Alpha Source", "Mid Source", "Zebra Source"]
+
+    @pytest.mark.asyncio
+    async def test_list_leads_order_by_stage(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+    ):
+        # PipelineStage.order is the natural sort key — descending puts
+        # later-pipeline rows first, matching the kanban left→right order.
+        late = PipelineStage(
+            name="Late", order=9, pipeline_type="lead", is_active=True
+        )
+        early = PipelineStage(
+            name="Early", order=1, pipeline_type="lead", is_active=True
+        )
+        mid = PipelineStage(
+            name="Mid", order=5, pipeline_type="lead", is_active=True
+        )
+        db_session.add_all([late, early, mid])
+        await db_session.commit()
+        for s in (late, early, mid):
+            await db_session.refresh(s)
+
+        for stage in (late, early, mid):
+            db_session.add(
+                Lead(
+                    first_name="St",
+                    last_name="Sort",
+                    email=f"{stage.name.lower()}@stage.example",
+                    pipeline_stage_id=stage.id,
+                    status="new",
+                    owner_id=test_user.id,
+                    created_by_id=test_user.id,
+                )
+            )
+        await db_session.commit()
+
+        response = await client.get(
+            "/api/leads",
+            headers=auth_headers,
+            params={"order_by": "stage", "order_dir": "asc"},
+        )
+        assert response.status_code == 200
+        stage_ids = [
+            lead["pipeline_stage_id"]
+            for lead in response.json()["items"]
+            if lead.get("pipeline_stage_id") in {early.id, mid.id, late.id}
+        ]
+        assert stage_ids == [early.id, mid.id, late.id]
+
+    @pytest.mark.asyncio
+    async def test_list_leads_unknown_order_by_falls_back(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_lead: Lead,
+    ):
+        # Unknown sort key must not 4xx — build_order_clauses silently
+        # returns the default ordering. Protects the URL contract against
+        # stale share-links from before a field was added/removed.
+        response = await client.get(
+            "/api/leads",
+            headers=auth_headers,
+            params={"order_by": "not_a_real_field", "order_dir": "asc"},
+        )
+        assert response.status_code == 200
+
+
 class TestLeadsCreate:
     """Tests for lead creation endpoint."""
 

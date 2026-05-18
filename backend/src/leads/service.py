@@ -14,6 +14,7 @@ from src.core.sorting import build_order_clauses
 from src.leads.models import Lead, LeadSource
 from src.leads.schemas import LeadCreate, LeadSourceCreate, LeadSourceUpdate, LeadUpdate
 from src.leads.scoring import calculate_lead_score
+from src.opportunities.models import PipelineStage
 
 logger = logging.getLogger(__name__)
 
@@ -21,10 +22,18 @@ logger = logging.getLogger(__name__)
 # `name` sorts by (last_name, first_name) — Lead.full_name is a Python property
 # (first/last with company_name fallback), not a column. Surname-first matches
 # the alphabetical convention users expect on a leads list.
+#
+# `stage` orders by PipelineStage.order (pipeline position), not the stage
+# name, so descending sort puts later stages first. `source` orders by the
+# joined source name; both rely on the outer-joins added in get_list so the
+# clause can reach those columns.
 LEAD_SORTABLE_FIELDS: dict[str, Any] = {
     "name": (Lead.last_name, Lead.first_name),
+    "company": Lead.company_name,
     "status": Lead.status,
+    "stage": PipelineStage.order,
     "score": Lead.score,
+    "source": LeadSource.name,
     "created_at": Lead.created_at,
 }
 
@@ -75,7 +84,17 @@ class LeadService(
         parameter so callers that bypass DataScope can OR in just the
         assignee shares without rebuilding the full shared-entity map.
         """
-        query = select(Lead).options(selectinload(Lead.source))
+        # Outer-join LeadSource + PipelineStage so the allowlisted `source`
+        # and `stage` ORDER BY clauses (see LEAD_SORTABLE_FIELDS) can
+        # reference their columns. NULLs sort last under both directions
+        # via Postgres default — unassigned-source/unstaged rows trail the
+        # named ones, which is the expected reading order on the list.
+        query = (
+            select(Lead)
+            .outerjoin(LeadSource, Lead.source_id == LeadSource.id)
+            .outerjoin(PipelineStage, Lead.pipeline_stage_id == PipelineStage.id)
+            .options(selectinload(Lead.source))
+        )
 
         if filters:
             query = apply_filters_to_query(query, Lead, filters)
