@@ -1,5 +1,5 @@
 import { Fragment } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Menu, Transition } from '@headlessui/react';
 import {
   AcademicCapIcon,
@@ -61,8 +61,21 @@ export function GuideLauncher() {
     setGuidesEnabled,
     resetProgress,
   } = useGuides();
+  const location = useLocation();
   const currentGuide = currentPageGuides[0];
-  const menuGuides = currentPageGuides.length > 0 ? currentPageGuides : recommendedGuides.slice(0, 4);
+  // Only fall back to role recommendations when the user is on a context
+  // where those tours are actually relevant — the dashboard root. On a
+  // feature page that has no dedicated tour (e.g. /companies), the
+  // recommended list would surface admin-tool tours like
+  // "Restart User approvals" or "Admin dashboard" that have nothing to
+  // do with the page; let the empty state direct them to /help instead.
+  const onDashboard = location.pathname === '/' || location.pathname === '';
+  const menuGuides =
+    currentPageGuides.length > 0
+      ? currentPageGuides
+      : onDashboard
+        ? recommendedGuides.slice(0, 4)
+        : [];
 
   return (
     <Menu as="div" className="relative" data-guide="header-guide">
@@ -102,7 +115,9 @@ export function GuideLauncher() {
                 ? 'Guides are disabled for your account.'
                 : currentGuide
                   ? 'Start the current page tour or pick a recommended refresher.'
-                  : 'Pick a recommended tour or browse all guides in Help.'}
+                  : menuGuides.length > 0
+                    ? 'Pick a recommended tour or browse all guides in Help.'
+                    : 'No tour for this page yet — browse all guides in Help.'}
             </p>
           </div>
 
