@@ -4,17 +4,15 @@ Unit tests for dashboard endpoints.
 Tests for number cards (KPIs) and chart data endpoints.
 """
 
+
 import pytest
-from datetime import date, timedelta
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-
+from src.activities.models import Activity
 from src.auth.models import User
+from src.contacts.models import Contact
 from src.leads.models import Lead, LeadSource
 from src.opportunities.models import Opportunity, PipelineStage
-from src.activities.models import Activity
-from src.contacts.models import Contact
-from src.companies.models import Company
 
 
 @pytest.mark.skip(reason="date_trunc requires PostgreSQL; SQLite test DB unsupported")

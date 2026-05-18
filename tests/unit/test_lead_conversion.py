@@ -9,7 +9,6 @@ of being silently orphaned on the lead tombstone.
 import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.activities.models import Activity
 from src.auth.models import User
 from src.contacts.models import Contact

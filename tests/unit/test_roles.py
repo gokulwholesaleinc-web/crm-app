@@ -8,11 +8,9 @@ assigning roles to users, and permission enforcement (403 for unauthorized users
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-
 from src.auth.models import User
-from src.auth.security import get_password_hash, create_access_token
-from src.roles.models import Role, UserRole, RoleName, DEFAULT_PERMISSIONS
+from src.auth.security import get_password_hash
+from src.roles.models import Role
 
 
 class TestListRoles:

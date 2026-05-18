@@ -12,11 +12,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.account.models import UserNotificationPrefs
 from src.auth.models import User
-from src.companies.models import Company
 from src.contacts.models import Contact
 from src.leads.models import Lead, LeadSource
 from src.notifications.models import Notification
-from src.opportunities.models import Opportunity, PipelineStage
 
 
 async def _enable_all_notifications(db_session: AsyncSession, user: User) -> None:

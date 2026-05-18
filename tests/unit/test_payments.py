@@ -10,23 +10,21 @@ Validates:
 
 import hashlib
 import hmac
-import json
 import time
+from datetime import UTC
 
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from src.auth.security import get_password_hash, create_access_token
 from src.auth.models import User
-from src.contacts.models import Contact
+from src.auth.security import create_access_token, get_password_hash
 from src.companies.models import Company
-from src.roles.models import Role, UserRole
+from src.contacts.models import Contact
 from src.opportunities.models import Opportunity, PipelineStage
-from src.payments.models import StripeCustomer, Product, Price, Payment, Subscription
+from src.payments.models import Payment, Price, Product, StripeCustomer, Subscription
 from src.payments.service import PaymentService
 from src.proposals.models import Proposal
-
+from src.roles.models import Role, UserRole
 
 # =========================================================================
 # Helper fixtures
@@ -408,8 +406,8 @@ class TestStripeCustomer:
         guard, an admin path produces StripeCustomer rows pointing at
         tombstoned CRM entities — referential integrity hole.
         """
-        from datetime import datetime, timezone
-        test_contact.deleted_at = datetime.now(timezone.utc)
+        from datetime import datetime
+        test_contact.deleted_at = datetime.now(UTC)
         await db_session.commit()
 
         response = await client.post(
@@ -450,7 +448,6 @@ class TestStripeCustomer:
         Regression for the case where AND semantics would silently
         report "no payment method" for a company-level customer.
         """
-        from src.companies.models import Company
         from src.payments.models import StripeCustomer
 
         # Seed: company with a stripe customer at the company level
@@ -896,7 +893,6 @@ class TestPaymentsByEntity:
     ):
         """contact_id filter scopes payments to a single CRM contact."""
         # Second contact + StripeCustomer + payment that should NOT match
-        from src.contacts.models import Contact
         other_contact = Contact(
             first_name="Other",
             last_name="Person",

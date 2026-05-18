@@ -11,7 +11,6 @@ import pytest_asyncio
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.auth.models import User
 from src.payments.models import Payment, StripeCustomer, Subscription
 from src.webhooks.stripe_events import WebhookEvent

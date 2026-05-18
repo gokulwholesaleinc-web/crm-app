@@ -5,17 +5,18 @@ Tests for contact dedup (email, phone, name match), company dedup (name match),
 merge operations, and no-false-positive verification.
 """
 
+from datetime import UTC
+
 import pytest
 from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-
-from src.auth.models import User
-from src.contacts.models import Contact
-from src.companies.models import Company
-from src.leads.models import Lead
+from sqlalchemy.ext.asyncio import AsyncSession
 from src.activities.models import Activity
+from src.auth.models import User
+from src.companies.models import Company
+from src.contacts.models import Contact
 from src.core.models import Note
+from src.leads.models import Lead
 
 
 class TestDedupCheckContacts:
@@ -397,7 +398,6 @@ class TestMergeContacts:
         await db_session.refresh(secondary)
 
         # Create activity linked to secondary
-        from datetime import datetime, timezone
         activity = Activity(
             activity_type="call",
             subject="Call from secondary",
@@ -730,8 +730,8 @@ class TestDedupMergeSoftDelete:
         test_user: User,
     ):
         """Notes + audit log entry must be written when merging."""
-        from src.dedup.service import DedupService
         from src.audit.models import AuditLog
+        from src.dedup.service import DedupService
 
         primary = Contact(
             first_name="NotePrimary", last_name="X",
@@ -890,9 +890,9 @@ class TestDedupMergeSoftDelete:
         implementation only repointed Activity/Note/EntityTag and
         silently orphaned every other (entity_type, entity_id) table.
         """
-        from src.dedup.service import DedupService
         from src.attachments.models import Attachment
         from src.comments.models import Comment
+        from src.dedup.service import DedupService
         from src.notifications.models import Notification
 
         primary = Contact(
@@ -959,8 +959,8 @@ class TestDedupMergeSoftDelete:
         test_user: User,
     ):
         """Companies soft-deleted via merge must not leak into list views."""
-        from src.dedup.service import DedupService
         from src.companies.service import CompanyService
+        from src.dedup.service import DedupService
 
         primary = Company(
             name="Visible Primary Co",
@@ -1088,7 +1088,7 @@ class TestClustersEndpoint:
         test_user: User,
     ):
         """Soft-deleted + merged-away rows must not appear in any cluster."""
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         live = Contact(
             first_name="Live", last_name="Twin", phone="3125557000",
@@ -1104,7 +1104,7 @@ class TestClustersEndpoint:
         await db_session.refresh(soft)
         # Soft-delete one of the twins; cluster should disappear because
         # the live count drops to 1.
-        soft.deleted_at = datetime.now(timezone.utc)
+        soft.deleted_at = datetime.now(UTC)
         await db_session.commit()
 
         resp = await client.get(

@@ -12,12 +12,10 @@ from urllib.parse import parse_qs, urlparse
 import httpx
 import pytest
 from sqlalchemy import select
-
 from src.auth.models import User
 from src.auth.router import get_google_http_factory
 from src.auth.security import create_access_token
 from src.main import app
-
 
 # =============================================================================
 # Helpers

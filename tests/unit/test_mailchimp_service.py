@@ -8,11 +8,11 @@ internal services — the DB, ORM, and CRM models are all real here.
 
 from __future__ import annotations
 
-import httpx
 import json
+
+import httpx
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.auth.models import User
 from src.campaigns.models import Campaign, CampaignMember, EmailTemplate
 from src.contacts.models import Contact
@@ -23,7 +23,6 @@ from src.integrations.mailchimp.service import (
     MailchimpService,
 )
 from src.whitelabel.models import Tenant, TenantSettings, TenantUser
-
 
 # ---------------------------------------------------------------------------
 # Helpers

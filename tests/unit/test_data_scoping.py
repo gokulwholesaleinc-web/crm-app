@@ -8,13 +8,12 @@ properly scope data to the current user.
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.auth.models import User
-from src.auth.security import get_password_hash, create_access_token
-from src.contacts.models import Contact
+from src.auth.security import create_access_token, get_password_hash
 from src.companies.models import Company
-from src.leads.models import Lead, LeadSource
+from src.contacts.models import Contact
 from src.core.models import Note
+from src.leads.models import Lead
 
 
 class TestNotesDataScoping:

@@ -11,9 +11,7 @@ from __future__ import annotations
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.auth.models import User
 from src.auth.security import create_access_token, get_password_hash
 from src.contacts.models import Contact

@@ -6,38 +6,36 @@ Covers both the new async TTLCache and the legacy cachetools-based API.
 """
 
 import asyncio
-import time
 
 import pytest
 from src.core.cache import (
-    # New TTLCache API
-    TTLCache,
-    app_cache,
-    cached,
-    invalidate_on_change,
-    # Legacy API
-    get_cache,
-    cache_get,
-    cache_set,
-    cached_fetch,
-    invalidate_cache,
-    invalidate_all_caches,
-    invalidate_tags_cache,
-    invalidate_lead_sources_cache,
-    invalidate_pipeline_stages_cache,
-    invalidate_roles_cache,
-    invalidate_tenant_settings_cache,
-    invalidate_dashboard_cache,
-    invalidate_admin_stats_cache,
-    CACHE_TAGS,
+    CACHE_ADMIN_STATS,
+    CACHE_DASHBOARD,
     CACHE_LEAD_SOURCES,
     CACHE_PIPELINE_STAGES,
     CACHE_ROLES,
+    CACHE_TAGS,
     CACHE_TENANT_SETTINGS,
-    CACHE_DASHBOARD,
-    CACHE_ADMIN_STATS,
+    # New TTLCache API
+    TTLCache,
+    app_cache,
+    cache_get,
+    cache_set,
+    cached,
+    cached_fetch,
+    # Legacy API
+    get_cache,
+    invalidate_admin_stats_cache,
+    invalidate_all_caches,
+    invalidate_cache,
+    invalidate_dashboard_cache,
+    invalidate_lead_sources_cache,
+    invalidate_on_change,
+    invalidate_pipeline_stages_cache,
+    invalidate_roles_cache,
+    invalidate_tags_cache,
+    invalidate_tenant_settings_cache,
 )
-
 
 # =========================================================================
 # New TTLCache Tests
@@ -295,7 +293,6 @@ class TestCachedDecorator:
         async def returns_none():
             nonlocal call_count
             call_count += 1
-            return None
 
         result1 = await returns_none()
         result2 = await returns_none()
@@ -336,7 +333,7 @@ class TestInvalidateOnChange:
     async def test_invalidate_unknown_entity(self):
         """Test invalidating an unknown entity type doesn't fail."""
         await app_cache.set("dashboard:test", "data")
-        deleted = await invalidate_on_change("unknown_entity")
+        await invalidate_on_change("unknown_entity")
         # Should still clear dashboard caches
         assert await app_cache.get("dashboard:test") is None
         await app_cache.clear()
@@ -530,5 +527,4 @@ class TestCacheConstants:
             CACHE_ADMIN_STATS,
         ]:
             assert isinstance(name, str)
-
 

@@ -10,10 +10,9 @@ import pytest
 import pytest_asyncio
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.auth.models import User
 from src.leads.models import Lead
-from src.opportunities.models import PipelineStage, Opportunity
+from src.opportunities.models import Opportunity, PipelineStage
 
 
 @pytest_asyncio.fixture

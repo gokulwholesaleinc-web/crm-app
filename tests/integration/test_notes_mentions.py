@@ -11,16 +11,11 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.auth.models import User
-from src.auth.security import get_password_hash, create_access_token
+from src.auth.security import get_password_hash
 from src.contacts.models import Contact
-from src.companies.models import Company
-from src.core.models import Note
-from src.notifications.models import Notification
 from src.email.models import EmailQueue
-from src.notes.service import NoteService
-from src.notes.schemas import NoteCreate
+from src.notifications.models import Notification
 
 
 class TestNotesMentionNotifications:

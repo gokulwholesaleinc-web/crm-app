@@ -13,13 +13,8 @@ tests/integration/test_reports_and_filtering.py.
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-
-from src.auth.models import User
 from src.contacts.models import Contact
 from src.leads.models import Lead
-from src.companies.models import Company
-from src.reports.models import SavedReport
 
 
 class TestReportExecute:
@@ -593,6 +588,7 @@ class TestReportOwnerScopeGate:
         expected detail message (not a silent empty-result data leak).
         """
         from unittest.mock import patch
+
         import src.reports.service as reports_service
 
         class _NoOwnerModel:

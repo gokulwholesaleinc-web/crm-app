@@ -5,7 +5,6 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.auth.models import User
 from src.core.permissions import (
     PermissionChecker,

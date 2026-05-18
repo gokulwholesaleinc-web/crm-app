@@ -8,9 +8,7 @@ Validates:
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.auth.models import User
-from src.auth.security import get_password_hash, create_access_token
 from src.payments.models import Payment, StripeCustomer
 
 

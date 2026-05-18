@@ -6,24 +6,23 @@ status transitions, template CRUD, public view, view counting,
 and data isolation.
 """
 
-import pytest
 import secrets
-from datetime import date, timedelta
+from datetime import UTC
+
+import pytest
 from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 # Send paths gate on assert_gmail_connected (PR #310).
 pytestmark = pytest.mark.usefixtures("gmail_connected_test_user")
 
 from src.account.models import UserNotificationPrefs
 from src.auth.models import User
-from src.auth.security import get_password_hash, create_access_token
-from src.proposals.models import Proposal, ProposalSigningDocument, ProposalView
+from src.auth.security import get_password_hash
 from src.contacts.models import Contact
-from src.companies.models import Company
 from src.opportunities.models import Opportunity, PipelineStage
-
+from src.proposals.models import Proposal, ProposalSigningDocument, ProposalView
 
 # =============================================================================
 # Fixtures
@@ -382,7 +381,8 @@ class TestAutoNumbering:
         unique-key collision → 500. New generator returns 0004
         (max suffix + 1).
         """
-        from datetime import datetime as _dt, UTC as _UTC
+        from datetime import UTC as _UTC
+        from datetime import datetime as _dt
         year = _dt.now(_UTC).year
         for seq in (1, 2, 3):
             db_session.add(
@@ -531,9 +531,9 @@ class TestProposalsUpdate:
     ):
         """A signed proposal is locked — PATCH must 400 instead of mutating
         scope/pricing under the customer's signed PDF."""
-        from datetime import datetime, timezone
+        from datetime import datetime
 
-        test_proposal.signed_at = datetime(2026, 4, 29, 17, 30, tzinfo=timezone.utc)
+        test_proposal.signed_at = datetime(2026, 4, 29, 17, 30, tzinfo=UTC)
         test_proposal.signer_name = "Alice Q. Client"
         test_proposal.signer_email = "alice@example.com"
         test_proposal.status = "accepted"
@@ -832,8 +832,8 @@ class TestStatusTransitions:
         Signed-copy email is intentionally NOT sent: there is no
         countersigned PDF when the rep accepts on behalf of the client.
         """
-        from src.notifications.models import Notification
         from src.email.models import EmailQueue
+        from src.notifications.models import Notification
 
         owner = User(
             email="proposal-owner@example.com",

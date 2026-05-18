@@ -6,9 +6,7 @@ Validates that _sync_google_calendars:
 """
 
 import pytest
-import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.auth.models import User
 from src.auth.security import get_password_hash
 from src.integrations.google_calendar.models import GoogleCalendarCredential
@@ -20,7 +18,6 @@ class TestSyncGoogleCalendarsEmpty:
     @pytest.mark.asyncio
     async def test_completes_with_no_credentials(self, client):
         """Should complete without raising when GoogleCalendarCredential table is empty."""
-        import src.database as db_module
         from src.core.scheduler import _sync_google_calendars
 
         # client fixture already patches async_session_maker to the test DB
@@ -33,7 +30,6 @@ class TestSyncGoogleCalendarsIsolation:
     @pytest.mark.asyncio
     async def test_swallows_per_user_sync_error(self, db_session: AsyncSession, client):
         """Should not raise even when sync_from_google raises for a user."""
-        import src.database as db_module
         from src.core.scheduler import _sync_google_calendars
         from src.integrations.google_calendar.service import GoogleCalendarService
 

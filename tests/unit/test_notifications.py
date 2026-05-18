@@ -1,5 +1,7 @@
 """Tests for notifications API endpoints."""
 
+from datetime import UTC
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
@@ -473,7 +475,7 @@ class TestActivityAssignmentNotifications:
         test_contact,
     ):
         """Reassigning an activity to a different user creates a notification for that user."""
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
         user_a = await _create_user(db_session, "user_a_assign@example.com")
         user_b = await _create_user(db_session, "user_b_assign@example.com")
@@ -488,7 +490,7 @@ class TestActivityAssignmentNotifications:
                 "entity_id": test_contact.id,
                 "assigned_to_id": user_a.id,
                 "owner_id": user_a.id,
-                "scheduled_at": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat(),
+                "scheduled_at": (datetime.now(UTC) + timedelta(hours=1)).isoformat(),
             },
             headers=_auth_headers_for(user_a),
         )
@@ -530,7 +532,7 @@ class TestActivityAssignmentNotifications:
         test_contact,
     ):
         """PATCHing an activity without changing assigned_to_id creates no new assignment notification."""
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
         user_a = await _create_user(db_session, "user_a_nochg@example.com")
 
@@ -543,7 +545,7 @@ class TestActivityAssignmentNotifications:
                 "entity_id": test_contact.id,
                 "assigned_to_id": user_a.id,
                 "owner_id": user_a.id,
-                "scheduled_at": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat(),
+                "scheduled_at": (datetime.now(UTC) + timedelta(hours=1)).isoformat(),
             },
             headers=_auth_headers_for(user_a),
         )
@@ -589,7 +591,7 @@ class TestPublicProposalRejectNotification:
         db_session: AsyncSession,
     ):
         """Customer rejecting a proposal via /api/proposals/public/{token}/reject creates a proposal_rejected notification for the owner."""
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         from src.proposals.models import Proposal
         user_a = await _create_user(db_session, "public_proposal_reject@example.com")
@@ -612,7 +614,7 @@ class TestPublicProposalRejectNotification:
         import secrets
         proposal = await db_session.get(Proposal, proposal_id)
         proposal.status = "sent"
-        proposal.sent_at = datetime.now(timezone.utc)
+        proposal.sent_at = datetime.now(UTC)
         if not proposal.public_token:
             proposal.public_token = secrets.token_urlsafe(32)
         token = proposal.public_token
@@ -645,7 +647,7 @@ class TestProposalRejectNotification:
         db_session: AsyncSession,
     ):
         """Rejecting a proposal in 'sent' status creates a proposal_rejected notification for the owner."""
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         user_a = await _create_user(db_session, "proposal_owner_reject@example.com")
         await _enable_in_app(db_session, user_a)
@@ -665,7 +667,7 @@ class TestProposalRejectNotification:
         from src.proposals.models import Proposal
         proposal = await db_session.get(Proposal, proposal_id)
         proposal.status = "sent"
-        proposal.sent_at = datetime.now(timezone.utc)
+        proposal.sent_at = datetime.now(UTC)
         await db_session.commit()
 
         reject_resp = await client.post(

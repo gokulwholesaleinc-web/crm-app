@@ -6,14 +6,13 @@ Tests for list, create, get, update, delete, and lead scoring operations.
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-
+from sqlalchemy.ext.asyncio import AsyncSession
 from src.auth.models import User
+from src.companies.models import Company
+from src.contacts.models import Contact
 from src.leads.models import Lead, LeadSource
 from src.leads.scoring import LeadScorer, calculate_lead_score
-from src.contacts.models import Contact
-from src.companies.models import Company
 from src.opportunities.models import PipelineStage
 
 

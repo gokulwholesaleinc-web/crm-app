@@ -13,7 +13,6 @@ from unittest.mock import AsyncMock, MagicMock
 import httpx
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.integrations.gmail.client import (
     GmailAuthError,
     GmailClient,

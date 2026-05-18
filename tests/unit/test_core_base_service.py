@@ -1,13 +1,10 @@
 """Unit tests for core/base_service.py — BaseService and CRUDService using Contact."""
 
-import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.contacts.models import Contact
 from src.contacts.schemas import ContactCreate, ContactUpdate
-from src.core.base_service import BaseService, CRUDService
-
+from src.core.base_service import CRUDService
 
 # ---------------------------------------------------------------------------
 # Concrete service for tests

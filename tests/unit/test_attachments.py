@@ -4,13 +4,11 @@ Also tests file size and type validation.
 """
 
 import io
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from src.auth.models import User
 from src.contacts.models import Contact
-from src.companies.models import Company
 
 
 class TestAttachmentUpload:

@@ -7,19 +7,17 @@ no business mocks).
 
 import base64
 import json
+from datetime import UTC
 from urllib.parse import parse_qs, urlparse
 
 import httpx
 import pytest
 from sqlalchemy import select
-
 from src.auth.models import User
 from src.auth.security import create_access_token
 from src.integrations.gmail.models import GmailConnection, GmailSyncState
-from src.integrations.gmail.router import get_gmail_http_factory, GMAIL_OAUTH_STATE_COOKIE
-from src.integrations.gmail import oauth as gmail_oauth
+from src.integrations.gmail.router import GMAIL_OAUTH_STATE_COOKIE, get_gmail_http_factory
 from src.main import app
-
 
 # =============================================================================
 # Helpers
@@ -491,21 +489,21 @@ class TestGmailSyncEndpoint:
         Protects Gmail API quota and prevents a user from racing the scheduler
         by spamming the button.
         """
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         conn = GmailConnection(
             user_id=test_user.id,
             email="user@gmail.com",
             access_token="ya29.test",
             refresh_token="1//test",
-            token_expiry=datetime(2099, 1, 1, tzinfo=timezone.utc),
+            token_expiry=datetime(2099, 1, 1, tzinfo=UTC),
             scopes="openid email profile gmail.send gmail.readonly",
         )
         db_session.add(conn)
         state = GmailSyncState(
             user_id=test_user.id,
             last_history_id="100",
-            last_synced_at=datetime.now(timezone.utc),
+            last_synced_at=datetime.now(UTC),
             failure_count=0,
         )
         db_session.add(state)

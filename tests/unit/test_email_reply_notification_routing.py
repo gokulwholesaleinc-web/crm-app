@@ -356,7 +356,6 @@ class TestGuardEdgeCases:
     @pytest.mark.asyncio
     async def test_guard_skips_when_user_has_no_active_connection(self, db: AsyncSession):
         """Guard returns None when the recipient has no active Gmail connection."""
-        from datetime import timezone
 
         from src.integrations.gmail.models import GmailConnection as _GC
 

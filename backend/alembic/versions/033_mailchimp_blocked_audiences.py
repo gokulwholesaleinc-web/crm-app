@@ -20,9 +20,9 @@ Create Date: 2026-05-13
 from __future__ import annotations
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects.postgresql import ARRAY
 
+from alembic import op
 
 revision = "033_mailchimp_blocked"
 down_revision = "032_contract_fields"

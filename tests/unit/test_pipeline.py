@@ -9,19 +9,17 @@ Tests for:
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.auth.models import User
-from src.opportunities.models import Opportunity, PipelineStage
-from src.quotes.models import Quote
-from src.proposals.models import Proposal
-from src.payments.models import Payment, StripeCustomer
 from src.events.service import (
-    QUOTE_SENT,
-    QUOTE_ACCEPTED,
-    PROPOSAL_SENT,
-    PROPOSAL_ACCEPTED,
     PAYMENT_RECEIVED,
+    PROPOSAL_ACCEPTED,
+    PROPOSAL_SENT,
+    QUOTE_ACCEPTED,
+    QUOTE_SENT,
 )
+from src.opportunities.models import Opportunity
+from src.payments.models import Payment, StripeCustomer
+from src.proposals.models import Proposal
 
 
 class TestSalesEventConstants:
@@ -199,6 +197,6 @@ class TestSalesKPIsEndpoint:
 
         assert isinstance(data["quotes_sent"], int)
         assert isinstance(data["proposals_sent"], int)
-        assert isinstance(data["payments_collected_total"], (int, float))
+        assert isinstance(data["payments_collected_total"], int | float)
         assert isinstance(data["payments_collected_count"], int)
-        assert isinstance(data["quote_to_payment_conversion_rate"], (int, float))
+        assert isinstance(data["quote_to_payment_conversion_rate"], int | float)

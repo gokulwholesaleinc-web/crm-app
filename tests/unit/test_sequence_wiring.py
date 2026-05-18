@@ -7,19 +7,19 @@ Verifies that:
 - Full enrollment processing flow works end-to-end
 """
 
-import pytest
-from datetime import datetime, timedelta, timezone
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from datetime import UTC, datetime, timedelta
 
+import pytest
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from src.activities.models import Activity
 from src.auth.models import User
-from src.contacts.models import Contact
+from src.campaigns.models import EmailTemplate
 from src.companies.models import Company
+from src.contacts.models import Contact
+from src.email.models import EmailQueue
 from src.sequences.models import Sequence, SequenceEnrollment
 from src.sequences.service import SequenceService
-from src.email.models import EmailQueue
-from src.activities.models import Activity
-from src.campaigns.models import EmailTemplate
 
 
 @pytest.fixture
@@ -131,7 +131,7 @@ def _create_due_enrollment(
         contact_id=contact.id,
         current_step=0,
         status="active",
-        next_step_at=datetime.now(timezone.utc) - timedelta(hours=1),
+        next_step_at=datetime.now(UTC) - timedelta(hours=1),
     )
 
 
@@ -342,7 +342,7 @@ class TestEndToEndSequenceFlow:
 
         # Advance enrollment to be due again for step 1
         await db_session.refresh(enrollment)
-        enrollment.next_step_at = datetime.now(timezone.utc) - timedelta(hours=1)
+        enrollment.next_step_at = datetime.now(UTC) - timedelta(hours=1)
         await db_session.commit()
 
         # Step 1: wait
@@ -353,7 +353,7 @@ class TestEndToEndSequenceFlow:
 
         # Advance enrollment to be due again for step 2
         await db_session.refresh(enrollment)
-        enrollment.next_step_at = datetime.now(timezone.utc) - timedelta(hours=1)
+        enrollment.next_step_at = datetime.now(UTC) - timedelta(hours=1)
         await db_session.commit()
 
         # Step 2: task (final step)
@@ -398,14 +398,14 @@ class TestEndToEndSequenceFlow:
         assert enrollment.current_step == 1
 
         # Process step 1
-        enrollment.next_step_at = datetime.now(timezone.utc) - timedelta(hours=1)
+        enrollment.next_step_at = datetime.now(UTC) - timedelta(hours=1)
         await db_session.commit()
         await service.process_due_steps()
         await db_session.refresh(enrollment)
         assert enrollment.current_step == 2
 
         # Process step 2 (final)
-        enrollment.next_step_at = datetime.now(timezone.utc) - timedelta(hours=1)
+        enrollment.next_step_at = datetime.now(UTC) - timedelta(hours=1)
         await db_session.commit()
         await service.process_due_steps()
         await db_session.refresh(enrollment)

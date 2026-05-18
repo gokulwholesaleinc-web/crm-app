@@ -11,7 +11,32 @@ interface ErrorBoundaryState {
   error: Error | null;
 }
 
+export const STALE_CHUNK_RELOAD_FLAG = 'crm:stale-chunk-reload-attempted';
+
+export function isStaleChunkLoadError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  return (
+    error.name === 'ChunkLoadError' ||
+    message.includes('failed to fetch dynamically imported module') ||
+    message.includes('error loading dynamically imported module') ||
+    message.includes('importing a module script failed') ||
+    (message.includes('/assets/') && message.includes('404'))
+  );
+}
+
+function trySessionStorage(action: (storage: Storage) => void): void {
+  try {
+    action(window.sessionStorage);
+  } catch {
+    // Private browsing / storage-denied environments should still render
+    // the normal error boundary fallback.
+  }
+}
+
 export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  private clearStaleChunkFlagTimer: number | undefined;
+
   constructor(props: ErrorBoundaryProps) {
     super(props);
     this.state = { hasError: false, error: null };
@@ -21,8 +46,35 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     return { hasError: true, error };
   }
 
+  componentDidMount() {
+    this.clearStaleChunkFlagTimer = window.setTimeout(() => {
+      if (!this.state.hasError) {
+        trySessionStorage((storage) => storage.removeItem(STALE_CHUNK_RELOAD_FLAG));
+      }
+    }, 5000);
+  }
+
+  componentWillUnmount() {
+    if (this.clearStaleChunkFlagTimer !== undefined) {
+      window.clearTimeout(this.clearStaleChunkFlagTimer);
+    }
+  }
+
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('ErrorBoundary caught an error:', error, errorInfo);
+    if (!isStaleChunkLoadError(error)) {
+      return;
+    }
+
+    let shouldReload = true;
+    trySessionStorage((storage) => {
+      shouldReload = storage.getItem(STALE_CHUNK_RELOAD_FLAG) !== '1';
+      if (shouldReload) storage.setItem(STALE_CHUNK_RELOAD_FLAG, '1');
+    });
+
+    if (shouldReload) {
+      window.location.reload();
+    }
   }
 
   handleRetry = () => {
@@ -38,6 +90,8 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
       if (this.props.fallback) {
         return this.props.fallback;
       }
+
+      const staleChunk = isStaleChunkLoadError(this.state.error);
 
       return (
         <div className="flex min-h-[400px] items-center justify-center p-6">
@@ -59,10 +113,12 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
               </svg>
             </div>
             <h2 className="mb-2 text-lg font-semibold text-gray-900 dark:text-gray-100">
-              Something went wrong
+              {staleChunk ? 'App update needed' : 'Something went wrong'}
             </h2>
             <p className="mb-6 text-sm text-gray-500 dark:text-gray-400">
-              An unexpected error occurred. You can try again or reload the page.
+              {staleChunk
+                ? 'A new version was deployed while this page was open. Reload to get the latest files.'
+                : 'An unexpected error occurred. You can try again or reload the page.'}
             </p>
             <div className="flex items-center justify-center gap-3">
               <button

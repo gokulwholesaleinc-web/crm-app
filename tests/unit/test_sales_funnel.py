@@ -7,7 +7,6 @@ Tests for the funnel report that shows leads by status, conversion rates, and av
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.auth.models import User
 from src.leads.models import Lead, LeadSource
 

@@ -7,13 +7,10 @@ Tests for recording and retrieving entity change history.
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from src.auth.models import User
-from src.contacts.models import Contact
-from src.companies.models import Company
-from src.opportunities.models import Opportunity, PipelineStage
-from src.audit.models import AuditLog
 from src.audit.service import AuditService, detect_changes
+from src.auth.models import User
+from src.companies.models import Company
+from src.contacts.models import Contact
 
 
 class TestAuditService:
@@ -111,7 +108,7 @@ class TestAuditService:
         """Test paginated audit history."""
         service = AuditService(db_session)
 
-        for i in range(15):
+        for _i in range(15):
             await service.log_change("company", 1, test_user.id, "update")
 
         items, total = await service.get_entity_history("company", 1, page=1, page_size=10)
@@ -222,7 +219,7 @@ class TestAuditEndpoint:
     ):
         """Test paginated audit log endpoint."""
         service = AuditService(db_session)
-        for i in range(15):
+        for _i in range(15):
             await service.log_change("opportunity", 5, test_user.id, "update")
         await db_session.commit()
 

@@ -5,17 +5,16 @@ Tests template CRUD operations, merge variable replacement, legal terms preserva
 custom variables, and validation.
 """
 
-import pytest
 from datetime import date
+
+import pytest
 from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-
+from sqlalchemy.ext.asyncio import AsyncSession
 from src.auth.models import User
-from src.proposals.models import Proposal, ProposalTemplate
-from src.contacts.models import Contact
 from src.companies.models import Company
-
+from src.contacts.models import Contact
+from src.proposals.models import ProposalTemplate
 
 # =============================================================================
 # Fixtures

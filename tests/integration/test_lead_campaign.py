@@ -9,12 +9,11 @@ Tests cover:
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-
+from sqlalchemy.ext.asyncio import AsyncSession
 from src.auth.models import User
-from src.leads.models import Lead, LeadSource
 from src.email.models import EmailQueue
+from src.leads.models import Lead
 
 
 class TestSendCampaign:

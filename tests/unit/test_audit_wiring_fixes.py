@@ -24,14 +24,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 # Send paths gate on assert_gmail_connected (PR #310).
 pytestmark = pytest.mark.usefixtures("gmail_connected_test_user")
 
-from src.account.models import UserNotificationPrefs
 from src.activities.models import Activity
 from src.audit.models import AuditLog
 from src.auth.models import User
 from src.auth.security import create_access_token, get_password_hash
 from src.contacts.models import Contact
 from src.dashboard.router import _dashboard_cache
-from src.notifications.models import Notification
 from src.payments.models import Payment
 
 # ---------------------------------------------------------------------------

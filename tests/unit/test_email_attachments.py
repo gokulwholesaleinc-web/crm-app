@@ -12,10 +12,9 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.auth.models import User
-from src.email.service import EmailService, _resolve_from_name, _try_gmail_send
 from src.email.models import EmailQueue
+from src.email.service import EmailService, _resolve_from_name, _try_gmail_send
 from src.integrations.gmail.models import GmailConnection
 from src.integrations.gmail.sender import EmailAttachment, build_rfc822
 

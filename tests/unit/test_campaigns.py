@@ -5,14 +5,14 @@ Tests for list, create, get, update, delete, campaign member operations,
 email templates, campaign steps, stats, and execute.
 """
 
-import pytest
-from datetime import date, datetime, timedelta, timezone
-from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from datetime import UTC, date, datetime, timedelta
 
+import pytest
+from httpx import AsyncClient
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from src.auth.models import User
-from src.campaigns.models import Campaign, CampaignMember, EmailTemplate, EmailCampaignStep
+from src.campaigns.models import Campaign, CampaignMember, EmailCampaignStep, EmailTemplate
 from src.contacts.models import Contact
 from src.leads.models import Lead
 
@@ -674,7 +674,7 @@ class TestCampaignMembers:
             headers=admin_auth_headers,
             json={
                 "status": "sent",
-                "sent_at": datetime.now(timezone.utc).isoformat(),
+                "sent_at": datetime.now(UTC).isoformat(),
             },
         )
 

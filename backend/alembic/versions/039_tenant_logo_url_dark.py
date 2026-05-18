@@ -13,6 +13,7 @@ Nullable, no backfill.
 """
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision = "039_tenant_logo_url_dark"

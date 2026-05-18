@@ -6,18 +6,18 @@ Tests for send_proposal_email, generate_proposal_pdf, public view branding,
 and proposal email content.
 """
 
-import pytest
-from datetime import date, datetime, timedelta, timezone
-from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from datetime import UTC, date, datetime, timedelta
 
+import pytest
+from httpx import AsyncClient
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from src.auth.models import User
-from src.auth.security import get_password_hash, create_access_token
-from src.proposals.models import Proposal, ProposalView
-from src.contacts.models import Contact
+from src.auth.security import create_access_token, get_password_hash
 from src.companies.models import Company
+from src.contacts.models import Contact
 from src.email.models import EmailQueue
+from src.proposals.models import Proposal
 from src.whitelabel.models import Tenant, TenantSettings, TenantUser
 
 
@@ -25,6 +25,7 @@ def _extract_pdf_text(content: bytes) -> str:
     """Real PDF in CI (via pypdf), HTML fallback locally when weasyprint is absent."""
     if content.startswith(b"%PDF"):
         from io import BytesIO
+
         from pypdf import PdfReader
 
         reader = PdfReader(BytesIO(content))
@@ -307,6 +308,16 @@ class TestSendProposalEmail:
 class TestGenerateProposalPDF:
     """Tests for branded proposal PDF generation."""
 
+    @pytest.fixture(autouse=True)
+    def fake_pdf_renderer(self, monkeypatch: pytest.MonkeyPatch):
+        async def fake_render_html_to_pdf(html: str) -> bytes:
+            return html.encode("utf-8")
+
+        monkeypatch.setattr(
+            "src.proposals.service.render_html_to_pdf",
+            fake_render_html_to_pdf,
+        )
+
     @pytest.mark.asyncio
     async def test_generate_proposal_pdf_returns_content(
         self,
@@ -368,7 +379,7 @@ class TestGenerateProposalPDF:
         """Signed proposal PDF download contains signer name + email + signed_at."""
         branded_proposal.signer_name = "Alice Q. Client"
         branded_proposal.signer_email = "alice.client@example.com"
-        branded_proposal.signed_at = datetime(2026, 4, 29, 17, 30, tzinfo=timezone.utc)
+        branded_proposal.signed_at = datetime(2026, 4, 29, 17, 30, tzinfo=UTC)
         branded_proposal.signer_ip = "203.0.113.42"
         branded_proposal.signer_user_agent = "Mozilla/5.0 (TestRunner)"
         branded_proposal.status = "accepted"

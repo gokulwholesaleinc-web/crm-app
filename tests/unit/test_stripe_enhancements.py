@@ -16,12 +16,11 @@ import time
 
 import pytest
 from httpx import AsyncClient
-
-from src.auth.security import get_password_hash, create_access_token
 from src.auth.models import User
-from src.payments.models import StripeCustomer, Payment, Subscription
-from src.payments.service import PaymentService
+from src.auth.security import create_access_token
 from src.config import settings
+from src.payments.models import Payment, StripeCustomer, Subscription
+from src.payments.service import PaymentService
 
 
 def _token(user: User) -> dict:

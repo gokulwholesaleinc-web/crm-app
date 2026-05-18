@@ -22,8 +22,9 @@ daily scan if the owner's email pref is enabled.
 Revision id is 14 chars, comfortably under VARCHAR(32).
 """
 
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 revision = "028_contract_cd"
 down_revision = "027_branding_bg"

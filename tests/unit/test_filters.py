@@ -8,10 +8,7 @@ Also verifies user-scoped isolation and filter operator definitions.
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-
 from src.auth.models import User
-from src.filters.models import SavedFilter
 
 
 class TestFilterCreate:

@@ -7,18 +7,17 @@ and authentication for both seeded accounts.
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-
+from src.activities.models import Activity
 from src.auth.models import User
-from src.auth.security import verify_password, get_password_hash, create_access_token
+from src.auth.security import verify_password
+from src.campaigns.models import Campaign
 from src.companies.models import Company
 from src.contacts.models import Contact
+from src.core.models import EntityTag, Note, Tag
 from src.leads.models import Lead, LeadSource
 from src.opportunities.models import Opportunity, PipelineStage
-from src.activities.models import Activity
-from src.campaigns.models import Campaign
-from src.core.models import Note, Tag, EntityTag
 from src.seed import seed_database
 
 

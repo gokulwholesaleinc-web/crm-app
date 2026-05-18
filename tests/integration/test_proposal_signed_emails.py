@@ -15,24 +15,18 @@ not block the test environment.
 from __future__ import annotations
 
 import secrets
-from datetime import UTC, datetime
 from unittest.mock import AsyncMock, patch
 
-import pytest
-import pytest_asyncio
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.account.models import UserNotificationPrefs
 from src.auth.models import User
-from src.companies.models import Company
 from src.contacts.models import Contact
 from src.email.models import EmailQueue
 from src.notifications.models import Notification
 from src.proposals.models import Proposal
 from src.proposals.service import ProposalService
 from src.whitelabel.models import Tenant, TenantUser
-
 
 # ---------------------------------------------------------------------------
 # Helpers

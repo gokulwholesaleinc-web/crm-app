@@ -6,9 +6,7 @@ fixtures -- no mocking.
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.auth.models import User
-from src.whitelabel.models import Tenant, TenantSettings, TenantUser
 from src.email.branded_templates import (
     TenantBrandingHelper,
     render_branded_email,
@@ -26,7 +24,7 @@ from src.email.branded_templates import (
 )
 from src.email.pdf_service import BrandedPDFGenerator
 from src.email.service import EmailService
-
+from src.whitelabel.models import Tenant, TenantUser
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -1014,6 +1012,7 @@ class TestSafeHexAtRender:
     def test_safe_hex_logs_on_fallback(self, caplog):
         """A corrupt-row fallback must surface in logs so Sentry catches it."""
         import logging
+
         from src.email.branded_templates import _safe_hex
 
         with caplog.at_level(logging.WARNING, logger="src.email.branded_templates"):
@@ -1028,6 +1027,7 @@ class TestSafeHexAtRender:
     def test_safe_hex_silent_on_empty_or_none(self, caplog):
         """Empty / None aren't logged — those just mean 'use the default'."""
         import logging
+
         from src.email.branded_templates import _safe_hex
 
         with caplog.at_level(logging.WARNING, logger="src.email.branded_templates"):

@@ -1,18 +1,17 @@
 """Tests for LinkedIn campaign workflow: CSV detection, import-to-campaign, throttle, volume stats."""
 
+from datetime import date, timedelta
+
 import pytest
-from datetime import date, datetime, timedelta, timezone
 from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-
+from sqlalchemy.ext.asyncio import AsyncSession
 from src.auth.models import User
-from src.campaigns.models import Campaign, CampaignMember, EmailTemplate, EmailCampaignStep
+from src.campaigns.models import CampaignMember, EmailCampaignStep, EmailTemplate
 from src.contacts.models import Contact
+from src.email.models import EmailSettings
+from src.import_export.csv_handler import detect_linkedin_format
 from src.leads.models import Lead, LeadSource
-from src.email.models import EmailQueue, EmailSettings
-from src.import_export.csv_handler import detect_linkedin_format, _normalize_header, CSVHandler
-
 
 # =========================================================================
 # LinkedIn CSV Detection
@@ -123,7 +122,7 @@ class TestLinkedInCSVImport:
         """LinkedIn leads import should auto-set source_details."""
         csv_content = (
             "First Name,Last Name,Company,Title,Email,Geography,Industry,LinkedIn Profile URL\n"
-            f"Alice,LinkedIn,Acme,CEO,alice_linkedin@example.com,NYC,Tech,https://linkedin.com/in/alice\n"
+            "Alice,LinkedIn,Acme,CEO,alice_linkedin@example.com,NYC,Tech,https://linkedin.com/in/alice\n"
         )
         import io
         files = {"file": ("leads.csv", io.BytesIO(csv_content.encode()), "text/csv")}

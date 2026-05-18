@@ -12,28 +12,26 @@ Covers:
 """
 
 import base64
-import json
-from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
 import os
 import sys
+from datetime import UTC, datetime, timedelta
+from unittest.mock import patch
 
 import httpx
 import pytest
 import pytest_asyncio
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
-from sqlalchemy import select
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "backend"))
 
-from src.database import Base
 from src.auth.models import User
 from src.contacts.models import Contact
+from src.database import Base
 from src.email.models import EmailQueue, InboundEmail
 from src.integrations.gmail.models import GmailConnection, GmailSyncState
 from src.integrations.gmail.sync import GmailSyncWorker
-
 
 # ---------------------------------------------------------------------------
 # In-memory DB fixtures (scoped per test)
@@ -89,7 +87,7 @@ async def connection(db: AsyncSession, test_user: User) -> GmailConnection:
         email="sync_user@example.com",
         access_token="tok",
         refresh_token="rtok",
-        token_expiry=datetime.now(timezone.utc) + timedelta(hours=1),
+        token_expiry=datetime.now(UTC) + timedelta(hours=1),
         scopes="https://mail.google.com/",
     )
     db.add(conn)
@@ -217,7 +215,7 @@ class TestSyncInbound:
 
         routes = {
             "users/me/history": history,
-            f"users/me/messages/abc123": msg,
+            "users/me/messages/abc123": msg,
         }
         http = _make_http_client(routes)
 
@@ -633,7 +631,7 @@ class TestSyncThreadFallback:
             subject="First inbound",
             message_id="<first@gmail.example.com>",
             thread_id="thread-abc",
-            received_at=datetime.now(timezone.utc),
+            received_at=datetime.now(UTC),
             entity_type="contacts",
             entity_id=contact.id,
         )

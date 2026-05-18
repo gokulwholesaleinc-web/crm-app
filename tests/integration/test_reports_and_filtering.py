@@ -10,20 +10,15 @@ Tests cover:
 """
 
 import json
+
 import pytest
-
-from src.leads.models import Lead, LeadSource
-from src.companies.models import Company
-from src.opportunities.models import Opportunity, PipelineStage
-from src.activities.models import Activity
-from src.contacts.models import Contact
-from src.reports.models import SavedReport
-from src.filters.models import SavedFilter
-from src.reports.service import ReportExecutor
-from src.reports.schemas import ReportDefinition
-from src.core.filtering import apply_filter_condition, parse_filter_group, apply_filters_to_query
 from sqlalchemy import select
-
+from src.core.filtering import apply_filter_condition, apply_filters_to_query, parse_filter_group
+from src.filters.models import SavedFilter
+from src.leads.models import Lead
+from src.reports.models import SavedReport
+from src.reports.schemas import ReportDefinition
+from src.reports.service import ReportExecutor
 
 # ============================================================
 # Filtering unit tests

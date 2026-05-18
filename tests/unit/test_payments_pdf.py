@@ -2,7 +2,6 @@
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.auth.models import User
 from src.payments.models import Payment, StripeCustomer
 from src.payments.pdf import generate_invoice_pdf

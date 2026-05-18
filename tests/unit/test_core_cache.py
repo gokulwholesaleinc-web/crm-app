@@ -3,9 +3,7 @@
 import time
 
 import pytest
-
-from src.core.cache import TTLCache, cached, app_cache, invalidate_on_change
-
+from src.core.cache import TTLCache, app_cache, cached, invalidate_on_change
 
 # ---------------------------------------------------------------------------
 # TestTTLCache — basic get/set/delete behaviour

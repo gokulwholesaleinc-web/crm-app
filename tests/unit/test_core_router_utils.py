@@ -4,7 +4,6 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
-
 from src.core.router_utils import (
     calculate_pages,
     check_ownership,

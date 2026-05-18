@@ -7,13 +7,11 @@ Tests for tenant CRUD, public config, settings, and tenant user management.
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-
+from sqlalchemy.ext.asyncio import AsyncSession
 from src.auth.models import User
-from src.auth.security import create_access_token, get_password_hash
+from src.auth.security import create_access_token
 from src.whitelabel.models import Tenant, TenantSettings, TenantUser
-
 
 # --- Fixtures ---
 

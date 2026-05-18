@@ -4,19 +4,17 @@ Unit tests for dashboard date range filtering.
 Tests that KPI and chart endpoints correctly filter data by date_from and date_to parameters.
 """
 
+from datetime import date, datetime
+
 import pytest
-from datetime import date, datetime, timedelta
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-
+from src.auth.dependencies import _user_cache
 from src.auth.models import User
+from src.contacts.models import Contact
+from src.dashboard.router import _dashboard_cache
 from src.leads.models import Lead, LeadSource
 from src.opportunities.models import Opportunity, PipelineStage
-from src.activities.models import Activity
-from src.contacts.models import Contact
-from src.companies.models import Company
-from src.dashboard.router import _dashboard_cache
-from src.auth.dependencies import _user_cache
 
 
 @pytest.fixture(autouse=True)

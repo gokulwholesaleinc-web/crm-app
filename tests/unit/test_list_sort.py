@@ -11,7 +11,6 @@ coerced to 'desc' (see src/core/sorting.py).
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.auth.models import User
 from src.contacts.models import Contact
 from src.leads.models import Lead, LeadSource

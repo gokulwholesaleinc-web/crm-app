@@ -5,22 +5,20 @@ Tests all admin endpoints: user listing, user update, deactivation,
 system stats, team overview, activity feed, and role assignment.
 """
 
+
 import pytest
 import pytest_asyncio
-from datetime import datetime, timedelta, timezone
 from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from sqlalchemy import select
-
-from src.auth.models import User
-from src.auth.security import get_password_hash, create_access_token
-from src.contacts.models import Contact
-from src.companies.models import Company
-from src.leads.models import Lead, LeadSource
-from src.opportunities.models import Opportunity, PipelineStage
+from sqlalchemy.ext.asyncio import AsyncSession
 from src.audit.models import AuditLog
-from src.whitelabel.models import Tenant, TenantUser
+from src.auth.models import User
+from src.auth.security import create_access_token, get_password_hash
+from src.companies.models import Company
+from src.contacts.models import Contact
+from src.leads.models import Lead
+from src.opportunities.models import Opportunity
+from src.whitelabel.models import Tenant
 
 
 @pytest.fixture

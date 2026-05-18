@@ -6,9 +6,8 @@ Stubs settings.STRIPE_SECRET_KEY + STRIPE_PUBLISHABLE_KEY at the Stripe SDK boun
 
 import pytest
 from httpx import AsyncClient
-
-from src.auth.security import get_password_hash, create_access_token
 from src.auth.models import User
+from src.auth.security import create_access_token, get_password_hash
 
 
 def _token(user: User) -> dict:

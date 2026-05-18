@@ -29,7 +29,6 @@ from src.email.service import _resolve_reply_context
 from src.integrations.gmail.models import GmailConnection
 from src.integrations.gmail.sync import _store_inbound
 
-
 TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 
 

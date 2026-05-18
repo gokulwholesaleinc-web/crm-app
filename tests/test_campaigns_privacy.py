@@ -12,15 +12,12 @@ No mocks — all tests run against the in-memory SQLite test database using
 the real FastAPI app and the fixtures from conftest.py.
 """
 
-import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.auth.models import User
 from src.auth.security import create_access_token
 from src.campaigns.models import Campaign
 from src.core.models import EntityShare
-
 
 # ---------------------------------------------------------------------------
 # Helpers
