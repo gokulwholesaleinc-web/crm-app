@@ -144,10 +144,6 @@ export function useRejectProposal() {
   });
 }
 
-// ``useResendProposalPaymentLink`` and ``useRetryProposalBilling``
-// removed 2026-05-18 — proposals no longer spawn Stripe artifacts;
-// billing lives in the Invoices module.
-
 /**
  * PATCH a proposal's saved signature-box placement.
  *

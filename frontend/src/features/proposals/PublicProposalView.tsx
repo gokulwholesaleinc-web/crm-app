@@ -192,7 +192,6 @@ function PublicProposalView() {
     el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, [proposal?.proposal_number]);
 
-
   // Hook must run unconditionally (rules-of-hooks) so it sits before
   // the loading/error early returns below and guards against a null
   // proposal inside the callback.
@@ -699,7 +698,6 @@ function PublicProposalView() {
               )}
             </div>
           </div>
-
         </div>
       </footer>
 

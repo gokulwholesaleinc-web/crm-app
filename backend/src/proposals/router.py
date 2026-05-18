@@ -1026,12 +1026,6 @@ async def send_proposal(
     return ProposalResponse.model_validate(proposal)
 
 
-# ``/{proposal_id}/retry-billing`` removed 2026-05-18 — proposals no
-# longer spawn Stripe artifacts. Use the Invoices module to bill clients
-# after acceptance. Legacy proposals with stripe_* columns still render
-# their existing artifacts; nothing new is created here.
-
-
 @router.post("/{proposal_id}/restamp", response_model=ProposalResponse)
 async def restamp_proposal_signed_pdf(
     proposal_id: int,
@@ -1052,13 +1046,6 @@ async def restamp_proposal_signed_pdf(
     with value_error_as_400():
         proposal = await service.restamp_signed_pdf(proposal)
     return ProposalResponse.model_validate(proposal)
-
-
-# ``/{proposal_id}/refresh-from-quote`` endpoint removed 2026-05-14 —
-# quotes router unmounted; proposals are no longer hydrated from quotes.
-
-# ``/{proposal_id}/resend-payment-link`` removed 2026-05-18 alongside
-# retry-billing — payments are owned by the Invoices module now.
 
 
 @router.get("/{proposal_id}/pdf")

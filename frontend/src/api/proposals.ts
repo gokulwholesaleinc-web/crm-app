@@ -86,11 +86,6 @@ export const rejectProposal = async (proposalId: number): Promise<Proposal> => {
   return response.data;
 };
 
-// ``resendProposalPaymentLink`` and ``retryProposalBilling`` removed
-// 2026-05-18 — proposals no longer spawn Stripe artifacts. Billing
-// lives in the Invoices module; the corresponding backend endpoints
-// were removed in the same change.
-
 export const restampProposalSignedPdf = async (proposalId: number): Promise<Proposal> => {
   const response = await apiClient.post<Proposal>(
     `${PROPOSALS_BASE}/${proposalId}/restamp`,

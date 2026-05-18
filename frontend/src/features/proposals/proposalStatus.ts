@@ -90,8 +90,8 @@ export function buildProposalTimelineSteps(proposal: Proposal): TimelineStep[] {
 
 /**
  * Build the pre-send checklist. Only renders when the proposal is in a
- * sendable status (draft/sent/viewed) — accepted/paid proposals have no
- * send action so there's nothing to gate.
+ * sendable status (draft/sent/viewed) — accepted proposals have no send
+ * action so there's nothing to gate.
  */
 export function buildProposalSendChecklist(
   proposal: Proposal,
