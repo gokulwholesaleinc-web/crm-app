@@ -597,13 +597,11 @@ export function GuideTourOverlay({
         <p id={bodyId} className="mt-3 text-sm leading-6 text-gray-700 dark:text-gray-300">
           {currentStep.body}
         </p>
-        <div className="mt-3 rounded-md border border-primary-100 bg-primary-50 px-3 py-2 text-sm text-primary-800 dark:border-primary-900/40 dark:bg-primary-900/20 dark:text-primary-200">
-          <span className="font-semibold">Try this:</span>{' '}
-          {currentStep.action ??
-            (currentStep.selector
-              ? 'use the highlighted control, then continue when you are ready.'
-              : 'read this step, then continue when you are ready.')}
-        </div>
+        {currentStep.action && (
+          <div className="mt-3 rounded-md border border-primary-100 bg-primary-50 px-3 py-2 text-sm text-primary-800 dark:border-primary-900/40 dark:bg-primary-900/20 dark:text-primary-200">
+            <span className="font-semibold">Try this:</span> {currentStep.action}
+          </div>
+        )}
         {targetMissing && (
           <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
             This step does not have a visible page target right now, so the guide is showing the instruction without a highlight.
