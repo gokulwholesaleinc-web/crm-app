@@ -144,28 +144,9 @@ export function useRejectProposal() {
   });
 }
 
-export function useResendProposalPaymentLink() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (proposalId: number) => proposalsApi.resendPaymentLink(proposalId),
-    onSuccess: (_data, proposalId) => {
-      queryClient.invalidateQueries({ queryKey: proposalKeys.detail(proposalId) });
-    },
-  });
-}
-
-export function useRetryProposalBilling() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (proposalId: number) => proposalsApi.retryBilling(proposalId),
-    onSuccess: (_data, proposalId) => {
-      queryClient.invalidateQueries({ queryKey: proposalKeys.lists() });
-      queryClient.invalidateQueries({ queryKey: proposalKeys.detail(proposalId) });
-    },
-  });
-}
+// ``useResendProposalPaymentLink`` and ``useRetryProposalBilling``
+// removed 2026-05-18 — proposals no longer spawn Stripe artifacts;
+// billing lives in the Invoices module.
 
 /**
  * PATCH a proposal's saved signature-box placement.
