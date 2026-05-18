@@ -30,6 +30,7 @@ from src.auth.models import User
 from src.contacts.models import Contact
 from src.database import Base
 from src.email.models import EmailQueue, InboundEmail
+from src.integrations.gmail.client import GmailAuthError, GmailClient
 from src.integrations.gmail.models import GmailConnection, GmailSyncState
 from src.integrations.gmail.sync import GmailSyncWorker
 
@@ -1126,3 +1127,57 @@ class TestSyncMultiRecipient:
         )).scalar_one()
         assert row.entity_type == "contacts"
         assert row.entity_id == contact.id
+
+
+class TestSyncTokenRevocation:
+    @pytest.mark.asyncio
+    async def test_auth_error_from_process_message_revokes_connection(self, connection, db):
+        """A GmailAuthError raised while processing a single message must
+        propagate to the outer handler and flip ``connection.revoked_at``.
+        Regression: the inner ``except Exception`` previously swallowed
+        ``GmailAuthError`` so the UI kept showing "Connected" while every
+        poll silently failed 401."""
+        state = GmailSyncState(
+            user_id=connection.user_id,
+            last_history_id="100",
+            failure_count=0,
+        )
+        db.add(state)
+        await db.commit()
+
+        history = {
+            "history": [
+                {"id": "101", "messagesAdded": [{"message": {"id": "revoked-mid-sync"}}]}
+            ]
+        }
+        routes = {"users/me/history": history}
+        http = _make_http_client(routes)
+
+        async def _raise_auth(*_args, **_kwargs):
+            raise GmailAuthError("token revoked")
+
+        orig_init = GmailClient.__init__
+
+        def patched_init(self, conn, db_, http=None):
+            orig_init(self, conn, db_, http=http)
+
+        with (
+            patch("src.integrations.gmail.client.httpx.AsyncClient", return_value=http),
+            patch.object(GmailClient, "__init__", patched_init),
+            patch("src.integrations.gmail.sync._process_message", side_effect=_raise_auth),
+            pytest.raises(GmailAuthError),
+        ):
+            await GmailSyncWorker.sync_account(connection, db)
+
+        await db.refresh(connection)
+        assert connection.revoked_at is not None, (
+            "connection.revoked_at must be set so the UI stops showing "
+            "'Connected' after a mid-sync token revoke"
+        )
+        state_row = (
+            await db.execute(
+                select(GmailSyncState).where(GmailSyncState.user_id == connection.user_id)
+            )
+        ).scalar_one()
+        assert state_row.failure_count == 1
+        assert "GmailAuthError" in (state_row.last_error or "")

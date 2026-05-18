@@ -16,12 +16,16 @@ export const STALE_CHUNK_RELOAD_FLAG = 'crm:stale-chunk-reload-attempted';
 export function isStaleChunkLoadError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   const message = error.message.toLowerCase();
+  // The four named conditions below cover Vite, webpack, and Safari for
+  // dynamic-import failures. We deliberately do NOT match a generic
+  // "/assets/ + 404" pair — an API 404 against any path containing
+  // "/assets/" (e.g. /api/v1/assets/123) would be misclassified as a
+  // stale chunk and silently reload the page.
   return (
     error.name === 'ChunkLoadError' ||
     message.includes('failed to fetch dynamically imported module') ||
     message.includes('error loading dynamically imported module') ||
-    message.includes('importing a module script failed') ||
-    (message.includes('/assets/') && message.includes('404'))
+    message.includes('importing a module script failed')
   );
 }
 

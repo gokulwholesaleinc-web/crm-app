@@ -83,6 +83,12 @@ class GmailSyncWorker:
                             "[gmail_sync] user_id=%s message_id=%s skipped: message no longer available",
                             connection.user_id, msg_id,
                         )
+                    except GmailAuthError:
+                        # Token was revoked mid-sync. Let it propagate to
+                        # the outer handler so the connection flips to
+                        # revoked_at — otherwise the UI keeps reading
+                        # "Connected" while every poll silently fails 401.
+                        raise
                     except Exception as exc:
                         logger.error(
                             "[gmail_sync] user_id=%s message_id=%s error: %s",
