@@ -17,11 +17,13 @@ export const safeStorage = {
     }
   },
 
-  set(key: string, value: string): void {
+  set(key: string, value: string): boolean {
     try {
       localStorage.setItem(key, value);
+      return true;
     } catch {
       // unavailable, blocked, or quota exceeded — preference stays in-memory
+      return false;
     }
   },
 
@@ -43,11 +45,12 @@ export const safeStorage = {
     }
   },
 
-  setJson(key: string, value: unknown): void {
+  setJson(key: string, value: unknown): boolean {
     try {
-      safeStorage.set(key, JSON.stringify(value));
+      return safeStorage.set(key, JSON.stringify(value));
     } catch {
       // circular reference or serialization failure
+      return false;
     }
   },
 };

@@ -123,7 +123,7 @@ function ProposalsPage() {
       created = await createProposalMutation.mutateAsync(data);
     } catch (err) {
       showError(extractApiErrorDetail(err) ?? 'Failed to create proposal');
-      return;
+      throw err;
     }
 
     // Upload signable PDFs after create so the endpoint has a proposal id.
