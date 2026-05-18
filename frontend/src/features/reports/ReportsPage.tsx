@@ -148,9 +148,12 @@ function ReportsPage() {
   }
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div className="space-y-4 sm:space-y-6" data-guide="reports-page">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+      <div
+        className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2"
+        data-guide="reports-header"
+      >
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">Reports</h1>
           <p className="mt-1 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
@@ -168,7 +171,7 @@ function ReportsPage() {
       {/* Contract stats widgets removed 2026-05-14 — contracts router unmounted. */}
 
       {/* My Reports Section */}
-      <section>
+      <section data-guide="reports-saved">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
           <DocumentTextIcon className="h-5 w-5 text-gray-400" aria-hidden="true" />
           My Reports
@@ -232,7 +235,7 @@ function ReportsPage() {
       </section>
 
       {/* Templates Section */}
-      <section>
+      <section data-guide="reports-templates">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
           <ChartBarIcon className="h-5 w-5 text-gray-400" aria-hidden="true" />
           Report Templates

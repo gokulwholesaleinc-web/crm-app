@@ -257,9 +257,12 @@ export function ActivitiesPage() {
   const hasActiveFilters = Boolean(filters.activity_type || filters.priority || filters.is_completed !== undefined);
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div className="space-y-4 sm:space-y-6" data-guide="activities-page">
       {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div
+        className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+        data-guide="activities-header"
+      >
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">Activities</h1>
           <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-1">
@@ -309,7 +312,7 @@ export function ActivitiesPage() {
       {/* Toolbar */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center justify-between sm:justify-start gap-2">
-          <div className="flex items-center gap-1 sm:gap-2">
+          <div className="flex items-center gap-1 sm:gap-2" data-guide="activities-view-toggle">
             <button
               onClick={() => setViewMode('list')}
               className={clsx(
@@ -353,6 +356,7 @@ export function ActivitiesPage() {
             leftIcon={<FunnelIcon className="h-4 w-4" />}
             onClick={() => setShowFilters(!showFilters)}
             className="ml-1 sm:ml-2"
+            data-guide="activities-filters"
           >
             <span className="hidden sm:inline">Filters</span>
             <span className="sm:hidden">Filter</span>

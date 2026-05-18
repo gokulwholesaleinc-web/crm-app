@@ -151,7 +151,7 @@ function SettingsPage() {
   };
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div className="space-y-4 sm:space-y-6" data-guide="settings-page">
       {/* Page Header */}
       <div>
         <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">Settings</h1>
@@ -197,6 +197,7 @@ function SettingsPage() {
         <nav
           aria-label="Settings sections"
           className="hidden lg:block lg:w-56 lg:flex-shrink-0"
+          data-guide="settings-nav"
         >
           <ul
             className="sticky top-6 space-y-1 border-l border-gray-200 dark:border-gray-700"
@@ -230,6 +231,7 @@ function SettingsPage() {
             id="profile"
             ref={setSectionRef('profile')}
             className="scroll-mt-6"
+            data-guide="settings-section-profile"
           >
             <Card>
               <CardHeader
@@ -324,7 +326,7 @@ function SettingsPage() {
             />
           )}
 
-          <section id="branding" ref={setSectionRef('branding')} className="scroll-mt-6">
+          <section id="branding" ref={setSectionRef('branding')} className="scroll-mt-6" data-guide="settings-section-branding">
             <BrandingSection />
           </section>
 
@@ -353,6 +355,7 @@ function SettingsPage() {
             id="integrations"
             ref={setSectionRef('integrations')}
             className="scroll-mt-6"
+            data-guide="settings-integrations"
           >
             <IntegrationsSection />
           </section>
@@ -365,11 +368,11 @@ function SettingsPage() {
             <EmailSettingsSection />
           </section>
 
-          <section id="webhooks" ref={setSectionRef('webhooks')} className="scroll-mt-6">
+          <section id="webhooks" ref={setSectionRef('webhooks')} className="scroll-mt-6" data-guide="settings-webhooks">
             <WebhooksSection />
           </section>
 
-          <section id="roles" ref={setSectionRef('roles')} className="scroll-mt-6">
+          <section id="roles" ref={setSectionRef('roles')} className="scroll-mt-6" data-guide="settings-roles">
             <RolesSection />
           </section>
 
@@ -426,6 +429,7 @@ function SettingsPage() {
             id="notifications"
             ref={setSectionRef('notifications')}
             className="scroll-mt-6"
+            data-guide="settings-notifications"
           >
             <NotificationPreferencesSection />
           </section>
@@ -434,6 +438,7 @@ function SettingsPage() {
             id="preferences"
             ref={setSectionRef('preferences')}
             className="scroll-mt-6"
+            data-guide="settings-preferences"
           >
             <AccountPreferencesSection />
           </section>

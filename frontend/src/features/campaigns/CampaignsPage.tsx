@@ -347,9 +347,12 @@ export function CampaignsPage() {
   const hasActiveFilters = Boolean(filters.search || filters.status || filters.campaign_type);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-guide="campaigns-page">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div
+        className="flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+        data-guide="campaigns-header"
+      >
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">Email Campaigns</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
@@ -357,7 +360,7 @@ export function CampaignsPage() {
           </p>
         </div>
         {canCreateCampaigns && (
-          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto" data-guide="campaigns-actions">
             <Button
               leftIcon={<PlusIcon className="h-5 w-5" />}
               onClick={() => {
@@ -373,10 +376,15 @@ export function CampaignsPage() {
       </div>
 
       {/* Volume Stats Dashboard */}
-      <VolumeStats />
+      <div data-guide="campaigns-volume">
+        <VolumeStats />
+      </div>
 
       {/* Toolbar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+      <div
+        className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4"
+        data-guide="campaigns-filters"
+      >
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
           <div className="w-full sm:w-80">
             <Input
@@ -469,7 +477,7 @@ export function CampaignsPage() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4" data-guide="campaigns-list">
             {campaigns.map((campaign) => (
               <CampaignCard
                 key={campaign.id}

@@ -160,7 +160,7 @@ export default function AdminSharingPage() {
   const pages = Math.ceil(total / PAGE_SIZE);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-guide="admin-sharing-page">
       <div className="flex items-center gap-3">
         <ShareIcon className="h-6 w-6 text-gray-500 dark:text-gray-400" aria-hidden="true" />
         <div>
@@ -172,85 +172,88 @@ export default function AdminSharingPage() {
       </div>
 
       {/* Filters */}
-      <Card>
-        <CardBody>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div>
-              <label
-                htmlFor="filter-entity-type"
-                className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1"
-              >
-                Entity type
-              </label>
-              <Select
-                id="filter-entity-type"
-                value={entityType}
-                onChange={(e) => {
-                  setEntityType(e.target.value);
-                  handleFilterChange();
-                }}
-                options={ENTITY_TYPE_OPTIONS}
-              />
-            </div>
+      <div data-guide="admin-sharing-filters">
+        <Card>
+          <CardBody>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div>
+                <label
+                  htmlFor="filter-entity-type"
+                  className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1"
+                >
+                  Entity type
+                </label>
+                <Select
+                  id="filter-entity-type"
+                  value={entityType}
+                  onChange={(e) => {
+                    setEntityType(e.target.value);
+                    handleFilterChange();
+                  }}
+                  options={ENTITY_TYPE_OPTIONS}
+                />
+              </div>
 
-            <div>
-              <label
-                htmlFor="filter-shared-with"
-                className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1"
-              >
-                Shared with
-              </label>
-              <Select
-                id="filter-shared-with"
-                value={sharedWithId}
-                onChange={(e) => {
-                  setSharedWithId(e.target.value);
-                  handleFilterChange();
-                }}
-                options={userOptions}
-              />
-            </div>
+              <div>
+                <label
+                  htmlFor="filter-shared-with"
+                  className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1"
+                >
+                  Shared with
+                </label>
+                <Select
+                  id="filter-shared-with"
+                  value={sharedWithId}
+                  onChange={(e) => {
+                    setSharedWithId(e.target.value);
+                    handleFilterChange();
+                  }}
+                  options={userOptions}
+                />
+              </div>
 
-            <div>
-              <label
-                htmlFor="filter-shared-by"
-                className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1"
-              >
-                Shared by
-              </label>
-              <Select
-                id="filter-shared-by"
-                value={sharedById}
-                onChange={(e) => {
-                  setSharedById(e.target.value);
-                  handleFilterChange();
-                }}
-                options={userOptions}
-              />
-            </div>
+              <div>
+                <label
+                  htmlFor="filter-shared-by"
+                  className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1"
+                >
+                  Shared by
+                </label>
+                <Select
+                  id="filter-shared-by"
+                  value={sharedById}
+                  onChange={(e) => {
+                    setSharedById(e.target.value);
+                    handleFilterChange();
+                  }}
+                  options={userOptions}
+                />
+              </div>
 
-            <div>
-              <label
-                htmlFor="filter-permission"
-                className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1"
-              >
-                Permission
-              </label>
-              <Select
-                id="filter-permission"
-                value={permissionLevel}
-                onChange={(e) => {
-                  setPermissionLevel(e.target.value);
-                  handleFilterChange();
-                }}
-                options={PERMISSION_OPTIONS}
-              />
+              <div>
+                <label
+                  htmlFor="filter-permission"
+                  className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1"
+                >
+                  Permission
+                </label>
+                <Select
+                  id="filter-permission"
+                  value={permissionLevel}
+                  onChange={(e) => {
+                    setPermissionLevel(e.target.value);
+                    handleFilterChange();
+                  }}
+                  options={PERMISSION_OPTIONS}
+                />
+              </div>
             </div>
-          </div>
-        </CardBody>
-      </Card>
+          </CardBody>
+        </Card>
+      </div>
 
       {/* Table */}
+      <div data-guide="admin-sharing-table">
       <Card>
         <CardHeader
           title={`Shares (${total.toLocaleString()})`}
@@ -370,6 +373,7 @@ export default function AdminSharingPage() {
           )}
         </CardBody>
       </Card>
+      </div>
 
       {/* Revoke confirm dialog */}
       <ConfirmDialog

@@ -8,15 +8,18 @@ function CalendarPage() {
   const { connected, isLoadingStatus, sync, isSyncing } = useGoogleCalendarSync();
 
   return (
-    <div className="space-y-4 sm:space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="space-y-4 sm:space-y-6" data-guide="calendar-page">
+      <div
+        className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+        data-guide="calendar-header"
+      >
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">Calendar</h1>
           <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-1">
             Your activities and Google Calendar events
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3" data-guide="calendar-sync">
           {!isLoadingStatus && (connected ? (
             <Button
               variant="primary"

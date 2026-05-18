@@ -181,16 +181,19 @@ function ContactsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-guide="contacts-page">
       {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div
+        className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+        data-guide="contacts-header"
+      >
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Contacts</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
             Manage your contacts and relationships
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2" data-guide="contacts-actions">
           <Button
             variant="secondary"
             leftIcon={<FunnelIcon className="h-5 w-5" />}
@@ -277,7 +280,10 @@ function ContactsPage() {
       )}
 
       {/* Search and Filters */}
-      <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-4 border border-transparent dark:border-gray-700">
+      <div
+        className="bg-white dark:bg-gray-800 shadow rounded-lg p-4 border border-transparent dark:border-gray-700"
+        data-guide="contacts-search"
+      >
         <div className="flex flex-col gap-3 sm:flex-row sm:gap-4">
           <div className="flex-1">
             <label htmlFor="search" className="sr-only">
@@ -329,7 +335,10 @@ function ContactsPage() {
       )}
 
       {/* Contacts Table */}
-      <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden border border-transparent dark:border-gray-700">
+      <div
+        className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden border border-transparent dark:border-gray-700"
+        data-guide="contacts-table"
+      >
         {isLoading ? (
           <SkeletonTable rows={5} cols={8} />
         ) : contacts.length === 0 ? (

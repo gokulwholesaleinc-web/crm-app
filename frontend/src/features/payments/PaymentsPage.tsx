@@ -142,10 +142,13 @@ function PaymentsPage() {
   const hasActivePaymentFilters = Boolean(searchQuery || statusFilter);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-guide="payments-page">
       <StripeTestModeBanner />
       {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div
+        className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+        data-guide="payments-header"
+      >
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">Payments</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
@@ -154,14 +157,18 @@ function PaymentsPage() {
         </div>
         <div className="flex items-center gap-3">
           <HelpLink anchor="tutorial-create-invoice" label="How to send an invoice" text="How to send an invoice" />
-          <Button variant="primary" onClick={() => setShowInvoiceModal(true)}>
+          <Button
+            variant="primary"
+            onClick={() => setShowInvoiceModal(true)}
+            data-guide="payments-send-invoice"
+          >
             Send Invoice
           </Button>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200 dark:border-gray-700">
+      <div className="border-b border-gray-200 dark:border-gray-700" data-guide="payments-tabs">
         <nav className="-mb-px flex gap-6" aria-label="Payment tabs">
           {TABS.map((tab) => (
             <button
@@ -237,7 +244,10 @@ function PaymentsPage() {
 
       {/* All Payments Tab */}
       {activeTab === 'All Payments' && (
-        <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden border border-transparent dark:border-gray-700">
+        <div
+          className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden border border-transparent dark:border-gray-700"
+          data-guide="payments-table"
+        >
           {isLoading ? (
             <SkeletonTable rows={5} cols={5} />
           ) : payments.length === 0 ? (

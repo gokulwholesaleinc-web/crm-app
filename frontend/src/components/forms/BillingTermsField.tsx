@@ -134,7 +134,7 @@ function BillingTermsField({
                 One-time charge
               </span>
               <span className="block text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                Single invoice sent on acceptance.
+                Reference amount for a manual invoice after signing.
               </span>
             </span>
           </label>

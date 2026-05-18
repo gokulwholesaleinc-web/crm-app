@@ -320,18 +320,26 @@ function InboxPage() {
       : 'No emails to show yet.';
 
   return (
-    <div className="space-y-4 sm:space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+    <div className="space-y-4 sm:space-y-6" data-guide="inbox-page">
+      <div
+        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+        data-guide="inbox-header"
+      >
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">Inbox</h1>
           <p className="mt-0.5 sm:mt-1 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
             Recent emails across your CRM. Click any row to open the contact thread.
           </p>
         </div>
-        <VolumeTile />
+        <div data-guide="inbox-volume">
+          <VolumeTile />
+        </div>
       </div>
 
-      <div className="rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+      <div
+        className="rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+        data-guide="inbox-search"
+      >
         <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
           <label className="flex-1 flex items-center gap-3" htmlFor="inbox-search">
             <MagnifyingGlassIcon className="h-5 w-5 text-gray-400" aria-hidden="true" />
