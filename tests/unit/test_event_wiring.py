@@ -9,16 +9,12 @@ a real event handler is registered to capture emitted events.
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.auth.models import User
-from src.leads.models import Lead, LeadSource
-from src.contacts.models import Contact
 from src.companies.models import Company
-from src.opportunities.models import Opportunity, PipelineStage
-from src.activities.models import Activity
-from src.quotes.models import Quote
+from src.contacts.models import Contact
+from src.events.service import off, on
+from src.leads.models import Lead, LeadSource
 from src.proposals.models import Proposal
-from src.events.service import on, off, clear_handlers
 
 
 class _EventCollector:
@@ -38,14 +34,21 @@ class _EventCollector:
 def event_collector():
     """Register an event collector for all event types and clean up after each test."""
     from src.events.service import (
-        LEAD_CREATED, LEAD_UPDATED,
-        CONTACT_CREATED, CONTACT_UPDATED,
-        COMPANY_CREATED, COMPANY_UPDATED,
-        OPPORTUNITY_CREATED, OPPORTUNITY_UPDATED, OPPORTUNITY_STAGE_CHANGED,
         ACTIVITY_CREATED,
-        QUOTE_SENT, QUOTE_ACCEPTED,
-        PROPOSAL_SENT, PROPOSAL_ACCEPTED,
+        COMPANY_CREATED,
+        COMPANY_UPDATED,
+        CONTACT_CREATED,
+        CONTACT_UPDATED,
+        LEAD_CREATED,
+        LEAD_UPDATED,
+        OPPORTUNITY_CREATED,
+        OPPORTUNITY_STAGE_CHANGED,
+        OPPORTUNITY_UPDATED,
         PAYMENT_RECEIVED,
+        PROPOSAL_ACCEPTED,
+        PROPOSAL_SENT,
+        QUOTE_ACCEPTED,
+        QUOTE_SENT,
     )
 
     collector = _EventCollector()

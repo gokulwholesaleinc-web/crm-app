@@ -5,9 +5,11 @@ from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import (
     JSON,
+    BigInteger,
     Date,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     LargeBinary,
     Numeric,
@@ -63,6 +65,45 @@ if TYPE_CHECKING:
     from src.companies.models import Company
     from src.contacts.models import Contact
     from src.opportunities.models import Opportunity
+
+
+class ProposalSigningDocument(Base, AuditableMixin):
+    """PDF attached to a proposal that must receive the signer signature."""
+    __tablename__ = "proposal_signing_documents"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    proposal_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("proposals.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    file_size: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
+    content_type: Mapped[str] = mapped_column(
+        String(100),
+        default="application/pdf",
+        nullable=False,
+    )
+    pdf_path: Mapped[str] = mapped_column(Text, nullable=False)
+    signature_field_coords: Mapped[dict | None] = mapped_column(_SignatureCoords)
+    signed_pdf_path: Mapped[str | None] = mapped_column(Text)
+    signed_pdf_error: Mapped[str | None] = mapped_column(Text)
+    display_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    proposal: Mapped["Proposal"] = relationship(
+        "Proposal",
+        back_populates="signing_documents",
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_proposal_signing_documents_proposal_order",
+            "proposal_id",
+            "display_order",
+            "id",
+        ),
+    )
 
 
 class Proposal(Base, AuditableMixin):
@@ -254,6 +295,13 @@ class Proposal(Base, AuditableMixin):
         "User",
         foreign_keys=[owner_id],
         lazy="joined",
+    )
+    signing_documents: Mapped[list[ProposalSigningDocument]] = relationship(
+        "ProposalSigningDocument",
+        back_populates="proposal",
+        cascade="all, delete-orphan",
+        order_by=(ProposalSigningDocument.display_order, ProposalSigningDocument.id),
+        lazy="selectin",
     )
 
 

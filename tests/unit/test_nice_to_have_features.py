@@ -8,20 +8,19 @@ Tests for:
 - Predictive AI (win probability, next action suggestion, activity summary)
 """
 
+from datetime import UTC, date, datetime, timedelta
+
 import pytest
-from datetime import date, datetime, timedelta, timezone
 from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-
-from src.auth.models import User
-from src.leads.models import Lead, LeadSource
-from src.contacts.models import Contact
-from src.companies.models import Company
-from src.opportunities.models import Opportunity, PipelineStage
+from sqlalchemy.ext.asyncio import AsyncSession
 from src.activities.models import Activity
-from src.core.currencies import convert_amount, get_supported_currencies_list, get_base_currency
-
+from src.auth.models import User
+from src.companies.models import Company
+from src.contacts.models import Contact
+from src.core.currencies import convert_amount, get_base_currency, get_supported_currencies_list
+from src.leads.models import Lead, LeadSource
+from src.opportunities.models import Opportunity, PipelineStage
 
 # =========================================================================
 # Multi-Currency Unit Tests
@@ -542,7 +541,7 @@ class TestCalendarEndpoint:
         assert data["total_activities"] >= 1
 
         # Verify activity data structure in dates
-        for date_key, activities in data["dates"].items():
+        for _date_key, activities in data["dates"].items():
             assert isinstance(activities, list)
             for act in activities:
                 assert "id" in act
@@ -562,7 +561,7 @@ class TestCalendarEndpoint:
     ):
         """Test calendar only returns activities within specified date range."""
         # Create activity for tomorrow
-        tomorrow = datetime.now(timezone.utc) + timedelta(days=1)
+        tomorrow = datetime.now(UTC) + timedelta(days=1)
         activity = Activity(
             activity_type="meeting",
             subject="Tomorrow Meeting",
@@ -600,7 +599,7 @@ class TestCalendarEndpoint:
         test_contact: Contact,
     ):
         """Test calendar filtering by activity type."""
-        tomorrow = datetime.now(timezone.utc) + timedelta(days=1)
+        tomorrow = datetime.now(UTC) + timedelta(days=1)
 
         # Create a call activity
         call = Activity(
@@ -642,7 +641,7 @@ class TestCalendarEndpoint:
         data = response.json()
 
         # All activities in the response should be calls
-        for date_key, activities in data["dates"].items():
+        for _date_key, activities in data["dates"].items():
             for act in activities:
                 assert act["activity_type"] == "call"
 
@@ -715,5 +714,4 @@ class TestCalendarEndpoint:
             "/api/activities/calendar?start_date=2025-01-01&end_date=2025-01-31",
         )
         assert response.status_code == 401
-
 

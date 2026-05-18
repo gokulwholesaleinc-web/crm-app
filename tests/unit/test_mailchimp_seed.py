@@ -12,13 +12,11 @@ import httpx
 import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.config import settings
 from src.integrations.mailchimp.client import MailchimpClient
 from src.integrations.mailchimp.models import MailchimpConnection
 from src.integrations.mailchimp.seed import seed_mailchimp_from_env
 from src.whitelabel.models import Tenant, TenantSettings
-
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -20,6 +20,20 @@ export interface SignatureFieldCoords {
   h: number;
 }
 
+export interface ProposalSigningDocument {
+  id: number;
+  proposal_id: number;
+  original_filename: string;
+  file_size: number;
+  content_type: string;
+  signature_field_coords?: SignatureFieldCoords | null;
+  signed_pdf_path?: string | null;
+  signed_pdf_error?: string | null;
+  display_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ProposalBillingFields {
   payment_type: PaymentType;
   /** Stripe-native unit. 'month' + count=3 = quarterly, count=6 = bi-yearly. */
@@ -122,6 +136,8 @@ export interface Proposal extends ProposalBase {
   signed_pdf_path?: string | null;
   /** Most-recent stamp/upload failure. Drives the re-stamp banner on /proposals/:id. */
   signed_pdf_error?: string | null;
+  /** PDFs that require explicit signature/date placement before send. */
+  signing_documents?: ProposalSigningDocument[];
   /** Per-view audit log. Populated on every public-link GET. */
   views?: ProposalView[];
   created_at: string;

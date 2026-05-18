@@ -5,10 +5,9 @@ the happy-path works. Each test hits the real test DB via the client fixture.
 """
 
 import io
-import pytest
+
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-
 
 # =============================================================================
 # Opportunities router retired (PR #328, 2026-05-14) — ownership-gate
@@ -52,9 +51,9 @@ class TestFileUploadSizeGuard:
         test_contact,
     ):
         """Upload with file.size=None (chunked) should be rejected with 400."""
-        from src.attachments import service as attachment_service
-        from fastapi import UploadFile
         import io as _io
+
+        from src.attachments import service as attachment_service
 
         # Simulate a chunked upload by patching file.size to None at the service layer.
         original_upload = attachment_service.AttachmentService.upload_file

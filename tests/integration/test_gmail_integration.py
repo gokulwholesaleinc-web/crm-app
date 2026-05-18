@@ -6,14 +6,13 @@ for the Gmail API. No mocks on business logic.
 
 import base64
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import httpx
 import pytest
 import pytest_asyncio
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.activities.models import Activity
 from src.contacts.models import Contact
 from src.email.models import EmailQueue, InboundEmail
@@ -92,7 +91,7 @@ async def gmail_connection(db_session: AsyncSession, test_user) -> GmailConnecti
         email="giancarlo@linkcreative.com",
         access_token="ya29.test-access",
         refresh_token="1//test-refresh",
-        token_expiry=datetime(2099, 1, 1, tzinfo=timezone.utc),
+        token_expiry=datetime(2099, 1, 1, tzinfo=UTC),
         scopes="openid email profile gmail.send gmail.readonly",
     )
     db_session.add(conn)
@@ -231,7 +230,7 @@ class TestGmailSync:
             from_email="customer@example.com",
             to_email="giancarlo@linkcreative.com",
             subject="Already logged",
-            received_at=datetime.now(timezone.utc),
+            received_at=datetime.now(UTC),
             message_id="<inbound-dup@example.com>",
         )
         db_session.add(existing)

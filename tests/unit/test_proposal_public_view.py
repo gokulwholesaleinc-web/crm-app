@@ -11,15 +11,15 @@ Validates:
 - No mocking — real DB, real ASGI transport
 """
 
-import pytest
 import secrets
 from base64 import b64encode
+
+import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.auth.models import User
-from src.proposals.models import Proposal
 from src.contacts.models import Contact
+from src.proposals.models import Proposal
 
 # Smallest valid PNG (1x1 transparent) used as the drawn signature in
 # every accept call below — the Sign-to-Confirm payload made

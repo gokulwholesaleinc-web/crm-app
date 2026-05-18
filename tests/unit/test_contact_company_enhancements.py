@@ -7,15 +7,14 @@ Tests cover:
 """
 
 import io
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.auth.models import User
-from src.contacts.models import Contact
 from src.companies.models import Company
-from src.payments.models import StripeCustomer, Payment
-from src.attachments.models import Attachment
+from src.contacts.models import Contact
+from src.payments.models import Payment, StripeCustomer
 
 
 class TestCompanySegment:

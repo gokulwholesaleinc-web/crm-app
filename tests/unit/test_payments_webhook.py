@@ -21,12 +21,10 @@ from unittest.mock import patch
 import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.auth.models import User
 from src.payments.models import Payment, StripeCustomer, Subscription
 from src.payments.service import PaymentService, _to_cents
 from src.webhooks.stripe_events import WebhookEvent
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -64,8 +62,7 @@ def _as_utc(dt):
     """
     if dt is None:
         return None
-    from datetime import timezone as _tz
-    return dt.replace(tzinfo=_tz.utc) if dt.tzinfo is None else dt
+    return dt.replace(tzinfo=UTC) if dt.tzinfo is None else dt
 
 
 # ---------------------------------------------------------------------------
@@ -162,11 +159,13 @@ def patched_settings():
     changed to `from src.payments.service import _get_stripe`, this patch
     silently stops working — update both sides together.
     """
-    with patch("src.payments.service._get_stripe", return_value=None):
-        with patch("src.payments.service.settings") as mock_settings:
-            mock_settings.STRIPE_WEBHOOK_SECRET = WEBHOOK_SECRET
-            mock_settings.STRIPE_SECRET_KEY = ""
-            yield mock_settings
+    with (
+        patch("src.payments.service._get_stripe", return_value=None),
+        patch("src.payments.service.settings") as mock_settings,
+    ):
+        mock_settings.STRIPE_WEBHOOK_SECRET = WEBHOOK_SECRET
+        mock_settings.STRIPE_SECRET_KEY = ""
+        yield mock_settings
 
 
 # ---------------------------------------------------------------------------
@@ -670,7 +669,7 @@ class TestHandleSubscriptionUpdated:
         test_user: User,
     ):
         """Renewal events advance current_period_start/end; we must apply them."""
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         customer = StripeCustomer(
             stripe_customer_id="cus_subupdate_04",
@@ -684,16 +683,16 @@ class TestHandleSubscriptionUpdated:
             stripe_subscription_id="sub_update_04",
             customer_id=customer.id,
             status="active",
-            current_period_start=datetime(2026, 1, 1, tzinfo=timezone.utc),
-            current_period_end=datetime(2026, 2, 1, tzinfo=timezone.utc),
+            current_period_start=datetime(2026, 1, 1, tzinfo=UTC),
+            current_period_end=datetime(2026, 2, 1, tzinfo=UTC),
             owner_id=test_user.id,
             created_by_id=test_user.id,
         )
         db_session.add(sub)
         await db_session.commit()
 
-        new_start_dt = datetime(2026, 2, 1, tzinfo=timezone.utc)
-        new_end_dt = datetime(2026, 3, 1, tzinfo=timezone.utc)
+        new_start_dt = datetime(2026, 2, 1, tzinfo=UTC)
+        new_end_dt = datetime(2026, 3, 1, tzinfo=UTC)
         await payment_service._handle_subscription_updated({
             "id": "sub_update_04",
             "status": "active",
@@ -714,7 +713,7 @@ class TestHandleSubscriptionUpdated:
         test_user: User,
     ):
         """Events without period fields (e.g. pause) must not null existing values."""
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         customer = StripeCustomer(
             stripe_customer_id="cus_subupdate_05",
@@ -724,8 +723,8 @@ class TestHandleSubscriptionUpdated:
         db_session.add(customer)
         await db_session.flush()
 
-        existing_start = datetime(2026, 1, 1, tzinfo=timezone.utc)
-        existing_end = datetime(2026, 2, 1, tzinfo=timezone.utc)
+        existing_start = datetime(2026, 1, 1, tzinfo=UTC)
+        existing_end = datetime(2026, 2, 1, tzinfo=UTC)
         sub = Subscription(
             stripe_subscription_id="sub_update_05",
             customer_id=customer.id,

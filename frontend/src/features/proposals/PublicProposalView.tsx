@@ -62,6 +62,7 @@ interface PublicProposal {
   terms_and_conditions: string | null;
   designated_signer_email: string | null;
   has_master_contract: boolean;
+  signing_document_count?: number;
 }
 
 const DEFAULT_BRANDING: ProposalBranding = {
@@ -586,6 +587,7 @@ function PublicProposalView() {
           recipientEmail={recipientEmail}
           termsAndConditions={proposal.terms_and_conditions}
           hasMasterContract={proposal.has_master_contract}
+          signingDocumentCount={proposal.signing_document_count ?? 0}
           onSubmit={submitSignature}
         />
 

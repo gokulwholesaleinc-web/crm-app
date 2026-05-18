@@ -3,11 +3,11 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { PlusIcon, DocumentDuplicateIcon } from '@heroicons/react/24/outline';
 import { Button, EntityLink, Modal, ConfirmDialog, StatusBadge, PaginationBar } from '../../components/ui';
 import { SkeletonTable } from '../../components/ui/Skeleton';
-import { ProposalForm } from './ProposalForm';
+import { ProposalForm, type SigningUploadStatus } from './ProposalForm';
 import { TemplateGallery } from './TemplateGallery';
 import { SortableTh } from '../../components/shared/SortableTh';
 import { useProposals, useCreateProposal, useDeleteProposal, useDuplicateProposal } from '../../hooks/useProposals';
-import { uploadProposalMasterContract } from '../../api/proposals';
+import { uploadProposalSigningDocument } from '../../api/proposals';
 import {
   useListPageSizeState,
   useListSortPersistence,
@@ -52,6 +52,10 @@ function ProposalsPage() {
     isOpen: false,
     proposal: null,
   });
+  // Live progress for the post-create signing-doc upload loop. Drives the
+  // submit button label so the modal doesn't go silent for several seconds
+  // between "proposal row created" and "navigate to detail page".
+  const [signingUploadStatus, setSigningUploadStatus] = useState<SigningUploadStatus | null>(null);
   const { sortBy, sortDir, toggle: toggleSort } = useListSortPersistence('proposals');
   const [pageSize, setPageSize] = useListPageSizeState('proposals');
 
@@ -112,40 +116,74 @@ function ProposalsPage() {
 
   const handleFormSubmit = async (
     data: ProposalCreate,
-    pendingMaster?: File | null,
+    pendingSigningDocs: File[] = [],
   ) => {
+    let created;
     try {
-      const created = await createProposalMutation.mutateAsync(data);
-      // Upload the stashed master contract as a follow-on so the proposal
-      // exists by the time the multipart POST resolves the id. A failure
-      // here doesn't unwind the create — the user lands on the detail
-      // page where MasterContractCard reads ``masterUploadFailed`` from
-      // location state and surfaces a persistent retry banner. Plain
-      // ``showError`` would disappear in ~5 s while the user is still
-      // figuring out the new page.
-      if (pendingMaster) {
-        try {
-          await uploadProposalMasterContract(created.id, pendingMaster);
-        } catch (err) {
-          const detail =
-            extractApiErrorDetail(err) ??
-            'Master contract upload failed after the proposal was created.';
-          setShowForm(false);
-          navigate(`/proposals/${created.id}`, {
-            state: { masterUploadFailed: detail },
-          });
-          return;
-        }
-      }
-      setShowForm(false);
-      showSuccess('Proposal created successfully');
-      navigate(`/proposals/${created.id}`);
-    } catch {
-      showError('Failed to create proposal');
+      created = await createProposalMutation.mutateAsync(data);
+    } catch (err) {
+      showError(extractApiErrorDetail(err) ?? 'Failed to create proposal');
+      return;
     }
+
+    // Upload signable PDFs after create so the endpoint has a proposal id.
+    // Placement still happens on the detail page; send is gated until every
+    // uploaded document has a signing area. Failures are tracked per-file so
+    // partial success doesn't disappear into a generic toast (a re-upload of
+    // the whole batch would otherwise dupe the files that already landed).
+    const failed: { fileName: string; detail: string }[] = [];
+    let succeededCount = 0;
+    let uploadIndex = 0;
+    for (const file of pendingSigningDocs) {
+      uploadIndex += 1;
+      setSigningUploadStatus({
+        current: uploadIndex,
+        total: pendingSigningDocs.length,
+        fileName: file.name,
+      });
+      try {
+        await uploadProposalSigningDocument(created.id, file);
+        succeededCount++;
+      } catch (err) {
+        failed.push({
+          fileName: file.name,
+          detail: extractApiErrorDetail(err) ?? 'Upload failed.',
+        });
+      }
+    }
+    setSigningUploadStatus(null);
+    setShowForm(false);
+
+    if (pendingSigningDocs.length === 0) {
+      showSuccess('Proposal created');
+    } else if (failed.length === 0) {
+      showSuccess(
+        `Proposal created — ${succeededCount} signing document${succeededCount === 1 ? '' : 's'} uploaded`,
+      );
+    } else if (succeededCount === 0) {
+      showError(
+        `Proposal created but every signing document failed to upload. Retry from the proposal page.`,
+      );
+    } else {
+      showError(
+        `Proposal created — ${succeededCount} of ${pendingSigningDocs.length} signing documents uploaded; ${failed.length} failed.`,
+      );
+    }
+
+    const failureBanner =
+      failed.length > 0
+        ? failed
+            .map((f) => `${f.fileName}: ${f.detail}`)
+            .join(' · ')
+        : null;
+    navigate(`/proposals/${created.id}`, {
+      state: failureBanner ? { masterUploadFailed: failureBanner } : undefined,
+    });
   };
 
   const handleFormCancel = () => {
+    // Don't let the modal close swallow an in-flight upload batch.
+    if (signingUploadStatus != null) return;
     setShowForm(false);
   };
 
@@ -532,6 +570,7 @@ function ProposalsPage() {
           onSubmit={handleFormSubmit}
           onCancel={handleFormCancel}
           isLoading={createProposalMutation.isPending}
+          signingUploadStatus={signingUploadStatus}
         />
       </Modal>
 

@@ -23,7 +23,6 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.attachments.models import Attachment
 from src.auth.models import User
 from src.contacts.models import Contact
@@ -304,11 +303,20 @@ class TestSignedCopyEmail:
         auth_headers: dict,
         sent_proposal: Proposal,
         test_contact: Contact,
+        monkeypatch: pytest.MonkeyPatch,
     ):
         """Accepting a proposal queues a signed-copy email; on attachment-fetch
         failure the body lists the original filenames so the recipient knows
         what was missing.
         """
+        async def fake_render_html_to_pdf(html: str) -> bytes:
+            return html.encode("utf-8")
+
+        monkeypatch.setattr(
+            "src.proposals.service.render_html_to_pdf",
+            fake_render_html_to_pdf,
+        )
+
         # Upload, view, then break the file_path so the in-test fetch
         # fails and the missing-filename branch fires.
         att = await _upload_pdf_attachment(

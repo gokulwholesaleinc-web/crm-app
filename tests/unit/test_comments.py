@@ -6,14 +6,12 @@ Tests for comment creation, listing, threading, @mentions, and deletion.
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-
+from sqlalchemy.ext.asyncio import AsyncSession
 from src.auth.models import User
-from src.contacts.models import Contact
-from src.companies.models import Company
 from src.comments.models import Comment
 from src.comments.service import CommentService, parse_mentions
+from src.contacts.models import Contact
 
 
 class TestParseMentions:

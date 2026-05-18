@@ -31,14 +31,12 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.auth.models import User
 from src.auth.security import create_access_token
 from src.contacts.models import Contact
 from src.payments.models import Payment, StripeCustomer, Subscription
-from src.payments.service import PaymentService, _to_cents
+from src.payments.service import _to_cents
 from src.proposals.models import Proposal
-from src.quotes.models import Quote, QuoteLineItem
 from src.webhooks.stripe_events import WebhookEvent
 
 

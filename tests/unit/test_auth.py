@@ -6,13 +6,9 @@ Tests for auth endpoints — password login removed, Google OAuth is the sole fl
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.auth.models import User
 from src.auth.security import get_password_hash, verify_password
-from src.whitelabel.models import Tenant, TenantUser
-
 
 
 class TestPasswordLoginRemoved:

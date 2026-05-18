@@ -128,10 +128,32 @@ export function StatusTimeline({ steps, variant = 'auto', className }: StatusTim
         const isCurrent = step.state === 'current';
         const describedById = `step-tooltip-${step.key}`;
 
-        const connectorClass = clsx('flex-shrink-0', {
-          'bg-primary-600': step.state === 'completed',
-          'bg-gray-200 dark:bg-gray-700': step.state !== 'completed',
-        });
+        // Each step renders two half-connectors (left + right) around the
+        // dot. Coloring rules:
+        //   - LEFT half: gold once we've *arrived* at this step — i.e.
+        //     this step is completed/current, OR the prior step was
+        //     completed (the entity is past that segment).
+        //   - RIGHT half: gold once we've *left* this step — i.e. this
+        //     step is completed.
+        // Treating `current` as "left half filled" is what makes the bar
+        // run all the way to a terminal current dot (e.g. Signed/Rejected
+        // on accepted/rejected proposals).
+        const prior = idx > 0 ? steps[idx - 1] : null;
+        const leftFilled =
+          step.state === 'completed' ||
+          step.state === 'current' ||
+          prior?.state === 'completed';
+        const rightFilled = step.state === 'completed';
+        const filledClass = 'bg-primary-600';
+        const emptyClass = 'bg-gray-200 dark:bg-gray-700';
+        const leftConnectorClass = clsx(
+          'flex-shrink-0',
+          leftFilled ? filledClass : emptyClass,
+        );
+        const rightConnectorClass = clsx(
+          'flex-shrink-0',
+          rightFilled ? filledClass : emptyClass,
+        );
 
         const labelClass = clsx('text-xs font-medium leading-tight block', {
           'text-primary-700 dark:text-primary-400':
@@ -159,7 +181,7 @@ export function StatusTimeline({ steps, variant = 'auto', className }: StatusTim
               {idx > 0 && (
                 <div
                   aria-hidden="true"
-                  className={clsx(connectorClass, {
+                  className={clsx(leftConnectorClass, {
                     'h-0.5 flex-1': rowLayout,
                     'w-0.5 flex-1 min-h-4': isVertical,
                   })}
@@ -175,7 +197,7 @@ export function StatusTimeline({ steps, variant = 'auto', className }: StatusTim
               {!isLast && (
                 <div
                   aria-hidden="true"
-                  className={clsx(connectorClass, {
+                  className={clsx(rightConnectorClass, {
                     'h-0.5 flex-1': rowLayout,
                     'w-0.5 h-4': isVertical,
                   })}

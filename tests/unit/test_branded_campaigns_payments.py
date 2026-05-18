@@ -17,31 +17,27 @@ The more comprehensive versions of these classes live in
 test_branded_templates.py (which has more test methods and edge cases).
 """
 
-import pytest
-from datetime import date, timedelta
 
+import pytest
 from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 # Send paths gate on assert_gmail_connected (PR #310).
 pytestmark = pytest.mark.usefixtures("gmail_connected_test_user")
 
 from src.auth.models import User
 from src.auth.security import create_access_token
-from src.contacts.models import Contact
-from src.leads.models import Lead, LeadSource
 from src.campaigns.models import Campaign, CampaignMember, EmailTemplate
-from src.payments.models import StripeCustomer, Payment
-from src.payments.service import PaymentService
-from src.email.service import EmailService, render_template
+from src.contacts.models import Contact
 from src.email.branded_templates import (
     TenantBrandingHelper,
-    render_campaign_wrapper,
-    render_payment_receipt_email,
-    render_branded_email,
 )
-from src.whitelabel.models import Tenant, TenantSettings, TenantUser
+from src.email.service import EmailService, render_template
+from src.leads.models import Lead
+from src.payments.models import Payment, StripeCustomer
+from src.payments.service import PaymentService
+from src.whitelabel.models import Tenant, TenantUser
 
 
 def _token(user: User) -> dict:

@@ -4,13 +4,12 @@ Calls _store_inbound directly — no Gmail API mocking needed.
 No mocks on any business logic. SQLite in-memory DB via conftest fixtures.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 import pytest_asyncio
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.account.models import UserNotificationPrefs
 from src.contacts.models import Contact
 from src.email.models import EmailQueue, InboundEmail
@@ -47,7 +46,7 @@ def _make_msg(
         "subject": subject,
         "body_text": body_text,
         "body_html": None,
-        "date": datetime.now(timezone.utc),
+        "date": datetime.now(UTC),
         "to_list": [to],
         "cc_list": [],
         "bcc_list": [],
@@ -65,7 +64,7 @@ async def gmail_connection(db_session: AsyncSession, test_user) -> GmailConnecti
         email="owner@company.com",
         access_token="tok",
         refresh_token="rtok",
-        token_expiry=datetime(2099, 1, 1, tzinfo=timezone.utc),
+        token_expiry=datetime(2099, 1, 1, tzinfo=UTC),
         scopes="https://mail.google.com/",
     )
     db_session.add(conn)
@@ -98,7 +97,7 @@ class TestInboundReplyNotify:
             in_reply_to="<original@example.com>",
         )
         await _store_inbound(
-            msg, gmail_connection, db_session, datetime.now(timezone.utc)
+            msg, gmail_connection, db_session, datetime.now(UTC)
         )
         await db_session.flush()
 
@@ -127,7 +126,7 @@ class TestInboundReplyNotify:
             in_reply_to=None,
         )
         await _store_inbound(
-            msg, gmail_connection, db_session, datetime.now(timezone.utc)
+            msg, gmail_connection, db_session, datetime.now(UTC)
         )
         await db_session.flush()
 
@@ -170,7 +169,7 @@ class TestInboundReplyNotify:
             message_id="<msg-002@example.com>",
         )
         await _store_inbound(
-            msg, gmail_connection, db_session, datetime.now(timezone.utc)
+            msg, gmail_connection, db_session, datetime.now(UTC)
         )
         await db_session.flush()
 
@@ -200,7 +199,7 @@ class TestInboundReplyNotify:
             in_reply_to="<original@example.com>",
         )
         await _store_inbound(
-            msg, gmail_connection, db_session, datetime.now(timezone.utc)
+            msg, gmail_connection, db_session, datetime.now(UTC)
         )
         await db_session.flush()
 
@@ -231,7 +230,7 @@ class TestInboundReplyNotify:
             in_reply_to="<original@example.com>",
         )
         await _store_inbound(
-            msg, gmail_connection, db_session, datetime.now(timezone.utc)
+            msg, gmail_connection, db_session, datetime.now(UTC)
         )
         await db_session.flush()
 

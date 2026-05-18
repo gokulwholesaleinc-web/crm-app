@@ -11,16 +11,15 @@ Covers:
    interval (4 wakeups/hr) instead of once per staggered job (8+/hr).
 """
 
-import pytest
 from datetime import date, timedelta
-from sqlalchemy.ext.asyncio import AsyncSession
 
+import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
 from src.auth.models import User
 from src.companies.models import Company
 from src.contacts.models import Contact
 from src.opportunities.models import Opportunity, PipelineStage
 from src.opportunities.pipeline import PipelineManager
-
 
 # =============================================================================
 # Fix 3 — Kanban N+1
@@ -193,6 +192,7 @@ class TestSchedulerConsolidation:
     def test_background_tick_is_async_callable(self):
         """_background_tick exists and is an async coroutine function."""
         import inspect
+
         from src.core.scheduler import _background_tick
 
         assert inspect.iscoroutinefunction(_background_tick)

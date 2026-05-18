@@ -60,7 +60,7 @@ from src.meta.models import CompanyMetaData, MetaCredential, MetaLeadCapture  # 
 from src.notifications.models import Notification  # noqa: F401
 from src.opportunities.models import Opportunity, PipelineStage  # noqa: F401
 from src.payments.models import Payment, Price, Product, StripeCustomer, Subscription  # noqa: F401
-from src.proposals.models import Proposal
+from src.proposals.models import Proposal, ProposalSigningDocument
 from src.proposals.service import ProposalService
 from src.quotes.models import (  # noqa: F401
     ProductBundle,
@@ -87,6 +87,10 @@ class _Unset:
 
 
 _UNSET = _Unset()
+
+
+def _valid_signature_coords() -> dict:
+    return {"page": 1, "x": 72, "y": 144, "w": 180, "h": 48}
 
 
 @pytest_asyncio.fixture(scope="session")
@@ -168,12 +172,20 @@ async def _make_proposal(
     *,
     status: str = "accepted",
     master_contract_pdf_path: str | None = "proposals/9/master.pdf",
+    signature_field_coords: dict | None | _Unset = _UNSET,
     signature_image: bytes | None = b"\x89PNG\r\n\x1a\n",
     signed_at: datetime | None | _Unset = _UNSET,
+    signed_pdf_path: str | None = None,
     signed_pdf_error: str | None = None,
 ) -> Proposal:
     if isinstance(signed_at, _Unset):
         signed_at = datetime.now(UTC) if status != "draft" else None
+    if isinstance(signature_field_coords, _Unset):
+        signature_field_coords = (
+            _valid_signature_coords()
+            if master_contract_pdf_path is not None
+            else None
+        )
     proposal = Proposal(
         proposal_number=f"PR-{secrets.token_hex(4).upper()}",
         title="Restamp Test",
@@ -189,7 +201,9 @@ async def _make_proposal(
         signer_ip="203.0.113.7",
         signer_user_agent="Mozilla/5.0 TestUA",
         master_contract_pdf_path=master_contract_pdf_path,
+        signature_field_coords=signature_field_coords,
         signature_image=signature_image,
+        signed_pdf_path=signed_pdf_path,
         signed_pdf_error=signed_pdf_error,
     )
     db.add(proposal)
@@ -208,7 +222,7 @@ class TestRestampServiceGuards:
             db_session, user, master_contract_pdf_path=None
         )
         service = ProposalService(db_session)
-        with pytest.raises(ValueError, match="master contract PDF"):
+        with pytest.raises(ValueError, match="signing document PDF"):
             await service.restamp_signed_pdf(proposal)
 
     async def test_rejects_when_no_signature_image(
@@ -260,6 +274,50 @@ class TestRestampCapturesFailure:
         assert result.signed_pdf_path is None
         assert result.signed_pdf_error is not None
         assert len(result.signed_pdf_error) <= 1000
+
+    async def test_multi_doc_total_failure_preserves_prior_signed_pdf_path(
+        self, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+    ):
+        user = await _make_user(db_session)
+        proposal = await _make_proposal(
+            db_session,
+            user,
+            master_contract_pdf_path=None,
+            signed_pdf_path="proposals/9/previous-signed.pdf",
+        )
+        db_session.add(
+            ProposalSigningDocument(
+                proposal_id=proposal.id,
+                original_filename="service-agreement.pdf",
+                file_size=1024,
+                content_type="application/pdf",
+                pdf_path="proposals/9/signing-documents/1/source.pdf",
+                signature_field_coords=_valid_signature_coords(),
+            )
+        )
+        await db_session.commit()
+
+        async def fake_download(_: str) -> bytes:
+            raise ClientError(
+                {
+                    "Error": {
+                        "Code": "ServiceUnavailable",
+                        "Message": "R2 temporarily unavailable",
+                    },
+                },
+                "GetObject",
+            )
+
+        monkeypatch.setattr(
+            "src.proposals.service.download_object_bytes",
+            fake_download,
+        )
+
+        result = await ProposalService(db_session).restamp_signed_pdf(proposal)
+
+        assert result.signed_pdf_path == "proposals/9/previous-signed.pdf"
+        assert result.signed_pdf_error is not None
+        assert "1 signing document(s) failed" in result.signed_pdf_error
 
 
 class TestRestampEndpoint:

@@ -12,7 +12,6 @@ Verifies:
 
 from __future__ import annotations
 
-import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.account.models import UserNotificationPrefs
 from src.account.notification_gate import (

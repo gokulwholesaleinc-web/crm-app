@@ -15,6 +15,8 @@ export interface ModalProps {
   showCloseButton?: boolean;
   closeOnOverlayClick?: boolean;
   fullScreenOnMobile?: boolean;
+  confirmClose?: boolean;
+  confirmCloseMessage?: string;
 }
 
 // Mobile: full-width/height by default; Desktop: constrained by max-width
@@ -39,13 +41,22 @@ export function Modal({
   showCloseButton = true,
   closeOnOverlayClick = true,
   fullScreenOnMobile = false,
+  confirmClose = false,
+  confirmCloseMessage = 'Discard unsaved changes?',
 }: ModalProps) {
+  const requestClose = () => {
+    if (confirmClose && !window.confirm(confirmCloseMessage)) {
+      return;
+    }
+    onClose();
+  };
+
   return (
     <Transition appear show={isOpen} as={Fragment}>
       <Dialog
         as="div"
         className="relative z-50"
-        onClose={closeOnOverlayClick ? onClose : () => {}}
+        onClose={closeOnOverlayClick ? requestClose : () => {}}
       >
         <Transition.Child
           as={Fragment}
@@ -104,7 +115,7 @@ export function Modal({
                       <button
                         type="button"
                         className="rounded-lg p-2 sm:p-1 text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 -mr-1 sm:mr-0 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center dark:hover:bg-gray-700 dark:hover:text-gray-300"
-                        onClick={onClose}
+                        onClick={requestClose}
                       >
                         <span className="sr-only">Close</span>
                         <XMarkIcon className="h-6 w-6 sm:h-5 sm:w-5" aria-hidden="true" />

@@ -2,7 +2,7 @@
 
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 import pytest_asyncio
@@ -11,10 +11,10 @@ from sqlalchemy.pool import StaticPool
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "backend"))
 
-from src.database import Base
 from src.auth.models import User
-from src.contacts.models import Contact, ContactEmailAlias
 from src.contacts.alias_match import find_contact_id_by_any_email
+from src.contacts.models import Contact, ContactEmailAlias
+from src.database import Base
 
 TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 
@@ -132,7 +132,7 @@ class TestFindContactIdByAnyEmail:
         deleted = Contact(
             first_name="Deleted", last_name="Guy", email="deleted@example.com",
             owner_id=user.id, created_by_id=user.id,
-            deleted_at=datetime.now(timezone.utc),
+            deleted_at=datetime.now(UTC),
         )
         db.add(deleted)
         await db.commit()
@@ -164,7 +164,7 @@ class TestFindContactIdByAnyEmail:
         deleted = Contact(
             first_name="Gone", last_name="User", email="gone@example.com",
             owner_id=user.id, created_by_id=user.id,
-            deleted_at=datetime.now(timezone.utc),
+            deleted_at=datetime.now(UTC),
         )
         db.add(deleted)
         await db.commit()

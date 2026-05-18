@@ -4,11 +4,9 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from src.auth.models import User, RejectedAccessEmail
+from src.auth.models import RejectedAccessEmail, User
 from src.auth.security import create_access_token, get_password_hash
 from src.notifications.models import Notification
-
 
 # ---------------------------------------------------------------------------
 # Helpers

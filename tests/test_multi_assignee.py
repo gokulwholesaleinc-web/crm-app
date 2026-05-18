@@ -12,7 +12,6 @@ These tests use a real in-memory SQLite database; no mocks.
 import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.auth.models import User
 from src.auth.security import get_password_hash
 from src.core.models import EntityShare
@@ -20,7 +19,6 @@ from src.leads.models import Lead, LeadSource
 from src.leads.service import LeadService
 from src.opportunities.models import Opportunity, PipelineStage
 from src.opportunities.service import OpportunityService
-
 
 # ---------------------------------------------------------------------------
 # Helpers / shared fixtures

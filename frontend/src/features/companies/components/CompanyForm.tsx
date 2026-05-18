@@ -20,6 +20,7 @@ interface CompanyFormProps {
   onSubmit: (data: CompanyCreate | CompanyUpdate) => Promise<void>;
   onCancel: () => void;
   isLoading?: boolean;
+  onDirtyChange?: (isDirty: boolean) => void;
 }
 
 interface FormValues {
@@ -104,6 +105,7 @@ export function CompanyForm({
   onSubmit,
   onCancel,
   isLoading,
+  onDirtyChange,
 }: CompanyFormProps) {
   const isEditing = !!company;
   const { data: usersData } = useUsers();
@@ -155,6 +157,10 @@ export function CompanyForm({
   });
 
   useUnsavedChangesWarning(isDirty);
+
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
 
   // Reset form when company prop changes
   useEffect(() => {

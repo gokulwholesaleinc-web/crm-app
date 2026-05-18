@@ -6,7 +6,6 @@ No mocks — all assertions hit the in-memory SQLite test DB.
 
 from datetime import UTC, date, datetime, timedelta
 
-import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.account.models import UserNotificationPrefs
 from src.contracts.models import Contract
@@ -233,10 +232,7 @@ class TestExpiringAlert:
         assert contract.expiring_notified_at is not None
         # SQLite returns tz-naive datetimes; strip tz for comparison
         notified = contract.expiring_notified_at
-        if notified.tzinfo is None:
-            old_naive = old_notify.replace(tzinfo=None)
-        else:
-            old_naive = old_notify
+        old_naive = old_notify.replace(tzinfo=None) if notified.tzinfo is None else old_notify
         assert notified > old_naive
 
     async def test_alert_skips_far_future_end_date(

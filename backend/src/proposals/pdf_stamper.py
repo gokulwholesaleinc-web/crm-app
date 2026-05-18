@@ -77,6 +77,7 @@ def stamp_master_with_signature(inputs: StampInputs) -> bytes:
         page_height=page_height,
         signature_png=inputs.signature_png,
         box=box,
+        signed_at=inputs.signed_at,
     )
 
     writer = PdfWriter()
@@ -152,6 +153,7 @@ def _build_signature_overlay(
     page_height: float,
     signature_png: bytes,
     box: tuple[float, float, float, float],
+    signed_at: datetime,
 ) -> bytes:
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=(page_width, page_height))
@@ -168,6 +170,16 @@ def _build_signature_overlay(
         anchor="sw",
         mask="auto",
     )
+    date_label = f"Signed {signed_at.strftime('%Y-%m-%d')}"
+    c.setFont("Helvetica", 7)
+    c.setFillGray(0.35)
+    if y >= 10:
+        date_y = y - 9
+    elif y + h + 9 <= page_height:
+        date_y = y + h + 3
+    else:
+        date_y = y + 2
+    c.drawString(x, date_y, date_label)
     c.save()
     return buf.getvalue()
 

@@ -6,11 +6,14 @@ Provides async test database setup, test client, and user fixtures.
 
 import os
 import sys
-import time
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
+from datetime import UTC
 
 import pytest
 import pytest_asyncio
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import StaticPool
 
 
 def pytest_itemcollected(item):
@@ -25,50 +28,99 @@ def pytest_itemcollected(item):
     if doc:
         first_line = doc.strip().split("\n")[0]
         item._nodeid = f"{item.parent.nodeid}::{first_line}"
-from httpx import AsyncClient, ASGITransport
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from sqlalchemy.pool import StaticPool
+
 
 # Add backend src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 
-from src.database import Base, get_db
-from src.auth.security import get_password_hash, create_access_token
-from src.auth.models import User, RejectedAccessEmail
-from src.contacts.models import Contact
-from src.companies.models import Company
-from src.leads.models import Lead, LeadSource
-from src.opportunities.models import Opportunity, PipelineStage
+from src.account import models as account_models
+from src.account.models import UserNotificationPrefs
+from src.activities import models as activity_models
 from src.activities.models import Activity
-from src.campaigns.models import Campaign, CampaignMember, EmailTemplate, EmailCampaignStep
-from src.core.models import Note, Tag, EntityTag, EntityShare
-from src.workflows.models import WorkflowRule, WorkflowExecution
-from src.dashboard.models import DashboardNumberCard, DashboardChart, DashboardReportWidget
-from src.whitelabel.models import Tenant, TenantSettings, TenantUser
-from src.attachments.models import Attachment
-from src.email.models import EmailQueue, InboundEmail, EmailSettings
-from src.notifications.models import Notification
-from src.account.models import UserNotificationPrefs, UserPreferences
-from src.filters.models import SavedFilter
-from src.reports.models import SavedReport
-from src.audit.models import AuditLog
+from src.assignment import models as assignment_models
+from src.attachments import models as attachment_models
+from src.audit import models as audit_models
+from src.auth import models as auth_models
+from src.auth.models import User
+from src.auth.security import create_access_token, get_password_hash
+from src.campaigns import models as campaign_models
+from src.comments import models as comment_models
 from src.comments.models import Comment
-from src.roles.models import Role, UserRole, RoleName, DEFAULT_PERMISSIONS
-from src.webhooks.models import Webhook, WebhookDelivery
-from src.assignment.models import AssignmentRule
-from src.sequences.models import Sequence, SequenceEnrollment
-from src.quotes.models import Quote, QuoteLineItem, QuoteTemplate, ProductBundle, ProductBundleItem
-from src.payments.models import StripeCustomer, Product, Price, Payment, Subscription
-from src.proposals.models import Proposal, ProposalTemplate, ProposalView
+from src.companies import models as company_models
+from src.companies.models import Company
+from src.contacts import models as contact_models
+from src.contacts.models import Contact
+from src.contracts import models as contract_models
 from src.contracts.models import Contract
-from src.meta.models import CompanyMetaData, MetaCredential, MetaLeadCapture
-from src.expenses.models import Expense
-from src.integrations.google_calendar.models import GoogleCalendarCredential, CalendarSyncEvent
-from src.integrations.gmail.models import GmailConnection, GmailSyncState
-from src.integrations.mailchimp.models import MailchimpConnection
-from src.webhooks.stripe_events import WebhookEvent
-from src.reports.delivery import ReportDeliveryService
+from src.core import models as core_models
+from src.core.models import Note, Tag
+from src.dashboard import models as dashboard_models
+from src.database import Base, get_db
+from src.email import models as email_models
+from src.expenses import models as expense_models
+from src.filters import models as filter_models
+from src.integrations.gmail import models as gmail_models
+from src.integrations.gmail.models import GmailConnection
+from src.integrations.google_calendar import models as google_calendar_models
+from src.integrations.mailchimp import models as mailchimp_models
+from src.leads import models as lead_models
+from src.leads.models import Lead, LeadSource
+from src.meta import models as meta_models
+from src.notifications import models as notification_models
+from src.opportunities import models as opportunity_models
+from src.opportunities.models import Opportunity, PipelineStage
+from src.payments import models as payment_models
+from src.payments.models import Payment
+from src.proposals import models as proposal_models
+from src.quotes import models as quote_models
+from src.reports import delivery as report_delivery
+from src.reports import models as report_models
+from src.reports.models import SavedReport
+from src.roles import models as role_models
+from src.roles.models import DEFAULT_PERMISSIONS, Role, RoleName, UserRole
+from src.sequences import models as sequence_models
+from src.webhooks import models as webhook_models
+from src.webhooks import stripe_events
+from src.whitelabel import models as whitelabel_models
+from src.whitelabel.models import Tenant, TenantSettings, TenantUser
+from src.workflows import models as workflow_models
 
+_MODEL_REGISTRY_IMPORTS = (
+    account_models,
+    activity_models,
+    assignment_models,
+    attachment_models,
+    audit_models,
+    auth_models,
+    campaign_models,
+    comment_models,
+    company_models,
+    contact_models,
+    contract_models,
+    core_models,
+    dashboard_models,
+    email_models,
+    expense_models,
+    filter_models,
+    gmail_models,
+    google_calendar_models,
+    lead_models,
+    mailchimp_models,
+    meta_models,
+    notification_models,
+    opportunity_models,
+    payment_models,
+    proposal_models,
+    quote_models,
+    report_delivery,
+    report_models,
+    role_models,
+    sequence_models,
+    stripe_events,
+    webhook_models,
+    whitelabel_models,
+    workflow_models,
+)
 
 # Test database URL - using SQLite in-memory for tests. The participant_emails
 # column has a TypeDecorator that maps to JSON on SQLite and ARRAY on Postgres
@@ -152,7 +204,7 @@ async def _attach_gmail_connection(db_session, user: User) -> None:
     / gmail-relink suites that override token state) — without this
     check those collide on the ``user_id`` UNIQUE constraint.
     """
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
 
     from sqlalchemy import select
 
@@ -176,7 +228,7 @@ async def _attach_gmail_connection(db_session, user: User) -> None:
             access_token="test-access-token",
             refresh_token="test-refresh-token",
             scopes="https://www.googleapis.com/auth/gmail.send",
-            token_expiry=datetime.now(timezone.utc) + timedelta(hours=1),
+            token_expiry=datetime.now(UTC) + timedelta(hours=1),
         )
     )
     await db_session.commit()
@@ -301,20 +353,10 @@ async def superuser_token(test_superuser: User) -> str:
 
 
 @pytest_asyncio.fixture(scope="function")
-async def admin_auth_headers(superuser_token: str) -> dict:
-    """Authorization headers for an admin/superuser. Use this for tests
-    that exercise privileged endpoints (bulk ops, sources/stages
-    config, admin tools) — the default ``auth_headers`` is a
-    sales_rep and will 403 against role-gated endpoints.
-    """
-    return {"Authorization": f"Bearer {superuser_token}"}
-
-
-@pytest_asyncio.fixture(scope="function")
 async def client(db_session: AsyncSession, test_engine) -> AsyncGenerator[AsyncClient, None]:
     """Create async test client."""
-    from src.main import app
     import src.database as db_module
+    from src.main import app
 
     # Override the database dependency
     async def override_get_db():
@@ -491,7 +533,7 @@ async def test_activity(
     test_contact: Contact,
 ) -> Activity:
     """Create a test activity."""
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
 
     activity = Activity(
         activity_type="call",
@@ -499,7 +541,7 @@ async def test_activity(
         description="Discuss next steps",
         entity_type="contacts",
         entity_id=test_contact.id,
-        scheduled_at=datetime.now(timezone.utc) + timedelta(hours=1),
+        scheduled_at=datetime.now(UTC) + timedelta(hours=1),
         priority="normal",
         is_completed=False,
         owner_id=test_user.id,

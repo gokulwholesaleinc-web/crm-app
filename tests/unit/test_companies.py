@@ -6,9 +6,8 @@ Tests for list, create, get, update, and delete company operations.
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-
+from sqlalchemy.ext.asyncio import AsyncSession
 from src.auth.models import User
 from src.companies.models import Company
 from src.contacts.models import Contact

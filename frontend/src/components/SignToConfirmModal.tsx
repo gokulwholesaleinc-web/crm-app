@@ -19,6 +19,7 @@ export interface SignToConfirmModalProps {
   /** When true, a pre-submit notice warns the signer that a
    *  countersigned PDF will arrive by email after submission. */
   hasMasterContract: boolean;
+  signingDocumentCount?: number;
   /**
    * Returns `null` on success, or an error message string to display
    * inline. The modal handles all submit-disabled / pending state.
@@ -36,6 +37,7 @@ export function SignToConfirmModal({
   recipientEmail,
   termsAndConditions,
   hasMasterContract,
+  signingDocumentCount = 0,
   onSubmit,
 }: SignToConfirmModalProps) {
   const sigRef = useRef<SignatureCanvasHandle | null>(null);
@@ -297,7 +299,9 @@ export function SignToConfirmModal({
                 </div>
                 {hasMasterContract && !submitting && (
                   <p className="mt-3 text-center text-[11px] text-white/40">
-                    A countersigned PDF will be emailed to you after you submit.
+                    {signingDocumentCount > 1
+                      ? 'Countersigned PDFs will be emailed to you after you submit.'
+                      : 'A countersigned PDF will be emailed to you after you submit.'}
                   </p>
                 )}
               </Dialog.Panel>

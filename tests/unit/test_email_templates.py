@@ -4,14 +4,13 @@ Unit tests for email templates and campaign steps endpoints.
 Tests for CRUD operations on email templates and campaign step sequences.
 """
 
-import pytest
-from datetime import date, timedelta
-from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 
+import pytest
+from httpx import AsyncClient
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from src.auth.models import User
-from src.campaigns.models import Campaign, EmailTemplate, EmailCampaignStep
+from src.campaigns.models import Campaign, EmailCampaignStep, EmailTemplate
 
 
 @pytest.fixture

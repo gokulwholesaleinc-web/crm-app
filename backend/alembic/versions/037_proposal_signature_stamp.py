@@ -30,8 +30,9 @@ proposals carry their legacy typed-name signature unchanged.
 """
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision = "037_proposal_sig_stamp"
 down_revision = "036_seed_lc_brand"

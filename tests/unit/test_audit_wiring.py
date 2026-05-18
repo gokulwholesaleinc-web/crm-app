@@ -8,13 +8,11 @@ produce the expected AuditLog records accessible via the audit API.
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from src.auth.models import User
-from src.contacts.models import Contact
-from src.companies.models import Company
-from src.leads.models import Lead, LeadSource
-from src.opportunities.models import Opportunity, PipelineStage
 from src.activities.models import Activity
+from src.auth.models import User
+from src.companies.models import Company
+from src.contacts.models import Contact
+from src.leads.models import Lead, LeadSource
 
 
 async def _get_audit_items(client: AsyncClient, auth_headers: dict, entity_type: str, entity_id: int) -> list:

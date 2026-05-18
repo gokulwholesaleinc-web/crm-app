@@ -49,6 +49,8 @@ from src.proposals.schemas import (
     ProposalRejectRequest,
     ProposalResponse,
     ProposalSendRequest,
+    ProposalSigningDocumentResponse,
+    ProposalSigningDocumentUpdate,
     ProposalTemplateCreate,
     ProposalTemplateResponse,
     ProposalTemplateUpdate,
@@ -66,6 +68,26 @@ router = APIRouter(prefix="/api/proposals", tags=["proposals"])
 # payload that would force the row into TOAST storage and bloat the
 # audit page render.
 _MAX_SIGNATURE_BYTES = 200_000
+_MAX_SIGNING_PDF_BYTES = 25 * 1024 * 1024
+
+
+def _require_declared_pdf_size(
+    file: UploadFile,
+    *,
+    missing_detail: str,
+    oversized_detail: str,
+) -> None:
+    """Reject uploads whose declared size is missing or over the PDF cap."""
+    if file.size is None:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail=missing_detail,
+        )
+    if file.size > _MAX_SIGNING_PDF_BYTES:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail=oversized_detail,
+        )
 
 
 def _decode_signature_image(payload: str) -> bytes:
@@ -365,6 +387,17 @@ def _proposal_attachment_or_404(
         raise_not_found("Attachment")
 
 
+async def _signing_document_or_404(
+    service: ProposalService,
+    proposal_id: int,
+    document_id: int,
+):
+    document = await service.get_signing_document(proposal_id, document_id)
+    if document is None:
+        raise_not_found("Signing document")
+    return document
+
+
 @router.post(
     "/{proposal_id}/attachments",
     response_model=AttachmentResponse,
@@ -608,7 +641,11 @@ async def get_public_proposal(
         proposal.designated_signer_email
         or (proposal.contact.email if proposal.contact else None)
     )
-    response.has_master_contract = bool(proposal.master_contract_pdf_path)
+    signing_document_count = len(proposal.signing_documents or [])
+    response.signing_document_count = signing_document_count
+    response.has_master_contract = bool(
+        proposal.master_contract_pdf_path or signing_document_count
+    )
 
     # Per-token attachment list — surfaced for review only; opening
     # everything is no longer a precondition to signing.
@@ -699,7 +736,11 @@ async def accept_proposal_public(
         proposal.designated_signer_email
         or (proposal.contact.email if proposal.contact else None)
     )
-    response.has_master_contract = bool(proposal.master_contract_pdf_path)
+    signing_document_count = len(proposal.signing_documents or [])
+    response.signing_document_count = signing_document_count
+    response.has_master_contract = bool(
+        proposal.master_contract_pdf_path or signing_document_count
+    )
     return response
 
 
@@ -767,6 +808,219 @@ async def reject_proposal_public(
     return response
 
 
+@router.get(
+    "/{proposal_id}/signing-documents",
+    response_model=list[ProposalSigningDocumentResponse],
+)
+async def list_signing_documents(
+    proposal_id: int,
+    current_user: CurrentUser,
+    db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
+):
+    """List PDFs on this proposal that need explicit signature placement."""
+    service = ProposalService(db)
+    proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
+    check_record_access_or_shared(
+        proposal, current_user, data_scope.role_name,
+        shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_PROPOSALS),
+    )
+    return [
+        ProposalSigningDocumentResponse.model_validate(doc)
+        for doc in await service.list_signing_documents(proposal_id)
+    ]
+
+
+@router.post(
+    "/{proposal_id}/signing-documents",
+    response_model=ProposalSigningDocumentResponse,
+    status_code=HTTPStatus.CREATED,
+)
+async def upload_signing_document(
+    proposal_id: int,
+    current_user: CurrentUser,
+    db: DBSession,
+    file: UploadFile = File(...),
+):
+    """Upload one signable PDF. Every uploaded PDF needs a box before send."""
+    service = ProposalService(db)
+    proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
+    check_ownership(proposal, current_user, EntityNames.PROPOSAL)
+    _ensure_unsigned(proposal)
+    _require_declared_pdf_size(
+        file,
+        missing_detail="signing document upload size is required",
+        oversized_detail="signing document exceeds 25 MB limit",
+    )
+    content = await file.read()
+    with value_error_as_400():
+        document = await service.upload_signing_document_pdf(
+            proposal,
+            content=content,
+            filename=file.filename,
+            user_id=current_user.id,
+        )
+    return ProposalSigningDocumentResponse.model_validate(document)
+
+
+@router.patch(
+    "/{proposal_id}/signing-documents/{document_id}",
+    response_model=ProposalSigningDocumentResponse,
+)
+async def update_signing_document(
+    proposal_id: int,
+    document_id: int,
+    document_data: ProposalSigningDocumentUpdate,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Save or clear the visual signature area for one signable PDF."""
+    service = ProposalService(db)
+    proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
+    check_ownership(proposal, current_user, EntityNames.PROPOSAL)
+    _ensure_unsigned(proposal)
+    document = await _signing_document_or_404(service, proposal_id, document_id)
+    with value_error_as_400():
+        document = await service.update_signing_document(
+            proposal,
+            document,
+            signature_field_coords=document_data.signature_field_coords,
+            user_id=current_user.id,
+        )
+    return ProposalSigningDocumentResponse.model_validate(document)
+
+
+@router.delete(
+    "/{proposal_id}/signing-documents/{document_id}",
+    status_code=HTTPStatus.NO_CONTENT,
+)
+async def delete_signing_document(
+    proposal_id: int,
+    document_id: int,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Delete a signable PDF before the proposal is signed."""
+    service = ProposalService(db)
+    proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
+    check_ownership(proposal, current_user, EntityNames.PROPOSAL)
+    _ensure_unsigned(proposal)
+    document = await _signing_document_or_404(service, proposal_id, document_id)
+    with value_error_as_400():
+        await service.delete_signing_document(proposal, document)
+
+
+@router.get("/{proposal_id}/signing-documents/{document_id}/pdf")
+@limiter.limit("30/minute")
+async def download_signing_document_pdf(
+    proposal_id: int,
+    document_id: int,
+    request: Request,
+    current_user: CurrentUser,
+    db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
+):
+    """Stream the source PDF for placement preview."""
+    from botocore.exceptions import ClientError
+
+    from src.attachments.object_storage import download_object_bytes
+
+    service = ProposalService(db)
+    proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
+    check_record_access_or_shared(
+        proposal, current_user, data_scope.role_name,
+        shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_PROPOSALS),
+    )
+    document = await _signing_document_or_404(service, proposal_id, document_id)
+    try:
+        content = await download_object_bytes(document.pdf_path)
+    except ClientError as exc:
+        response = getattr(exc, "response", None) or {}
+        err = response.get("Error", {}) if isinstance(response, dict) else {}
+        code = err.get("Code", "")
+        if code in ("NoSuchKey", "404", "NotFound"):
+            raise HTTPException(
+                status_code=HTTPStatus.NOT_FOUND,
+                detail="Signing document file missing from storage",
+            ) from exc
+        logger.exception(
+            "R2 ClientError fetching signing document %s for proposal %s",
+            document_id, proposal_id,
+        )
+        raise HTTPException(
+            status_code=HTTPStatus.SERVICE_UNAVAILABLE,
+            detail="File storage temporarily unavailable — try again later",
+        ) from exc
+    except Exception as exc:
+        logger.exception(
+            "Unexpected error fetching signing document %s for proposal %s",
+            document_id, proposal_id,
+        )
+        raise HTTPException(
+            status_code=HTTPStatus.SERVICE_UNAVAILABLE,
+            detail="File storage temporarily unavailable — try again later",
+        ) from exc
+    return Response(content=content, media_type="application/pdf")
+
+
+@router.get("/{proposal_id}/signing-documents/{document_id}/signed-pdf")
+@limiter.limit("30/minute")
+async def download_signing_document_signed_pdf(
+    proposal_id: int,
+    document_id: int,
+    request: Request,
+    current_user: CurrentUser,
+    db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
+):
+    """Stream one signed copy PDF after the public signer accepts."""
+    from botocore.exceptions import ClientError
+
+    from src.attachments.object_storage import download_object_bytes
+
+    service = ProposalService(db)
+    proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
+    check_record_access_or_shared(
+        proposal, current_user, data_scope.role_name,
+        shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_PROPOSALS),
+    )
+    document = await _signing_document_or_404(service, proposal_id, document_id)
+    if not document.signed_pdf_path:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND,
+            detail="No signed PDF on file for this document",
+        )
+    try:
+        content = await download_object_bytes(document.signed_pdf_path)
+    except ClientError as exc:
+        response = getattr(exc, "response", None) or {}
+        err = response.get("Error", {}) if isinstance(response, dict) else {}
+        code = err.get("Code", "")
+        if code in ("NoSuchKey", "404", "NotFound"):
+            raise HTTPException(
+                status_code=HTTPStatus.NOT_FOUND,
+                detail="Signed PDF file missing from storage — re-stamp to regenerate",
+            ) from exc
+        logger.exception(
+            "R2 ClientError fetching signed document %s for proposal %s",
+            document_id, proposal_id,
+        )
+        raise HTTPException(
+            status_code=HTTPStatus.SERVICE_UNAVAILABLE,
+            detail="File storage temporarily unavailable — try again later",
+        ) from exc
+    except Exception as exc:
+        logger.exception(
+            "Unexpected error fetching signed document %s for proposal %s",
+            document_id, proposal_id,
+        )
+        raise HTTPException(
+            status_code=HTTPStatus.SERVICE_UNAVAILABLE,
+            detail="File storage temporarily unavailable — try again later",
+        ) from exc
+    return Response(content=content, media_type="application/pdf")
+
+
 @router.post(
     "/{proposal_id}/master-contract",
     response_model=ProposalResponse,
@@ -789,6 +1043,11 @@ async def upload_master_contract(
     service = ProposalService(db)
     proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
     check_ownership(proposal, current_user, EntityNames.PROPOSAL)
+    _require_declared_pdf_size(
+        file,
+        missing_detail="master contract upload size is required",
+        oversized_detail="master contract exceeds 25 MB limit",
+    )
     content = await file.read()
     with value_error_as_400():
         proposal = await service.upload_master_contract_pdf(

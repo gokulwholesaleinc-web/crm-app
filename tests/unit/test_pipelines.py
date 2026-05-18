@@ -9,11 +9,10 @@ The multi-pipeline feature is not yet implemented. All tests are skipped.
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-
+from sqlalchemy.ext.asyncio import AsyncSession
 from src.auth.models import User
-from src.opportunities.models import PipelineStage, Opportunity
+from src.opportunities.models import Opportunity, PipelineStage
 
 # Pipeline model does not exist yet — skip the entire module
 pytestmark = pytest.mark.skip(reason="Pipeline model not implemented yet")

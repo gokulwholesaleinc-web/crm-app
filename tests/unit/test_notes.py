@@ -7,10 +7,9 @@ Tests for list, create, get, update, and delete operations.
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.auth.models import User
-from src.core.models import Note
 from src.contacts.models import Contact
+from src.core.models import Note
 
 
 class TestNotesList:
@@ -334,7 +333,7 @@ class TestNotesPermissions:
         test_contact: Contact,
     ):
         """Test that users cannot update notes created by others."""
-        from src.auth.security import get_password_hash, create_access_token
+        from src.auth.security import create_access_token, get_password_hash
 
         # Create another user
         other_user = User(
@@ -389,7 +388,7 @@ class TestNotesPermissions:
         test_contact: Contact,
     ):
         """Test that users cannot delete notes created by others."""
-        from src.auth.security import get_password_hash, create_access_token
+        from src.auth.security import create_access_token, get_password_hash
 
         # Create another user
         other_user = User(
@@ -449,11 +448,11 @@ class TestNotesMentions:
         """@-mentioning a user in a different tenant must not notify them."""
         from sqlalchemy import select
         from src.auth.security import get_password_hash
-        from src.whitelabel.models import Tenant, TenantUser
-        from src.notifications.models import Notification
         from src.email.models import EmailQueue
         from src.notes.schemas import NoteCreate
         from src.notes.service import NoteService
+        from src.notifications.models import Notification
+        from src.whitelabel.models import Tenant, TenantUser
 
         # Two separate tenants
         tenant_a = Tenant(name="Tenant A", slug="tenant-a", is_active=True)
@@ -513,10 +512,10 @@ class TestNotesMentions:
         """A Bob Jones in the author's tenant must be notified over a foreign one."""
         from sqlalchemy import select
         from src.auth.security import get_password_hash
-        from src.whitelabel.models import Tenant, TenantUser
-        from src.notifications.models import Notification
         from src.notes.schemas import NoteCreate
         from src.notes.service import NoteService
+        from src.notifications.models import Notification
+        from src.whitelabel.models import Tenant, TenantUser
 
         tenant_a = Tenant(name="Tenant A", slug="tenant-a", is_active=True)
         tenant_b = Tenant(name="Tenant B", slug="tenant-b", is_active=True)
@@ -579,10 +578,10 @@ class TestNotesMentions:
         """Note content with <script> must be HTML-escaped in the queued email."""
         from sqlalchemy import select
         from src.auth.security import get_password_hash
-        from src.whitelabel.models import Tenant, TenantUser
         from src.email.models import EmailQueue
         from src.notes.schemas import NoteCreate
         from src.notes.service import NoteService
+        from src.whitelabel.models import Tenant, TenantUser
 
         tenant_a = Tenant(name="Tenant A", slug="tenant-a", is_active=True)
         db_session.add(tenant_a)

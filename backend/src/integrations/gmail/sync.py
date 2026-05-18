@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.integrations.gmail.client import GmailAuthError, GmailClient
+from src.integrations.gmail.client import GmailAuthError, GmailClient, GmailMessageNotFound
 from src.integrations.gmail.models import GmailBackfillState, GmailConnection, GmailSyncState
 
 # Strips HTML tags so a body_html-only message produces a readable snippet
@@ -78,6 +78,17 @@ class GmailSyncWorker:
                         continue
                     try:
                         await _process_message(msg_id, connection, client, db)
+                    except GmailMessageNotFound:
+                        logger.info(
+                            "[gmail_sync] user_id=%s message_id=%s skipped: message no longer available",
+                            connection.user_id, msg_id,
+                        )
+                    except GmailAuthError:
+                        # Token was revoked mid-sync. Let it propagate to
+                        # the outer handler so the connection flips to
+                        # revoked_at — otherwise the UI keeps reading
+                        # "Connected" while every poll silently fails 401.
+                        raise
                     except Exception as exc:
                         logger.error(
                             "[gmail_sync] user_id=%s message_id=%s error: %s",
@@ -150,6 +161,11 @@ class GmailSyncWorker:
                         await _process_message(
                             msg_id, connection, client, db,
                             require_contact_link=True,
+                        )
+                    except GmailMessageNotFound:
+                        logger.info(
+                            "[gmail_backfill] user_id=%s message_id=%s skipped: message no longer available",
+                            connection.user_id, msg_id,
                         )
                     except GmailAuthError:
                         raise

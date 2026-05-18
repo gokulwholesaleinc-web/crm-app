@@ -139,129 +139,134 @@ describe('PublicProposalView', () => {
     expect(screen.getByText('L')).toBeInTheDocument();
   });
 
-  it('shows signError when accept clicked with missing name and email', async () => {
+  // Note: the inline name/email/signature form was replaced by
+  // SignToConfirmModal (the customer types in the modal, not on the
+  // page). The signing-modal mechanics are covered separately in
+  // SignToConfirmModal.test.tsx; here we only assert that the page
+  // surfaces the right entry points + handles the reject-direct path.
+
+  it('renders Sign to Accept and Decline buttons for a sent proposal', async () => {
     mockGet.mockResolvedValue({ data: baseProposal });
     renderAt();
-    await waitFor(() => screen.getByRole('button', { name: 'Accept this proposal' }));
-
-    fireEvent.click(screen.getByRole('button', { name: 'Accept this proposal' }));
-
     await waitFor(() =>
-      expect(screen.getByRole('alert')).toHaveTextContent(
-        'Please enter your full name and email address.'
-      )
+      expect(
+        screen.getByRole('button', { name: /Open the signing dialog to accept this proposal/i }),
+      ).toBeInTheDocument(),
     );
-    expect(mockPost).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole('button', { name: /Decline this proposal/i }),
+    ).toBeInTheDocument();
   });
 
-  it('shows signError when only name is filled and accept is clicked', async () => {
-    mockGet.mockResolvedValue({ data: baseProposal });
-    renderAt();
-    await waitFor(() => screen.getByLabelText('Full name'));
+  // Note: "Sign to Accept" opens SignToConfirmModal — its own test
+  // suite covers the modal mechanics. We don't render it here because
+  // react-signature-canvas requires HTMLCanvasElement, which jsdom
+  // doesn't implement; the resulting ref-null error is not a real bug.
 
-    fireEvent.change(screen.getByLabelText('Full name'), { target: { value: 'Jane Doe' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Accept this proposal' }));
-
-    await waitFor(() =>
-      expect(screen.getByRole('alert')).toHaveTextContent(
-        'Please enter your full name and email address.'
-      )
-    );
-    expect(mockPost).not.toHaveBeenCalled();
-  });
-
-  it('calls POST accept with signer payload and shows accepted confirmation', async () => {
-    mockGet.mockResolvedValue({ data: baseProposal });
-    // Accept handler sets `proposal = response.data`, so the mock MUST
-    // return a populated `data` payload — otherwise the component renders
-    // its "Proposal not found" empty state and the assertions below fail.
-    mockPost.mockResolvedValue({ data: { ...baseProposal, status: 'accepted' } });
-    renderAt();
-    await waitFor(() => screen.getByLabelText('Full name'));
-
-    fireEvent.change(screen.getByLabelText('Full name'), { target: { value: 'Jane Doe' } });
-    fireEvent.change(screen.getByLabelText('Email address'), { target: { value: 'jane@example.com' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Accept this proposal' }));
-
-    await waitFor(() => expect(screen.getByText('Proposal accepted')).toBeInTheDocument());
-    expect(mockPost).toHaveBeenCalledWith('/api/proposals/public/abc123/accept', {
-      signer_name: 'Jane Doe',
-      signer_email: 'jane@example.com',
+  it('Decline shows signError when proposal has no designated_signer_email', async () => {
+    // No designated_signer_email + the page only forwards that field;
+    // handleReject short-circuits with a signError instead of POSTing.
+    mockGet.mockResolvedValue({
+      data: { ...baseProposal, designated_signer_email: null },
     });
-    expect(screen.getByText(/signed copy will be emailed to you/)).toBeInTheDocument();
+    renderAt();
+    await waitFor(() => screen.getByRole('button', { name: /Decline this proposal/i }));
+
+    fireEvent.click(screen.getByRole('button', { name: /Decline this proposal/i }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        /This proposal has no recipient on file/i,
+      ),
+    );
+    expect(mockPost).not.toHaveBeenCalled();
   });
 
-  it('calls POST reject and shows rejected confirmation', async () => {
-    mockGet.mockResolvedValue({ data: baseProposal });
+  it('Decline posts /reject with the designated signer email and shows declined confirmation', async () => {
+    mockGet.mockResolvedValue({
+      data: { ...baseProposal, designated_signer_email: 'jane@example.com' },
+    });
     mockPost.mockResolvedValue({});
     renderAt();
-    await waitFor(() => screen.getByRole('button', { name: 'Decline this proposal' }));
+    await waitFor(() => screen.getByRole('button', { name: /Decline this proposal/i }));
 
-    // Fill email — required by handleReject gate
-    fireEvent.change(screen.getByLabelText('Email address'), { target: { value: 'jane@example.com' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Decline this proposal' }));
+    fireEvent.click(screen.getByRole('button', { name: /Decline this proposal/i }));
 
-    await waitFor(() => expect(screen.getByText('Proposal declined')).toBeInTheDocument());
-    expect(mockPost).toHaveBeenCalledWith('/api/proposals/public/abc123/reject', {
-      signer_email: expect.any(String),
+    await waitFor(() =>
+      expect(screen.getByText('Proposal declined')).toBeInTheDocument(),
+    );
+    expect(mockPost).toHaveBeenCalledWith(
+      '/api/proposals/public/abc123/reject',
+      { signer_email: 'jane@example.com' },
+    );
+  });
+
+  it('Decline surfaces backend detail when /reject returns an error', async () => {
+    mockGet.mockResolvedValue({
+      data: { ...baseProposal, designated_signer_email: 'jane@example.com' },
     });
-    expect(screen.getByText(/Thank you for your response/)).toBeInTheDocument();
-  });
-
-  it('hides signer form and action buttons after actionDone is set', async () => {
-    mockGet.mockResolvedValue({ data: baseProposal });
-    mockPost.mockResolvedValue({ data: { ...baseProposal, status: 'accepted' } });
+    mockPost.mockRejectedValue({
+      response: { data: { detail: 'Proposal already accepted.' } },
+    });
     renderAt();
-    await waitFor(() => screen.getByLabelText('Full name'));
+    await waitFor(() => screen.getByRole('button', { name: /Decline this proposal/i }));
 
-    fireEvent.change(screen.getByLabelText('Full name'), { target: { value: 'Jane Doe' } });
-    fireEvent.change(screen.getByLabelText('Email address'), { target: { value: 'jane@example.com' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Accept this proposal' }));
+    fireEvent.click(screen.getByRole('button', { name: /Decline this proposal/i }));
 
-    await waitFor(() => expect(screen.getByText('Proposal accepted')).toBeInTheDocument());
-    expect(screen.queryByLabelText('Full name')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Accept this proposal' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Decline this proposal' })).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        /Proposal already accepted/i,
+      ),
+    );
   });
 
-  it('disables action buttons while actionPending', async () => {
-    mockGet.mockResolvedValue({ data: baseProposal });
-    // Never resolves so actionPending stays true
+  it('hides action buttons after rejection lands', async () => {
+    mockGet.mockResolvedValue({
+      data: { ...baseProposal, designated_signer_email: 'jane@example.com' },
+    });
+    mockPost.mockResolvedValue({});
+    renderAt();
+    await waitFor(() => screen.getByRole('button', { name: /Decline this proposal/i }));
+
+    fireEvent.click(screen.getByRole('button', { name: /Decline this proposal/i }));
+
+    await waitFor(() =>
+      expect(screen.getByText('Proposal declined')).toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByRole('button', { name: /Decline this proposal/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /Open the signing dialog to accept this proposal/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('disables Decline while reject is pending', async () => {
+    mockGet.mockResolvedValue({
+      data: { ...baseProposal, designated_signer_email: 'jane@example.com' },
+    });
+    // Never resolves so actionPending stays true.
     mockPost.mockReturnValue(new Promise(() => {}));
     renderAt();
-    await waitFor(() => screen.getByLabelText('Full name'));
+    await waitFor(() => screen.getByRole('button', { name: /Decline this proposal/i }));
 
-    fireEvent.change(screen.getByLabelText('Full name'), { target: { value: 'Jane Doe' } });
-    fireEvent.change(screen.getByLabelText('Email address'), { target: { value: 'jane@example.com' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Accept this proposal' }));
+    fireEvent.click(screen.getByRole('button', { name: /Decline this proposal/i }));
 
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Accept this proposal' })).toBeDisabled()
-    );
-    expect(screen.getByRole('button', { name: 'Decline this proposal' })).toBeDisabled();
-  });
-
-  it('shows backend detail message when accept POST returns an error with detail', async () => {
-    mockGet.mockResolvedValue({ data: baseProposal });
-    const err = { response: { data: { detail: 'Signer email does not match contact.' } } };
-    mockPost.mockRejectedValue(err);
-    renderAt();
-    await waitFor(() => screen.getByLabelText('Full name'));
-
-    fireEvent.change(screen.getByLabelText('Full name'), { target: { value: 'Jane Doe' } });
-    fireEvent.change(screen.getByLabelText('Email address'), { target: { value: 'jane@example.com' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Accept this proposal' }));
-
-    await waitFor(() =>
-      expect(screen.getByRole('alert')).toHaveTextContent('Signer email does not match contact.')
+      expect(screen.getByRole('button', { name: /Decline this proposal/i })).toBeDisabled(),
     );
   });
 
-  it('does not show action section for proposals with status draft', async () => {
+  it('does not render action buttons for proposals in status=draft', async () => {
     mockGet.mockResolvedValue({ data: { ...baseProposal, status: 'draft' } });
     renderAt();
     await waitFor(() => screen.getByRole('heading', { level: 1 }));
-    expect(screen.queryByRole('button', { name: 'Accept this proposal' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /Open the signing dialog to accept this proposal/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /Decline this proposal/i }),
+    ).not.toBeInTheDocument();
   });
 
   it('renders optional sections only when content is provided', async () => {

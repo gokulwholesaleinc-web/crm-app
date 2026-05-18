@@ -147,6 +147,13 @@ async def assign_role(
             status_code=HTTPStatus.BAD_REQUEST,
             detail=str(exc),
         ) from exc
+    except ValueError as exc:
+        if str(exc) == "User not found":
+            raise_not_found("User", assignment.user_id)
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
     return user_role
 
 

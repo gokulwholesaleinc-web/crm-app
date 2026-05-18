@@ -8,12 +8,10 @@ import pytest
 import pytest_asyncio
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-
-from src.auth.models import User
-from src.leads.models import Lead, LeadSource
 from src.assignment.models import AssignmentRule
 from src.assignment.service import AssignmentService
+from src.auth.models import User
+from src.leads.models import Lead
 
 
 # Assignment rule writes require manager+. Override the conftest-level

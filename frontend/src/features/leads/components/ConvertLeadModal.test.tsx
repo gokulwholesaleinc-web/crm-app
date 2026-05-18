@@ -20,7 +20,9 @@ beforeEach(() => {
 describe('ConvertLeadModal', () => {
   it('renders the modal with lead name', () => {
     renderWithProviders(<ConvertLeadModal {...BASE_PROPS} />);
-    expect(screen.getByText(/Convert/)).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: /Convert Lead/i }),
+    ).toBeInTheDocument();
     expect(screen.getByText(/Acme Corp/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
   });

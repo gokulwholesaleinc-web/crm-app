@@ -6,11 +6,11 @@ in favour of the Gmail-only outbound path; inbound mail is now ingested
 through the per-user Gmail history poller (src.integrations.gmail.sync).
 """
 
+from datetime import UTC, datetime
+
 import pytest
-from datetime import datetime, timezone
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 
 # Send paths gate on assert_gmail_connected (PR #310).
 pytestmark = pytest.mark.usefixtures("gmail_connected_test_user")
@@ -64,7 +64,7 @@ class TestEmailThread:
             body_html="<p>Inbound body</p>",
             entity_type="contacts",
             entity_id=test_contact.id,
-            received_at=datetime.now(timezone.utc),
+            received_at=datetime.now(UTC),
         )
         db_session.add(inbound)
         await db_session.commit()
@@ -177,7 +177,7 @@ class TestEmailThread:
             body_text="Thanks",
             entity_type="contacts",
             entity_id=test_contact.id,
-            received_at=datetime.now(timezone.utc),
+            received_at=datetime.now(UTC),
             thread_id="gmail-thread-42",
         )
         db_session.add(inbound)

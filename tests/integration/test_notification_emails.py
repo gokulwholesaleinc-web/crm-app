@@ -9,21 +9,18 @@ Each test class exercises one dispatcher. We verify:
 No mocks — real SQLite in-memory session via the conftest fixtures.
 """
 
-import pytest
-import pytest_asyncio
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from src.account.service import AccountPrefsService
 from src.account.schemas import NotificationPrefsUpdate
+from src.account.service import AccountPrefsService
 from src.auth.models import User
 from src.email.models import EmailQueue
 from src.notifications.models import Notification
 from src.notifications.service import (
-    notify_on_assignment,
     notify_on_activity_due,
-    notify_on_mention,
+    notify_on_assignment,
     notify_on_email_reply_received,
+    notify_on_mention,
     notify_on_proposal_signed,
 )
 

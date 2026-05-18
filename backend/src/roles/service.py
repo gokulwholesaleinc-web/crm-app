@@ -68,10 +68,21 @@ class RoleService:
         without any active admin (demoting the sole remaining admin).
         """
         new_role = await self.get_role_by_id(role_id)
+        if new_role is None:
+            raise ValueError("Role not found")
         new_role_is_admin = bool(new_role and new_role.name == RoleName.ADMIN.value)
 
         if not new_role_is_admin:
             await self._guard_last_active_admin(user_id)
+
+        from src.auth.dependencies import invalidate_user_cache
+        from src.auth.models import User
+        from src.core.data_scope import invalidate_scope_cache
+
+        result = await self.db.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
+        if user is None:
+            raise ValueError("User not found")
 
         # Remove existing role assignments for this user
         existing = await self.db.execute(
@@ -80,11 +91,17 @@ class RoleService:
         for ur in existing.scalars().all():
             await self.db.delete(ur)
 
+        # Keep the legacy users.role column synchronized because a few
+        # auth/admin dependencies still read the detached current_user.role.
+        user.role = new_role.name
+
         # Create new assignment
         user_role = UserRole(user_id=user_id, role_id=role_id)
         self.db.add(user_role)
         await self.db.flush()
         await self.db.refresh(user_role)
+        invalidate_user_cache(user_id)
+        invalidate_scope_cache(user_id)
         return user_role
 
     async def _guard_last_active_admin(self, user_id: int) -> None:

@@ -8,24 +8,21 @@
 """
 
 import json
+from datetime import UTC
+
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from src.campaigns.models import Campaign, CampaignMember, EmailTemplate, EmailCampaignStep
-from src.campaigns.service import CampaignService
-from src.reports.models import SavedReport
-from src.reports.delivery import ReportDeliveryService
-from src.dashboard.models import DashboardReportWidget
-from src.meta.models import MetaLeadCapture
-from src.meta.service import MetaService
-from src.integrations.google_calendar.models import GoogleCalendarCredential
-from src.integrations.google_calendar.service import GoogleCalendarService
 from src.auth.models import User
-from src.leads.models import Lead
+from src.campaigns.models import Campaign, CampaignMember, EmailCampaignStep, EmailTemplate
+from src.campaigns.service import CampaignService
+from src.dashboard.models import DashboardReportWidget
 from src.email.models import EmailQueue
-
+from src.integrations.google_calendar.models import GoogleCalendarCredential
+from src.leads.models import Lead
+from src.reports.delivery import ReportDeliveryService
+from src.reports.models import SavedReport
 
 # =============================================================================
 # Campaign Multi-Step Execution
@@ -487,7 +484,7 @@ class TestScheduledReportDelivery:
 
     async def test_report_not_due_yet(self, db_session: AsyncSession, test_user: User):
         """Should skip report that was just sent."""
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         report = SavedReport(
             name="Daily Report",
@@ -497,7 +494,7 @@ class TestScheduledReportDelivery:
             created_by_id=test_user.id,
             schedule="daily",
             recipients=json.dumps(["test@example.com"]),
-            last_sent_at=datetime.now(timezone.utc),
+            last_sent_at=datetime.now(UTC),
         )
         db_session.add(report)
         await db_session.commit()
@@ -508,7 +505,7 @@ class TestScheduledReportDelivery:
 
     async def test_is_due_no_last_sent(self, db_session: AsyncSession):
         """Should be due if never sent before."""
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         report = SavedReport(
             name="New Report",
@@ -520,7 +517,7 @@ class TestScheduledReportDelivery:
             recipients=json.dumps(["test@example.com"]),
         )
         service = ReportDeliveryService(db_session)
-        assert service._is_due(report, datetime.now(timezone.utc)) is True
+        assert service._is_due(report, datetime.now(UTC)) is True
 
     async def test_parse_recipients(self, db_session: AsyncSession):
         """Should parse valid email addresses from JSON."""
@@ -949,8 +946,8 @@ class TestCampaignAnalytics:
         await db_session.flush()
 
         # Create email queue entries for step 1
-        from datetime import datetime, timezone
-        now = datetime.now(timezone.utc)
+        from datetime import datetime
+        now = datetime.now(UTC)
         eq1 = EmailQueue(
             to_email="jane.smith@example.com",
             subject="Welcome Jane",

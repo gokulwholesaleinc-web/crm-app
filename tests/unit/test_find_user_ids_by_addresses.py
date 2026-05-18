@@ -2,21 +2,19 @@
 
 import os
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "backend"))
 
-from src.database import Base
 from src.auth.models import User
 from src.auth.security import get_password_hash
+from src.database import Base
 from src.integrations.gmail.models import GmailConnection
-
 
 TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 
@@ -70,7 +68,7 @@ async def _make_connection(
         email=email,
         access_token="tok",
         scopes="https://mail.google.com/",
-        revoked_at=datetime.now(timezone.utc) if revoked else None,
+        revoked_at=datetime.now(UTC) if revoked else None,
     )
     db.add(conn)
     await db.flush()

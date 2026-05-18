@@ -3,9 +3,8 @@
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.auth.models import User
-from src.auth.security import create_access_token, get_password_hash
+from src.auth.security import get_password_hash
 from src.email.models import EmailQueue, InboundEmail
 
 
@@ -254,7 +253,7 @@ class TestEmailSearch:
         auth_headers: dict,
     ):
         """entity_type + entity_id filter restricts results to that entity."""
-        eq_linked = await _make_sent_email(
+        await _make_sent_email(
             db_session,
             user_id=test_user.id,
             subject="EntityFilterKeywordABC",

@@ -2,9 +2,8 @@
 
 import pytest
 from sqlalchemy import select
-from sqlalchemy.sql import ClauseElement
 from sqlalchemy.ext.asyncio import AsyncSession
-
+from sqlalchemy.sql import ClauseElement
 from src.contacts.models import Contact
 from src.core.filtering import (
     apply_filter_condition,
@@ -12,7 +11,6 @@ from src.core.filtering import (
     build_token_search,
     parse_filter_group,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

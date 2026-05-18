@@ -12,12 +12,10 @@ Tests do NOT mock anything; they use the in-memory SQLite test DB.
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.auth.models import User
 from src.auth.security import create_access_token, get_password_hash
 from src.core.models import EntityShare
 from src.leads.models import Lead, LeadSource
-
 
 # ---------------------------------------------------------------------------
 # Helpers

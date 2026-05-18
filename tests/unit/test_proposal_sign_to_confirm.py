@@ -16,7 +16,6 @@ from base64 import b64encode
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.auth.models import User
 from src.contacts.models import Contact
 from src.proposals.models import Proposal

@@ -5,14 +5,15 @@ Tests the pipeline_stage_id field on leads, pipeline-stages endpoint,
 kanban board endpoint, lead move endpoint, and pipeline_type isolation.
 """
 
+from datetime import UTC
+
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.auth.models import User
-from src.leads.models import Lead, LeadSource
+from src.leads.models import Lead
 from src.opportunities.models import PipelineStage
 
 
@@ -905,7 +906,7 @@ class TestPatchLeadStageChange:
         ix_contacts_unique_email. Helper declines auto-convert; stage
         change still applies so the user isn't blocked.
         """
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         from src.contacts.models import Contact
 
@@ -918,7 +919,7 @@ class TestPatchLeadStageChange:
             email="soft.deleted@example.com",
             owner_id=test_user.id,
             created_by_id=test_user.id,
-            deleted_at=datetime.now(timezone.utc),
+            deleted_at=datetime.now(UTC),
         )
         db_session.add(gone)
         await db_session.commit()

@@ -5,19 +5,25 @@ Tests for CSV export, import, template generation, smart column mapping,
 duplicate detection, and preview.
 """
 
-import pytest
 import csv
 import io
-from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from datetime import UTC
 
+import pytest
+from httpx import AsyncClient
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from src.auth.models import User
 from src.auth.security import get_password_hash
-from src.contacts.models import Contact
 from src.companies.models import Company
-from src.leads.models import Lead, LeadSource
-from src.import_export.csv_handler import _map_columns, _normalize_header, _split_full_name, _find_name_column
+from src.contacts.models import Contact
+from src.import_export.csv_handler import (
+    _find_name_column,
+    _map_columns,
+    _normalize_header,
+    _split_full_name,
+)
+from src.leads.models import Lead
 
 
 class TestExportContacts:
@@ -1649,7 +1655,8 @@ Sam,Patel,sam@beta.example,{co_b.id}
         test_user: User,
     ):
         """A soft-deleted contact must not silently absorb an import row."""
-        from datetime import datetime, timezone
+        from datetime import datetime
+
         from src.contacts.models import Contact as ContactModel
 
         contact = ContactModel(
@@ -1662,7 +1669,7 @@ Sam,Patel,sam@beta.example,{co_b.id}
         db_session.add(contact)
         await db_session.flush()
         # Soft-delete it (mimics the merge path).
-        contact.deleted_at = datetime.now(timezone.utc)
+        contact.deleted_at = datetime.now(UTC)
         await db_session.flush()
 
         upload = """first_name,last_name,email,phone

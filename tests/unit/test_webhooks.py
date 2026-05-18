@@ -6,16 +6,15 @@ Tests webhook CRUD, HMAC signature verification, delivery logging, and event emi
 
 import hashlib
 import hmac
-import json
+
 import pytest
 from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-
+from sqlalchemy.ext.asyncio import AsyncSession
 from src.auth.models import User
+from src.events.service import clear_handlers, emit, get_handlers, off, on
 from src.webhooks.models import Webhook, WebhookDelivery
 from src.webhooks.service import compute_signature
-from src.events.service import emit, on, off, clear_handlers, get_handlers
 
 
 @pytest.fixture

@@ -8,6 +8,7 @@ import clsx from 'clsx';
 import {
   PlusIcon,
   FunnelIcon,
+  MagnifyingGlassIcon,
   MegaphoneIcon,
   ChartBarIcon,
   UsersIcon,
@@ -15,7 +16,8 @@ import {
 
 } from '@heroicons/react/24/outline';
 import { showError } from '../../utils/toast';
-import { Button, Select, Spinner, Modal, ConfirmDialog } from '../../components/ui';
+import { extractApiErrorDetail } from '../../utils/errors';
+import { Button, Input, Select, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { CampaignForm } from './components/CampaignForm';
 import { VolumeStats } from './components/VolumeStats';
 
@@ -247,6 +249,7 @@ export function CampaignsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [showFilters, setShowFilters] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [formDirty, setFormDirty] = useState(false);
   const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; campaign: Campaign | null }>(INITIAL_DELETE_CONFIRM);
 
@@ -264,7 +267,7 @@ export function CampaignsPage() {
   );
 
   // Fetch campaigns
-  const { data: campaignsData, isLoading } = useCampaigns(filters);
+  const { data: campaignsData, isLoading, error, refetch } = useCampaigns(filters);
 
   // Mutations
   const createCampaign = useCreateCampaign();
@@ -284,6 +287,10 @@ export function CampaignsPage() {
     setSearchParams(newParams);
   };
 
+  const clearFilters = () => {
+    setSearchParams(new URLSearchParams());
+  };
+
   const handleDeleteClick = (campaign: Campaign) => {
     setDeleteConfirm({ isOpen: true, campaign });
   };
@@ -294,7 +301,7 @@ export function CampaignsPage() {
       await deleteCampaign.mutateAsync(deleteConfirm.campaign.id);
       setDeleteConfirm(INITIAL_DELETE_CONFIRM);
     } catch (error) {
-      showError('Failed to delete campaign');
+      showError(extractApiErrorDetail(error) ?? 'Failed to delete campaign');
     }
   };
 
@@ -303,6 +310,7 @@ export function CampaignsPage() {
   };
 
   const handleEdit = (campaign: Campaign) => {
+    setFormDirty(false);
     setEditingCampaign(campaign);
     setShowForm(true);
   };
@@ -316,17 +324,27 @@ export function CampaignsPage() {
       }
       setShowForm(false);
       setEditingCampaign(null);
+      setFormDirty(false);
     } catch (error) {
-      showError('Failed to save campaign');
+      showError(extractApiErrorDetail(error) ?? 'Failed to save campaign');
     }
   };
 
-  const handleFormCancel = () => {
+  const closeForm = () => {
     setShowForm(false);
     setEditingCampaign(null);
+    setFormDirty(false);
+  };
+
+  const handleFormCancel = () => {
+    if (formDirty && !window.confirm('Discard unsaved changes?')) {
+      return;
+    }
+    closeForm();
   };
 
   const campaigns = campaignsData?.items || [];
+  const hasActiveFilters = Boolean(filters.search || filters.status || filters.campaign_type);
 
   return (
     <div className="space-y-6">
@@ -342,7 +360,10 @@ export function CampaignsPage() {
           <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
             <Button
               leftIcon={<PlusIcon className="h-5 w-5" />}
-              onClick={() => setShowForm(true)}
+              onClick={() => {
+                setFormDirty(false);
+                setShowForm(true);
+              }}
               className="w-full sm:w-auto"
             >
               New Campaign
@@ -356,15 +377,27 @@ export function CampaignsPage() {
 
       {/* Toolbar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
-        <Button
-          variant="ghost"
-          size="sm"
-          leftIcon={<FunnelIcon className="h-4 w-4" />}
-          onClick={() => setShowFilters(!showFilters)}
-          className="w-full sm:w-auto justify-center sm:justify-start"
-        >
-          Filters
-        </Button>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+          <div className="w-full sm:w-80">
+            <Input
+              value={searchParams.get('search') || ''}
+              onChange={(e) => updateFilter('search', e.target.value)}
+              placeholder="Search campaigns..."
+              leftIcon={<MagnifyingGlassIcon className="h-5 w-5" />}
+              aria-label="Search campaigns"
+              name="search"
+            />
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            leftIcon={<FunnelIcon className="h-4 w-4" />}
+            onClick={() => setShowFilters(!showFilters)}
+            className="w-full sm:w-auto justify-center sm:justify-start"
+          >
+            Filters
+          </Button>
+        </div>
 
         {campaignsData && (
           <div className="text-sm text-gray-500 dark:text-gray-400 text-center sm:text-right">
@@ -398,18 +431,36 @@ export function CampaignsPage() {
         <div className="flex items-center justify-center py-12">
           <Spinner size="lg" />
         </div>
+      ) : error ? (
+        <div className="rounded-md border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-900/20">
+          <h3 className="text-sm font-medium text-red-800 dark:text-red-300">Could not load campaigns</h3>
+          <p className="mt-1 text-sm text-red-700 dark:text-red-300">
+            {error instanceof Error ? error.message : 'Try again in a moment.'}
+          </p>
+          <Button variant="secondary" size="sm" onClick={() => void refetch()} className="mt-3">
+            Retry
+          </Button>
+        </div>
       ) : campaigns.length === 0 ? (
         <div className="text-center py-12">
           <MegaphoneIcon className="mx-auto h-12 w-12 text-gray-400" />
           <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">No campaigns</h3>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            {canCreateCampaigns
-              ? 'Get started by creating a new campaign.'
+            {hasActiveFilters
+              ? 'No campaigns match the current search or filters.'
+              : canCreateCampaigns
+                ? 'Get started by creating a new campaign.'
               : 'No campaigns yet. Ask an admin or manager to create one.'}
           </p>
-          {canCreateCampaigns && (
+          {hasActiveFilters ? (
             <div className="mt-6">
-              <Button onClick={() => setShowForm(true)}>
+              <Button variant="secondary" onClick={clearFilters}>
+                Clear filters
+              </Button>
+            </div>
+          ) : canCreateCampaigns && (
+            <div className="mt-6">
+              <Button onClick={() => { setFormDirty(false); setShowForm(true); }}>
                 <PlusIcon className="h-5 w-5 mr-2" />
                 New Campaign
               </Button>
@@ -464,15 +515,17 @@ export function CampaignsPage() {
       {/* Form Modal */}
       <Modal
         isOpen={showForm}
-        onClose={handleFormCancel}
+        onClose={closeForm}
         title={editingCampaign ? 'Edit Campaign' : 'New Campaign'}
         size="lg"
+        confirmClose={formDirty}
       >
         <CampaignForm
           campaign={editingCampaign || undefined}
           onSubmit={handleFormSubmit}
           onCancel={handleFormCancel}
           isLoading={createCampaign.isPending || updateCampaign.isPending}
+          onDirtyChange={setFormDirty}
         />
       </Modal>
 

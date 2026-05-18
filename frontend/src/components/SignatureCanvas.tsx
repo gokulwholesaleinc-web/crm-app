@@ -85,14 +85,22 @@ export const SignatureCanvas = forwardRef<SignatureCanvasHandle, SignatureCanvas
       }
     };
 
+    // The pad surface is a light card (white) inside the dark-themed
+    // signing modal so the signature renders as dark strokes on a
+    // pale background — what the customer sees while drawing is what
+    // gets stamped onto the (white) signed PDF. The previous design
+    // used a white pen on a near-transparent surface inside the dark
+    // modal; that looked fine in the dialog but produced a
+    // white-on-transparent PNG that disappeared when overlaid on the
+    // white master contract.
     return (
       <div
         ref={wrapperRef}
-        className="relative w-full h-40 rounded-2xl border border-white/15 bg-white/5"
+        className="relative w-full h-40 rounded-2xl border border-neutral-300 bg-white"
       >
         <ReactSignatureCanvas
           ref={sigRef}
-          penColor="#ffffff"
+          penColor="#0f172a"
           velocityFilterWeight={0.7}
           minWidth={1.2}
           maxWidth={2.6}
@@ -108,7 +116,7 @@ export const SignatureCanvas = forwardRef<SignatureCanvasHandle, SignatureCanvas
         {isEmpty && (
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-white/40 font-serif italic"
+            className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-neutral-400 font-serif italic"
           >
             Sign here
           </div>
@@ -116,7 +124,7 @@ export const SignatureCanvas = forwardRef<SignatureCanvasHandle, SignatureCanvas
         <div
           aria-hidden="true"
           className="pointer-events-none absolute left-6 right-6 bottom-6 h-px"
-          style={{ backgroundColor: accentHex + '40' }}
+          style={{ backgroundColor: accentHex + '80' }}
         />
       </div>
     );

@@ -15,8 +15,8 @@ Covers:
 import base64
 import os
 import sys
-from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import UTC, datetime, timedelta
+from unittest.mock import patch
 
 import httpx
 import pytest
@@ -27,13 +27,12 @@ from sqlalchemy.pool import StaticPool
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "backend"))
 
-from src.database import Base
 from src.auth.models import User
 from src.contacts.models import Contact
+from src.database import Base
 from src.email.models import EmailQueue, InboundEmail
-from src.integrations.gmail.models import GmailBackfillState, GmailConnection, GmailSyncState
+from src.integrations.gmail.models import GmailBackfillState, GmailConnection
 from src.integrations.gmail.sync import GmailSyncWorker
-
 
 # ---------------------------------------------------------------------------
 # In-memory DB fixtures
@@ -90,7 +89,7 @@ async def connection(db: AsyncSession, test_user: User) -> GmailConnection:
         email="backfill_user@example.com",
         access_token="tok",
         refresh_token="rtok",
-        token_expiry=datetime.now(timezone.utc) + timedelta(hours=1),
+        token_expiry=datetime.now(UTC) + timedelta(hours=1),
         scopes="https://mail.google.com/",
     )
     db.add(conn)
@@ -409,7 +408,7 @@ class TestBackfillAuthError:
         monkeypatch.setattr(client_mod, "_get_client_secret", lambda: "csecret")
 
         # Token is expired so client will try to refresh; refresh returns 401
-        connection.token_expiry = datetime.now(timezone.utc) - timedelta(seconds=10)
+        connection.token_expiry = datetime.now(UTC) - timedelta(seconds=10)
         db.add(connection)
         await db.commit()
 
@@ -421,9 +420,8 @@ class TestBackfillAuthError:
 
         from src.integrations.gmail.client import GmailAuthError
 
-        with _patch_gmail_client(http):
-            with pytest.raises(GmailAuthError):
-                await GmailSyncWorker.backfill(connection, db, days=10)
+        with _patch_gmail_client(http), pytest.raises(GmailAuthError):
+            await GmailSyncWorker.backfill(connection, db, days=10)
 
         await db.refresh(connection)
         assert connection.revoked_at is not None
@@ -444,7 +442,7 @@ class TestBackfillAuthError:
         monkeypatch.setattr(client_mod, "_get_client_id", lambda: "cid")
         monkeypatch.setattr(client_mod, "_get_client_secret", lambda: "csecret")
 
-        connection.token_expiry = datetime.now(timezone.utc) - timedelta(seconds=10)
+        connection.token_expiry = datetime.now(UTC) - timedelta(seconds=10)
         db.add(connection)
         await db.commit()
 
@@ -455,9 +453,8 @@ class TestBackfillAuthError:
 
         from src.integrations.gmail.client import GmailAuthError
 
-        with _patch_gmail_client(http):
-            with pytest.raises(GmailAuthError):
-                await GmailSyncWorker.backfill(connection, db, days=10)
+        with _patch_gmail_client(http), pytest.raises(GmailAuthError):
+            await GmailSyncWorker.backfill(connection, db, days=10)
 
         await db.refresh(connection)
         assert connection.revoked_at is not None

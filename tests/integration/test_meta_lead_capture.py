@@ -12,7 +12,6 @@ import pytest
 import pytest_asyncio
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.assignment.models import AssignmentRule
 from src.auth.models import User
 from src.auth.security import get_password_hash

@@ -4,14 +4,14 @@ Unit tests for activities CRUD endpoints.
 Tests for list, create, get, update, delete, and activity-specific operations.
 """
 
-import pytest
-from datetime import datetime, date, timedelta, timezone
-from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from datetime import UTC, date, datetime, timedelta
 
-from src.auth.models import User
+import pytest
+from httpx import AsyncClient
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from src.activities.models import Activity
+from src.auth.models import User
 from src.contacts.models import Contact
 from src.leads.models import Lead
 from src.opportunities.models import Opportunity
@@ -146,7 +146,7 @@ class TestActivitiesCreate:
                 "entity_type": "contacts",
                 "entity_id": test_contact.id,
                 "scheduled_at": (
-                    datetime.now(timezone.utc) + timedelta(hours=2)
+                    datetime.now(UTC) + timedelta(hours=2)
                 ).isoformat(),
                 "priority": "high",
                 "call_duration_minutes": 30,
@@ -201,7 +201,7 @@ class TestActivitiesCreate:
         test_contact: Contact,
     ):
         """Test creating a meeting activity."""
-        scheduled = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+        scheduled = (datetime.now(UTC) + timedelta(days=1)).isoformat()
         response = await client.post(
             "/api/activities",
             headers=auth_headers,
@@ -453,7 +453,7 @@ class TestActivitiesUpdate:
         test_activity: Activity,
     ):
         """Test updating activity scheduled time."""
-        new_time = (datetime.now(timezone.utc) + timedelta(days=2)).isoformat()
+        new_time = (datetime.now(UTC) + timedelta(days=2)).isoformat()
         response = await client.patch(
             f"/api/activities/{test_activity.id}",
             headers=auth_headers,
@@ -650,7 +650,7 @@ class TestMyTasks:
             entity_type="contacts",
             entity_id=test_contact.id,
             is_completed=True,
-            completed_at=datetime.now(timezone.utc),
+            completed_at=datetime.now(UTC),
             owner_id=test_user.id,
             created_by_id=test_user.id,
         )
@@ -781,7 +781,7 @@ class TestActivitiesCalendar:
             subject="In range (scheduled)",
             entity_type="contacts",
             entity_id=test_contact.id,
-            scheduled_at=datetime.combine(today, datetime.min.time(), tzinfo=timezone.utc),
+            scheduled_at=datetime.combine(today, datetime.min.time(), tzinfo=UTC),
             owner_id=test_user.id,
             created_by_id=test_user.id,
         )
@@ -1091,13 +1091,12 @@ class TestUpcomingActivitiesOptions:
     ):
         """Test getting upcoming activities with a longer lookahead window."""
         # Create activity scheduled 20 days from now
-        from datetime import timezone
         far_activity = Activity(
             activity_type="meeting",
             subject="Far Future Meeting",
             entity_type="contacts",
             entity_id=test_contact.id,
-            scheduled_at=datetime.now(timezone.utc) + timedelta(days=20),
+            scheduled_at=datetime.now(UTC) + timedelta(days=20),
             priority="normal",
             owner_id=test_user.id,
             created_by_id=test_user.id,
@@ -1143,7 +1142,7 @@ class TestPersonalCalendarPrivacy:
             subject="Private 1:1 with manager",
             entity_type="users",
             entity_id=test_user.id,
-            scheduled_at=datetime.now(timezone.utc) + timedelta(days=1),
+            scheduled_at=datetime.now(UTC) + timedelta(days=1),
             priority="normal",
             is_completed=False,
             owner_id=test_user.id,
@@ -1177,7 +1176,7 @@ class TestPersonalCalendarPrivacy:
             subject="My Google Calendar event",
             entity_type="users",
             entity_id=test_user.id,
-            scheduled_at=datetime.now(timezone.utc) + timedelta(days=1),
+            scheduled_at=datetime.now(UTC) + timedelta(days=1),
             priority="normal",
             is_completed=False,
             owner_id=test_user.id,
@@ -1205,7 +1204,7 @@ class TestPersonalCalendarPrivacy:
         """
         from src.auth.security import create_access_token
 
-        scheduled = datetime.now(timezone.utc) + timedelta(days=1)
+        scheduled = datetime.now(UTC) + timedelta(days=1)
         calendar_mirror = Activity(
             activity_type="meeting",
             subject="Other user's private event",

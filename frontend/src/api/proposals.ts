@@ -14,6 +14,8 @@ import type {
   ProposalTemplateUpdate,
   CreateFromTemplateRequest,
   ProposalAttachment,
+  ProposalSigningDocument,
+  SignatureFieldCoords,
 } from '../types';
 
 const PROPOSALS_BASE = '/api/proposals';
@@ -315,6 +317,72 @@ export const duplicateProposal = async (proposalId: number): Promise<Proposal> =
  */
 export const PROPOSAL_MASTER_CONTRACT_MAX_BYTES = 25 * 1024 * 1024;
 
+export const listProposalSigningDocuments = async (
+  proposalId: number,
+): Promise<ProposalSigningDocument[]> => {
+  const response = await apiClient.get<ProposalSigningDocument[]>(
+    `${PROPOSALS_BASE}/${proposalId}/signing-documents`,
+  );
+  return response.data;
+};
+
+export const uploadProposalSigningDocument = async (
+  proposalId: number,
+  file: File,
+): Promise<ProposalSigningDocument> => {
+  const form = new FormData();
+  form.append('file', file);
+  const response = await apiClient.post<ProposalSigningDocument>(
+    `${PROPOSALS_BASE}/${proposalId}/signing-documents`,
+    form,
+    { headers: { 'Content-Type': 'multipart/form-data' } },
+  );
+  return response.data;
+};
+
+export const updateProposalSigningDocument = async (
+  proposalId: number,
+  documentId: number,
+  signatureFieldCoords: SignatureFieldCoords | null,
+): Promise<ProposalSigningDocument> => {
+  const response = await apiClient.patch<ProposalSigningDocument>(
+    `${PROPOSALS_BASE}/${proposalId}/signing-documents/${documentId}`,
+    { signature_field_coords: signatureFieldCoords },
+  );
+  return response.data;
+};
+
+export const deleteProposalSigningDocument = async (
+  proposalId: number,
+  documentId: number,
+): Promise<void> => {
+  await apiClient.delete(
+    `${PROPOSALS_BASE}/${proposalId}/signing-documents/${documentId}`,
+  );
+};
+
+export const downloadProposalSigningDocument = async (
+  proposalId: number,
+  documentId: number,
+): Promise<Blob> => {
+  const response = await apiClient.get(
+    `${PROPOSALS_BASE}/${proposalId}/signing-documents/${documentId}/pdf`,
+    { responseType: 'blob' },
+  );
+  return response.data;
+};
+
+export const downloadProposalSigningDocumentSignedPdf = async (
+  proposalId: number,
+  documentId: number,
+): Promise<Blob> => {
+  const response = await apiClient.get(
+    `${PROPOSALS_BASE}/${proposalId}/signing-documents/${documentId}/signed-pdf`,
+    { responseType: 'blob' },
+  );
+  return response.data;
+};
+
 export const downloadProposalMasterContract = async (
   proposalId: number,
 ): Promise<Blob> => {
@@ -390,8 +458,13 @@ export const proposalsApi = {
   deleteAttachment: deleteProposalAttachment,
   publicAttachmentDownloadUrl: publicProposalAttachmentDownloadUrl,
   duplicate: duplicateProposal,
+  listSigningDocuments: listProposalSigningDocuments,
+  uploadSigningDocument: uploadProposalSigningDocument,
+  updateSigningDocument: updateProposalSigningDocument,
+  deleteSigningDocument: deleteProposalSigningDocument,
+  downloadSigningDocument: downloadProposalSigningDocument,
+  downloadSigningDocumentSignedPdf: downloadProposalSigningDocumentSignedPdf,
   downloadMasterContract: downloadProposalMasterContract,
   downloadSignedPdf: downloadProposalSignedPdf,
   uploadMasterContract: uploadProposalMasterContract,
 };
-

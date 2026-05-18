@@ -6,24 +6,23 @@ status transitions, template CRUD, public view, view counting,
 and data isolation.
 """
 
-import pytest
 import secrets
-from datetime import date, timedelta
+from datetime import UTC
+
+import pytest
 from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 # Send paths gate on assert_gmail_connected (PR #310).
 pytestmark = pytest.mark.usefixtures("gmail_connected_test_user")
 
 from src.account.models import UserNotificationPrefs
 from src.auth.models import User
-from src.auth.security import get_password_hash, create_access_token
-from src.proposals.models import Proposal, ProposalView
+from src.auth.security import get_password_hash
 from src.contacts.models import Contact
-from src.companies.models import Company
 from src.opportunities.models import Opportunity, PipelineStage
-
+from src.proposals.models import Proposal, ProposalSigningDocument, ProposalView
 
 # =============================================================================
 # Fixtures
@@ -382,7 +381,8 @@ class TestAutoNumbering:
         unique-key collision → 500. New generator returns 0004
         (max suffix + 1).
         """
-        from datetime import datetime as _dt, UTC as _UTC
+        from datetime import UTC as _UTC
+        from datetime import datetime as _dt
         year = _dt.now(_UTC).year
         for seq in (1, 2, 3):
             db_session.add(
@@ -531,9 +531,9 @@ class TestProposalsUpdate:
     ):
         """A signed proposal is locked — PATCH must 400 instead of mutating
         scope/pricing under the customer's signed PDF."""
-        from datetime import datetime, timezone
+        from datetime import datetime
 
-        test_proposal.signed_at = datetime(2026, 4, 29, 17, 30, tzinfo=timezone.utc)
+        test_proposal.signed_at = datetime(2026, 4, 29, 17, 30, tzinfo=UTC)
         test_proposal.signer_name = "Alice Q. Client"
         test_proposal.signer_email = "alice@example.com"
         test_proposal.status = "accepted"
@@ -700,6 +700,101 @@ class TestStatusTransitions:
         assert data["sent_at"] is not None
 
     @pytest.mark.asyncio
+    async def test_send_blocks_signing_document_without_placement(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_contact: Contact,
+    ):
+        """A proposal cannot be sent with an uploaded signing PDF missing its box."""
+        proposal = Proposal(
+            proposal_number="PR-2026-SEND-DOC-BLOCK",
+            title="Incomplete Signing Docs",
+            content="Content here",
+            status="draft",
+            contact_id=test_contact.id,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(proposal)
+        await db_session.flush()
+        db_session.add(ProposalSigningDocument(
+            proposal_id=proposal.id,
+            original_filename="MSA.pdf",
+            file_size=1200,
+            content_type="application/pdf",
+            pdf_path="proposals/1/signing-documents/1/source.pdf",
+            display_order=0,
+            created_by_id=test_user.id,
+        ))
+        await db_session.commit()
+
+        response = await client.post(
+            f"/api/proposals/{proposal.id}/send",
+            headers=auth_headers,
+            json={"attach_pdf": False},
+        )
+
+        assert response.status_code == 400
+        assert "Place a signing area" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_send_allows_signing_documents_with_placement(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_contact: Contact,
+    ):
+        """Every signable PDF with coordinates passes the send preflight."""
+        proposal = Proposal(
+            proposal_number="PR-2026-SEND-DOC-READY",
+            title="Ready Signing Docs",
+            content="Content here",
+            status="draft",
+            contact_id=test_contact.id,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(proposal)
+        await db_session.flush()
+        db_session.add_all([
+            ProposalSigningDocument(
+                proposal_id=proposal.id,
+                original_filename="MSA.pdf",
+                file_size=1200,
+                content_type="application/pdf",
+                pdf_path="proposals/1/signing-documents/1/source.pdf",
+                signature_field_coords={"page": 1, "x": 10, "y": 10, "w": 100, "h": 40},
+                display_order=0,
+                created_by_id=test_user.id,
+            ),
+            ProposalSigningDocument(
+                proposal_id=proposal.id,
+                original_filename="Order Form.pdf",
+                file_size=800,
+                content_type="application/pdf",
+                pdf_path="proposals/1/signing-documents/2/source.pdf",
+                signature_field_coords={"page": 1, "x": 20, "y": 20, "w": 100, "h": 40},
+                display_order=1,
+                created_by_id=test_user.id,
+            ),
+        ])
+        await db_session.commit()
+
+        response = await client.post(
+            f"/api/proposals/{proposal.id}/send",
+            headers=auth_headers,
+            json={"attach_pdf": False},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["status"] == "sent"
+
+    @pytest.mark.asyncio
     async def test_accept_sent_proposal(
         self,
         client: AsyncClient,
@@ -737,8 +832,8 @@ class TestStatusTransitions:
         Signed-copy email is intentionally NOT sent: there is no
         countersigned PDF when the rep accepts on behalf of the client.
         """
-        from src.notifications.models import Notification
         from src.email.models import EmailQueue
+        from src.notifications.models import Notification
 
         owner = User(
             email="proposal-owner@example.com",

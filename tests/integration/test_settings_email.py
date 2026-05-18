@@ -1,14 +1,11 @@
 """Integration tests for GET/PUT /api/settings/email."""
 
-import pytest
 import pytest_asyncio
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.auth.models import User
-from src.auth.security import get_password_hash, create_access_token
-from src.roles.models import Role, UserRole, RoleName, DEFAULT_PERMISSIONS
-
+from src.auth.security import create_access_token, get_password_hash
+from src.roles.models import UserRole
 
 # ---------------------------------------------------------------------------
 # Extra fixtures not in conftest (non-superuser admin role user)

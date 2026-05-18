@@ -9,14 +9,12 @@ import hashlib
 
 import httpx
 import pytest
-
 from src.integrations.mailchimp.client import (
     MailchimpClient,
     MailchimpError,
     split_api_key,
     subscriber_hash,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderWithProviders, screen, fireEvent, act } from '../../test-utils/renderWithProviders';
+import { renderWithProviders, screen, fireEvent, act, waitFor } from '../../test-utils/renderWithProviders';
 import { FormModal, FormModalProps } from './FormModal';
 
 interface TestForm {
@@ -70,6 +70,45 @@ describe('FormModal', () => {
       fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
     });
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a dirty modal open when close confirmation is canceled', async () => {
+    vi.useRealTimers();
+    const onClose = vi.fn();
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    renderWithProviders(<TestFormModal onClose={onClose} />);
+
+    fireEvent.change(screen.getByTestId('name-input'), { target: { value: 'Draft' } });
+    await waitFor(() => {
+      expect((screen.getByTestId('name-input') as HTMLInputElement).value).toBe('Draft');
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
+    });
+
+    expect(confirmSpy).toHaveBeenCalledWith('Discard unsaved changes?');
+    expect(onClose).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
+
+  it('closes a dirty modal when close confirmation is accepted', async () => {
+    vi.useRealTimers();
+    const onClose = vi.fn();
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    renderWithProviders(<TestFormModal onClose={onClose} />);
+
+    fireEvent.change(screen.getByTestId('name-input'), { target: { value: 'Draft' } });
+    await waitFor(() => {
+      expect((screen.getByTestId('name-input') as HTMLInputElement).value).toBe('Draft');
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
+    });
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+    confirmSpy.mockRestore();
   });
 
   it('calls onSubmit with form data on submit', async () => {

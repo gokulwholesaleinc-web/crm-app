@@ -13,9 +13,8 @@ Validates:
 
 import pytest
 from httpx import AsyncClient
-
-from src.auth.security import create_access_token
 from src.auth.models import User
+from src.auth.security import create_access_token
 
 
 def _token(user: User) -> dict:
@@ -372,8 +371,8 @@ class TestGoogleCalendarLoginHint:
         actually builds the URL. Verifies the endpoint wires current_user.email
         through to the URL — the integration between the router and service.
         """
-        import os
-        from urllib.parse import urlparse, parse_qs
+        from urllib.parse import parse_qs, urlparse
+
         from src.config import settings as real_settings
 
         original = getattr(real_settings, "GOOGLE_CLIENT_ID", "")

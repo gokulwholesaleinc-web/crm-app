@@ -9,17 +9,16 @@ from zoneinfo import ZoneInfo
 
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.account.notification_gate import (
     _in_quiet_window,
     should_notify_in_app,
     should_send_email,
 )
-from src.account.service import AccountPrefsService
 from src.account.schemas import (
     AccountPreferencesUpdate,
     NotificationPrefsUpdate,
 )
+from src.account.service import AccountPrefsService
 from src.auth.models import User
 from src.auth.security import create_access_token
 

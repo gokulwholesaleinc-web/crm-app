@@ -16,7 +16,6 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.account.models import UserNotificationPrefs
 from src.auth.models import User
 from src.auth.security import create_access_token, get_password_hash

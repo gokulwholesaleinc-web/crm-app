@@ -6,11 +6,20 @@ Uses S3-compatible API via boto3 to interact with Cloudflare R2 buckets.
 import logging
 import os
 import uuid
+from asyncio import to_thread
+from collections.abc import Callable
+from typing import TypeVar
 
 import boto3
 from botocore.config import Config as BotoConfig
 
 logger = logging.getLogger(__name__)
+T = TypeVar("T")
+
+
+async def _run_boto(call: Callable[[], T]) -> T:
+    """Run boto3's blocking client work off the async event loop."""
+    return await to_thread(call)
 
 
 def _get_r2_client():
@@ -41,19 +50,23 @@ def generate_object_key(entity_type: str, entity_id: int, extension: str) -> str
 
 async def get_upload_url(object_key: str) -> str:
     client = _get_r2_client()
-    return client.generate_presigned_url(
-        "put_object",
-        Params={"Bucket": _get_bucket_name(), "Key": object_key},
-        ExpiresIn=900,
+    return await _run_boto(
+        lambda: client.generate_presigned_url(
+            "put_object",
+            Params={"Bucket": _get_bucket_name(), "Key": object_key},
+            ExpiresIn=900,
+        )
     )
 
 
 async def get_download_url(object_key: str, ttl_sec: int = 3600) -> str:
     client = _get_r2_client()
-    return client.generate_presigned_url(
-        "get_object",
-        Params={"Bucket": _get_bucket_name(), "Key": object_key},
-        ExpiresIn=ttl_sec,
+    return await _run_boto(
+        lambda: client.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": _get_bucket_name(), "Key": object_key},
+            ExpiresIn=ttl_sec,
+        )
     )
 
 
@@ -66,8 +79,12 @@ async def download_object_bytes(object_key: str) -> bytes:
     distinguish missing-object from credential errors.
     """
     client = _get_r2_client()
-    response = client.get_object(Bucket=_get_bucket_name(), Key=object_key)
-    return response["Body"].read()
+
+    def _download() -> bytes:
+        response = client.get_object(Bucket=_get_bucket_name(), Key=object_key)
+        return response["Body"].read()
+
+    return await _run_boto(_download)
 
 
 async def upload_file_bytes(
@@ -76,21 +93,34 @@ async def upload_file_bytes(
     content_type: str = "application/octet-stream",
 ) -> str:
     client = _get_r2_client()
-    client.put_object(
-        Bucket=_get_bucket_name(),
-        Key=object_key,
-        Body=content,
-        ContentType=content_type,
+    await _run_boto(
+        lambda: client.put_object(
+            Bucket=_get_bucket_name(),
+            Key=object_key,
+            Body=content,
+            ContentType=content_type,
+        )
     )
     return object_key
 
 
 async def delete_object(object_key: str) -> None:
+    """Best-effort R2 deletion.
+
+    Callers that have already removed the owning DB row rely on this to
+    drain the object — a swallowed failure here leaves an orphan object
+    in R2 (and, for signed PDFs, real client signatures) with no admin
+    surface to find it. Log at ``error`` so Sentry picks it up; we still
+    don't raise so a single transient failure can't roll back the DB
+    delete the caller has already flushed.
+    """
     try:
         client = _get_r2_client()
-        client.delete_object(Bucket=_get_bucket_name(), Key=object_key)
-    except Exception as e:
-        logger.warning("Failed to delete object %s: %s", object_key, e)
+        await _run_boto(
+            lambda: client.delete_object(Bucket=_get_bucket_name(), Key=object_key)
+        )
+    except Exception:
+        logger.exception("Failed to delete object %s", object_key)
 
 
 def is_object_storage_available() -> bool:
