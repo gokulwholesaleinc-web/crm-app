@@ -88,7 +88,7 @@ describe('GuideTourOverlay', () => {
 
     expect(screen.getByRole('dialog', { name: 'Still useful' })).toBeInTheDocument();
     expect(screen.getByText('This step should render without a matching selector.')).toBeInTheDocument();
-    expect(screen.getByText(/without a highlight/i)).toBeInTheDocument();
+    expect(screen.getByText(/doesn['’]t have a visible page target/i)).toBeInTheDocument();
 
     await waitFor(() => {
       expect(warn).toHaveBeenCalledWith(

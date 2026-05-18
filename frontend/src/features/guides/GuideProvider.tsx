@@ -367,8 +367,8 @@ function prefersReducedMotion(): boolean {
 
 function getPanelStyle(rect: DOMRect | null): CSSProperties | undefined {
   if (!rect) return undefined;
-  const PANEL_WIDTH_MAX = 360;
-  const PANEL_HEIGHT = 220;
+  const PANEL_WIDTH_MAX = 320;
+  const PANEL_HEIGHT = 200;
   const GAP = 12;
   const EDGE_PAD = 16;
   const panelWidth = Math.min(PANEL_WIDTH_MAX, window.innerWidth - 32);
@@ -566,21 +566,29 @@ export function GuideTourOverlay({
         tabIndex={-1}
         onKeyDown={handleKeyDown}
         className={clsx(
-          'pointer-events-auto fixed right-4 bottom-4 max-h-[calc(100vh-2rem)] overflow-y-auto rounded-lg border border-gray-200 bg-white p-4 shadow-xl outline-none dark:border-gray-700 dark:bg-gray-900',
+          // Slight transparency + backdrop-blur lets users still see the
+          // highlighted target peek through, without losing contrast on
+          // the panel body text.
+          'pointer-events-auto fixed max-h-[calc(100vh-2rem)] overflow-y-auto rounded-lg border border-gray-200 bg-white/95 backdrop-blur-sm p-3 shadow-xl outline-none dark:border-gray-700 dark:bg-gray-900/95',
           'focus-visible:ring-2 focus-visible:ring-primary-500',
-          panelStyle ? '' : 'left-4 sm:left-auto sm:w-[360px]',
+          // ``right-4 bottom-4`` is the no-target fallback only. When an
+          // inline ``left+top`` style is set, those Tailwind classes would
+          // stretch the panel to fill the full viewport height (browser
+          // satisfies BOTH left/right and top/bottom). Keep them off when
+          // panelStyle is positioning the panel explicitly.
+          panelStyle ? 'w-[320px]' : 'right-4 bottom-4 left-4 sm:left-auto sm:w-[320px]',
         )}
         style={panelStyle}
       >
-        <div className="flex items-start gap-3">
-          <span className="mt-0.5 inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-primary-50 text-primary-600 dark:bg-primary-900/30 dark:text-primary-300">
-            <AcademicCapIcon className="h-5 w-5" aria-hidden="true" />
+        <div className="flex items-start gap-2.5">
+          <span className="mt-0.5 inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-primary-50 text-primary-600 dark:bg-primary-900/30 dark:text-primary-300">
+            <AcademicCapIcon className="h-4 w-4" aria-hidden="true" />
           </span>
           <div className="min-w-0 flex-1">
-            <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+            <p className="text-[10px] font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
               {guide.title} · Step {stepIndex + 1} of {totalSteps}
             </p>
-            <h2 id={titleId} className="mt-1 text-base font-semibold text-gray-900 dark:text-gray-100">
+            <h2 id={titleId} className="mt-0.5 text-sm font-semibold text-gray-900 dark:text-gray-100">
               {currentStep.title}
             </h2>
           </div>
@@ -590,25 +598,25 @@ export function GuideTourOverlay({
             className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:hover:bg-gray-800 dark:hover:text-gray-200"
             aria-label="Close guide"
           >
-            <XMarkIcon className="h-5 w-5" aria-hidden="true" />
+            <XMarkIcon className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
 
-        <p id={bodyId} className="mt-3 text-sm leading-6 text-gray-700 dark:text-gray-300">
+        <p id={bodyId} className="mt-2 text-sm leading-snug text-gray-700 dark:text-gray-300">
           {currentStep.body}
         </p>
         {currentStep.action && (
-          <div className="mt-3 rounded-md border border-primary-100 bg-primary-50 px-3 py-2 text-sm text-primary-800 dark:border-primary-900/40 dark:bg-primary-900/20 dark:text-primary-200">
+          <div className="mt-2 rounded-md border border-primary-100 bg-primary-50 px-2.5 py-1.5 text-xs leading-snug text-primary-800 dark:border-primary-900/40 dark:bg-primary-900/20 dark:text-primary-200">
             <span className="font-semibold">Try this:</span> {currentStep.action}
           </div>
         )}
         {targetMissing && (
           <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
-            This step does not have a visible page target right now, so the guide is showing the instruction without a highlight.
+            This step doesn&rsquo;t have a visible page target right now.
           </p>
         )}
 
-        <div className="mt-4 flex items-center justify-between gap-3">
+        <div className="mt-3 flex items-center justify-between gap-2">
           <Button variant="ghost" size="sm" onClick={onClose}>
             Skip
           </Button>
