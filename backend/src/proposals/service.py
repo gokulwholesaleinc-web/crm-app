@@ -690,7 +690,12 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
             finally:
                 await self._commit_stamp_capture(proposal.id)
 
-        proposal.signed_pdf_path = first_signed_key
+        # Preserve the prior pointer when every per-doc stamp fails — a
+        # transient R2 outage on Re-stamp must not destroy a previously-
+        # working signed_pdf_path. Mirrors the fail-soft contract in
+        # `_maybe_stamp_master_pdf` below.
+        if first_signed_key is not None:
+            proposal.signed_pdf_path = first_signed_key
         proposal.signed_pdf_error = (
             None
             if failed_count == 0

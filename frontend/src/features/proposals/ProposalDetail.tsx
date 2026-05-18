@@ -458,8 +458,12 @@ function ProposalDetailPage() {
       {/* Fail-soft stamp left no countersigned copy — surface so the
           operator can retry. Check `!= null` rather than truthiness so
           an empty-string error (from str(exc) where exc has no repr)
-          still surfaces the banner instead of silently hiding. */}
-      {proposal.signed_pdf_error != null && !proposal.signed_pdf_path && (
+          still surfaces the banner. We DO NOT gate on
+          `!proposal.signed_pdf_path`: under multi-doc signing the
+          backend sets `signed_pdf_path` to the first successful key
+          even when some docs fail, so requiring it to be empty would
+          hide partial-fail from the operator. */}
+      {proposal.signed_pdf_error != null && (
         <div
           role="alert"
           aria-live="polite"
