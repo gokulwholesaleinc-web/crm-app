@@ -7,7 +7,7 @@ import { ProposalForm } from './ProposalForm';
 import { TemplateGallery } from './TemplateGallery';
 import { SortableTh } from '../../components/shared/SortableTh';
 import { useProposals, useCreateProposal, useDeleteProposal, useDuplicateProposal } from '../../hooks/useProposals';
-import { uploadProposalMasterContract } from '../../api/proposals';
+import { uploadProposalSigningDocument } from '../../api/proposals';
 import {
   useListPageSizeState,
   useListSortPersistence,
@@ -112,30 +112,26 @@ function ProposalsPage() {
 
   const handleFormSubmit = async (
     data: ProposalCreate,
-    pendingMaster?: File | null,
+    pendingSigningDocs: File[] = [],
   ) => {
     try {
       const created = await createProposalMutation.mutateAsync(data);
-      // Upload the stashed master contract as a follow-on so the proposal
-      // exists by the time the multipart POST resolves the id. A failure
-      // here doesn't unwind the create — the user lands on the detail
-      // page where MasterContractCard reads ``masterUploadFailed`` from
-      // location state and surfaces a persistent retry banner. Plain
-      // ``showError`` would disappear in ~5 s while the user is still
-      // figuring out the new page.
-      if (pendingMaster) {
-        try {
-          await uploadProposalMasterContract(created.id, pendingMaster);
-        } catch (err) {
-          const detail =
-            extractApiErrorDetail(err) ??
-            'Master contract upload failed after the proposal was created.';
-          setShowForm(false);
-          navigate(`/proposals/${created.id}`, {
-            state: { masterUploadFailed: detail },
-          });
-          return;
+      // Upload signable PDFs after create so the endpoint has a proposal id.
+      // Placement still happens on the detail page; send is gated until every
+      // uploaded document has a signing area.
+      try {
+        for (const file of pendingSigningDocs) {
+          await uploadProposalSigningDocument(created.id, file);
         }
+      } catch (err) {
+        const detail =
+          extractApiErrorDetail(err) ??
+          'A signing document failed to upload after the proposal was created.';
+        setShowForm(false);
+        navigate(`/proposals/${created.id}`, {
+          state: { masterUploadFailed: detail },
+        });
+        return;
       }
       setShowForm(false);
       showSuccess('Proposal created successfully');

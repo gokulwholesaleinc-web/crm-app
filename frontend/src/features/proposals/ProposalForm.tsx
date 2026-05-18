@@ -12,11 +12,10 @@ import { PendingMasterContractField } from './PendingMasterContractField';
 import type { ProposalCreate } from '../../types';
 
 interface ProposalFormProps {
-  /** Called with the form data plus an optional pending master contract
-   *  ``File`` (create flow only). The parent runs the
-   *  ``POST /api/proposals/{id}/master-contract`` two-step after the
-   *  create response returns the new proposal id. */
-  onSubmit: (data: ProposalCreate, pendingMaster?: File | null) => void;
+  /** Called with form data plus pending signing PDFs (create flow only).
+   *  The parent uploads them after the proposal id exists; signature boxes
+   *  are placed from the proposal detail page before sending. */
+  onSubmit: (data: ProposalCreate, pendingSigningDocs?: File[]) => void;
   onCancel: () => void;
   isLoading?: boolean;
   initialData?: Partial<ProposalCreate>;
@@ -34,7 +33,7 @@ export function ProposalForm({
   proposalId,
 }: ProposalFormProps) {
   const isCreating = proposalId == null;
-  const [pendingMaster, setPendingMaster] = useState<File | null>(null);
+  const [pendingSigningDocs, setPendingSigningDocs] = useState<File[]>([]);
   const [searchParams] = useSearchParams();
   // Pre-fill any of the Related Records from URL query params so
   // navigating "Create Proposal" from a contact / company detail page
@@ -113,7 +112,7 @@ export function ProposalForm({
   // ProposalForm state, so capture the current value here so a deferred
   // confirm still carries the user's chosen master.
   const missingRelation = useMissingRelationConfirm<ProposalCreate>(
-    (data) => onSubmit(data, isCreating ? pendingMaster : null),
+    (data) => onSubmit(data, isCreating ? pendingSigningDocs : []),
   );
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -148,7 +147,7 @@ export function ProposalForm({
       return;
     }
 
-    onSubmit(data, isCreating ? pendingMaster : null);
+    onSubmit(data, isCreating ? pendingSigningDocs : []);
   };
 
   const handleBillingChange = (next: BillingTermsValue) => {
@@ -324,8 +323,11 @@ export function ProposalForm({
 
         {isCreating && (
           <PendingMasterContractField
-            value={pendingMaster}
-            onChange={setPendingMaster}
+            value={pendingSigningDocs}
+            onChange={(files) => {
+              setPendingSigningDocs(files);
+              setTouched(true);
+            }}
           />
         )}
       </div>

@@ -109,6 +109,7 @@ export function buildProposalSendChecklist(
   options: {
     onEditContact: () => void;
     onEditValidUntil?: () => void;
+    onManageSigningDocuments?: () => void;
   },
 ): ChecklistItem[] {
   const items: ChecklistItem[] = [];
@@ -162,5 +163,57 @@ export function buildProposalSendChecklist(
     });
   }
 
+  const signingDocuments = proposal.signing_documents ?? [];
+  if (signingDocuments.length > 0) {
+    const missingPlacement = signingDocuments.filter(
+      (doc) => !doc.signature_field_coords,
+    );
+    items.push({
+      key: 'signing_documents',
+      label:
+        missingPlacement.length === 0
+          ? `Signing areas placed on ${signingDocuments.length} document${
+              signingDocuments.length === 1 ? '' : 's'
+            }`
+          : `${missingPlacement.length} signing document${
+              missingPlacement.length === 1 ? '' : 's'
+            } need placement`,
+      state: missingPlacement.length === 0,
+      hint:
+        missingPlacement.length === 0
+          ? undefined
+          : `Place a signing area on ${missingPlacement[0].original_filename} before sending.`,
+      action:
+        missingPlacement.length === 0 || !options.onManageSigningDocuments
+          ? undefined
+          : {
+              label: 'Place area',
+              onClick: options.onManageSigningDocuments,
+            },
+    });
+  } else if (proposal.master_contract_pdf_path && !proposal.signature_field_coords) {
+    items.push({
+      key: 'legacy_master_signature',
+      label: 'Master agreement needs signature placement',
+      state: false,
+      hint: 'Place a signing area on the uploaded master agreement before sending.',
+      action: options.onManageSigningDocuments
+        ? { label: 'Place area', onClick: options.onManageSigningDocuments }
+        : undefined,
+    });
+  }
+
   return items;
+}
+
+export function hasSigningDocumentSendBlocker(proposal: Proposal): boolean {
+  const signingDocuments = proposal.signing_documents ?? [];
+  if (signingDocuments.some((doc) => !doc.signature_field_coords)) {
+    return true;
+  }
+  return Boolean(
+    signingDocuments.length === 0 &&
+      proposal.master_contract_pdf_path &&
+      !proposal.signature_field_coords,
+  );
 }

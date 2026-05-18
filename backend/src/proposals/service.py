@@ -38,9 +38,14 @@ from src.email.branded_templates import (
 from src.email.pdf_render import pdf_logo_allowed_hosts, render_html_to_pdf
 from src.email.service import EmailService, assert_gmail_connected
 from src.email.types import EmailAttachment
-from src.proposals.models import Proposal, ProposalTemplate, ProposalView
+from src.proposals.models import (
+    Proposal,
+    ProposalSigningDocument,
+    ProposalTemplate,
+    ProposalView,
+)
 from src.proposals.pdf_stamper import StampInputs, stamp_master_with_signature
-from src.proposals.schemas import ProposalCreate, ProposalUpdate
+from src.proposals.schemas import ProposalCreate, ProposalUpdate, SignatureFieldCoords
 
 logger = logging.getLogger(__name__)
 
@@ -128,6 +133,22 @@ def _assert_signer_matches(proposal: Proposal, signer_email: str | None) -> str:
     return given
 
 
+def _clean_pdf_filename(filename: str | None) -> str:
+    name = (filename or "signing-document.pdf").replace("\\", "/").rsplit("/", 1)[-1]
+    name = name.strip() or "signing-document.pdf"
+    if not name.lower().endswith(".pdf"):
+        name = f"{name}.pdf"
+    return name[:255]
+
+
+def _coords_to_dict(coords: SignatureFieldCoords | dict | None) -> dict | None:
+    if coords is None:
+        return None
+    if isinstance(coords, SignatureFieldCoords):
+        return coords.model_dump()
+    return coords
+
+
 class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreate, ProposalUpdate]):
     """Service for Proposal CRUD operations."""
 
@@ -145,6 +166,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
             selectinload(Proposal.views),
             selectinload(Proposal.created_by_user),
             selectinload(Proposal.owner),
+            selectinload(Proposal.signing_documents),
         ]
 
     async def _generate_proposal_number(self) -> str:
@@ -205,6 +227,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 selectinload(Proposal.company),
                 selectinload(Proposal.created_by_user),
                 selectinload(Proposal.owner),
+                selectinload(Proposal.signing_documents),
             )
         )
 
@@ -273,6 +296,130 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         if new_opp is not None and new_opp != instance.opportunity_id:
             await assert_opportunity_active(self.db, new_opp, "proposal")
         return await super().update(instance, data, user_id)
+
+    async def list_signing_documents(
+        self,
+        proposal_id: int,
+    ) -> list[ProposalSigningDocument]:
+        result = await self.db.execute(
+            select(ProposalSigningDocument)
+            .where(ProposalSigningDocument.proposal_id == proposal_id)
+            .order_by(
+                ProposalSigningDocument.display_order.asc(),
+                ProposalSigningDocument.id.asc(),
+            )
+        )
+        return list(result.scalars().all())
+
+    async def get_signing_document(
+        self,
+        proposal_id: int,
+        document_id: int,
+    ) -> ProposalSigningDocument | None:
+        result = await self.db.execute(
+            select(ProposalSigningDocument)
+            .where(ProposalSigningDocument.proposal_id == proposal_id)
+            .where(ProposalSigningDocument.id == document_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def upload_signing_document_pdf(
+        self,
+        proposal: Proposal,
+        content: bytes,
+        filename: str | None,
+        user_id: int,
+    ) -> ProposalSigningDocument:
+        """Persist one signable PDF that needs an explicit signature box."""
+        if proposal.signed_at is not None:
+            raise ValueError(
+                "Cannot modify signing documents on a signed proposal — clone it instead",
+            )
+        if not content:
+            raise ValueError("signing document PDF is empty")
+        if not content.startswith(b"%PDF-"):
+            raise ValueError("signing document must be a PDF file")
+        if len(content) > 25 * 1024 * 1024:
+            raise ValueError("signing document exceeds 25 MB limit")
+
+        count_result = await self.db.execute(
+            select(func.count(ProposalSigningDocument.id)).where(
+                ProposalSigningDocument.proposal_id == proposal.id,
+            )
+        )
+        display_order = int(count_result.scalar() or 0)
+        document = ProposalSigningDocument(
+            proposal_id=proposal.id,
+            original_filename=_clean_pdf_filename(filename),
+            file_size=len(content),
+            content_type="application/pdf",
+            pdf_path="",
+            display_order=display_order,
+            created_by_id=user_id,
+        )
+        self.db.add(document)
+        await self.db.flush()
+
+        key = f"proposals/{proposal.id}/signing-documents/{document.id}/source.pdf"
+        await upload_file_bytes(content, key, content_type="application/pdf")
+        document.pdf_path = key
+        await self.db.flush()
+        await self.db.refresh(document)
+        return document
+
+    async def update_signing_document(
+        self,
+        proposal: Proposal,
+        document: ProposalSigningDocument,
+        *,
+        signature_field_coords: SignatureFieldCoords | dict | None,
+        user_id: int,
+    ) -> ProposalSigningDocument:
+        if proposal.signed_at is not None:
+            raise ValueError(
+                "Cannot modify signing documents on a signed proposal — clone it instead",
+            )
+        document.signature_field_coords = _coords_to_dict(signature_field_coords)
+        document.updated_by_id = user_id
+        await self.db.flush()
+        await self.db.refresh(document)
+        return document
+
+    async def delete_signing_document(
+        self,
+        proposal: Proposal,
+        document: ProposalSigningDocument,
+    ) -> None:
+        if proposal.signed_at is not None:
+            raise ValueError(
+                "Cannot modify signing documents on a signed proposal — clone it instead",
+            )
+        await self.db.delete(document)
+        await self.db.flush()
+
+    async def validate_signing_documents_ready(self, proposal: Proposal) -> None:
+        """Block send/sign when an uploaded signing PDF has no box."""
+        documents = await self.list_signing_documents(proposal.id)
+        incomplete = [
+            doc.original_filename
+            for doc in documents
+            if not doc.pdf_path or not doc.signature_field_coords
+        ]
+        if incomplete:
+            names = ", ".join(incomplete[:3])
+            if len(incomplete) > 3:
+                names = f"{names}, +{len(incomplete) - 3} more"
+            raise ValueError(
+                "Place a signing area on every signing document before sending "
+                f"({names})",
+            )
+
+        # Compatibility path for pre-multi-doc rows or old clients still
+        # using /master-contract. New documents are validated above.
+        if not documents and proposal.master_contract_pdf_path and not proposal.signature_field_coords:
+            raise ValueError(
+                "Place a signing area on the master service agreement before sending",
+            )
 
     async def create(self, data: ProposalCreate, user_id: int) -> Proposal:
         """Create a new proposal with auto-generated number + public token.
@@ -362,6 +509,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 f"This proposal expired on {proposal.valid_until.isoformat()} "
                 "and can no longer be accepted",
             )
+        await self.validate_signing_documents_ready(proposal)
 
         # Validate the submitted payload (consent + signature) BEFORE the
         # signer-email authz check so a customer who forgot to tick the
@@ -411,7 +559,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         # is logged but does not unwind the acceptance — the signed-row
         # + signature_image bytes alone are ESIGN-Act § 7001-compliant
         # evidence and the operator can re-stamp later.
-        await self._maybe_stamp_master_pdf(
+        await self._maybe_stamp_signing_documents(
             proposal,
             signer_ip=signer_ip,
             signer_user_agent=signer_user_agent,
@@ -448,6 +596,101 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
 
         await self.db.refresh(proposal)
         return proposal
+
+    async def _maybe_stamp_signing_documents(
+        self,
+        proposal: Proposal,
+        signer_ip: str | None,
+        signer_user_agent: str | None,
+        signed_at: datetime,
+    ) -> None:
+        documents = await self.list_signing_documents(proposal.id)
+        if not documents:
+            await self._maybe_stamp_master_pdf(
+                proposal,
+                signer_ip=signer_ip,
+                signer_user_agent=signer_user_agent,
+                signed_at=signed_at,
+            )
+            return
+        if proposal.signature_image is None:
+            return
+
+        first_signed_key: str | None = None
+        failed_count = 0
+        for document in documents:
+            try:
+                master_bytes = await download_object_bytes(document.pdf_path)
+                stamped = await asyncio.to_thread(
+                    stamp_master_with_signature,
+                    StampInputs(
+                        master_pdf=master_bytes,
+                        signature_png=proposal.signature_image,
+                        coords=_coords_for_stamper(document.signature_field_coords),
+                        signer_name=proposal.signer_name or "",
+                        signer_email=proposal.signer_email or "",
+                        signer_ip=signer_ip,
+                        signer_user_agent=signer_user_agent,
+                        signed_at=signed_at,
+                        proposal_number=proposal.proposal_number,
+                    ),
+                )
+                timestamp = int(signed_at.timestamp())
+                signed_key = (
+                    f"proposals/{proposal.id}/signing-documents/"
+                    f"{document.id}/signed-{timestamp}.pdf"
+                )
+                await upload_file_bytes(
+                    stamped,
+                    signed_key,
+                    content_type="application/pdf",
+                )
+                document.signed_pdf_path = signed_key
+                document.signed_pdf_error = None
+                if first_signed_key is None:
+                    first_signed_key = signed_key
+            except PdfReadError as exc:
+                logger.exception(
+                    "Signing document unreadable for proposal %s document %s",
+                    proposal.id,
+                    document.id,
+                )
+                failed_count += 1
+                document.signed_pdf_error = (
+                    f"Signing document is corrupt or unreadable: {str(exc)[:900]}"
+                )
+            except ClientError as exc:
+                logger.exception(
+                    "R2 storage error stamping proposal %s document %s",
+                    proposal.id,
+                    document.id,
+                )
+                failed_count += 1
+                response = getattr(exc, "response", None)
+                err = response.get("Error", {}) if isinstance(response, dict) else {}
+                code = err.get("Code", "ClientError")
+                message = err.get("Message", str(exc))
+                document.signed_pdf_error = (
+                    f"Object storage temporarily unavailable ({code}): {message}"[:1000]
+                )
+            except Exception as exc:
+                logger.exception(
+                    "Failed to stamp proposal %s signing document %s",
+                    proposal.id,
+                    document.id,
+                )
+                failed_count += 1
+                document.signed_pdf_error = str(exc)[:1000]
+            finally:
+                await self._commit_stamp_capture(proposal.id)
+
+        proposal.signed_pdf_path = first_signed_key
+        proposal.signed_pdf_error = (
+            None
+            if failed_count == 0
+            else f"{failed_count} signing document(s) failed to generate a signed PDF"
+        )
+        await self._commit_stamp_capture(proposal.id)
 
     async def _maybe_stamp_master_pdf(
         self,
@@ -561,9 +804,10 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 "Only signed proposals can be re-stamped "
                 f"(status='{proposal.status}')",
             )
-        if not proposal.master_contract_pdf_path:
+        documents = await self.list_signing_documents(proposal.id)
+        if not documents and not proposal.master_contract_pdf_path:
             raise ValueError(
-                "Proposal has no master contract PDF to stamp",
+                "Proposal has no signing document PDF to stamp",
             )
         if proposal.signature_image is None:
             raise ValueError(
@@ -574,7 +818,8 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 "Proposal has no recorded signed_at timestamp",
             )
 
-        await self._maybe_stamp_master_pdf(
+        await self.validate_signing_documents_ready(proposal)
+        await self._maybe_stamp_signing_documents(
             proposal,
             signer_ip=proposal.signer_ip,
             signer_user_agent=proposal.signer_user_agent,
@@ -654,6 +899,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
             .options(
                 selectinload(Proposal.contact),
                 selectinload(Proposal.company),
+                selectinload(Proposal.signing_documents),
             )
             .where(Proposal.public_token == token)
         )
@@ -671,6 +917,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         proposal = await self.get_by_id(proposal_id)
         if not proposal:
             raise ValueError(f"Proposal {proposal_id} not found")
+        await self.validate_signing_documents_ready(proposal)
         if not proposal.contact_id:
             raise ValueError("Proposal has no associated contact")
 
@@ -1248,7 +1495,53 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
             # doesn't silently strip the attachment.
             attachments: list[EmailAttachment] = []
             stamped_attached = False
-            if proposal.signed_pdf_path:
+            missing_signed_lines: list[str] = []
+            signing_documents = await self.list_signing_documents(proposal.id)
+            if signing_documents:
+                for document in signing_documents:
+                    if not document.signed_pdf_path:
+                        missing_signed_lines.append(
+                            f"{document.original_filename} (signed copy not generated)",
+                        )
+                        continue
+                    try:
+                        stamped_bytes = await download_object_bytes(
+                            document.signed_pdf_path,
+                        )
+                        attachments.append(EmailAttachment(
+                            filename=(
+                                f"{proposal.proposal_number}-signed-"
+                                f"{document.original_filename}"
+                            ),
+                            content=stamped_bytes,
+                            content_type="application/pdf",
+                        ))
+                        stamped_attached = True
+                    except Exception as exc:
+                        logger.warning(
+                            "Failed to fetch signed-PDF object %r for proposal %s "
+                            "document %s; signer email will note the missing file",
+                            document.signed_pdf_path, proposal.id, document.id,
+                            exc_info=True,
+                        )
+                        document.signed_pdf_error = (
+                            "Signed copy could not be loaded from storage at "
+                            "email-send time; ask the proposal owner to re-stamp "
+                            f"and resend. ({str(exc)[:400]})"
+                        )[:1000]
+                        missing_signed_lines.append(
+                            f"{document.original_filename} (signed copy unavailable)",
+                        )
+                if missing_signed_lines:
+                    try:
+                        await self.db.commit()
+                    except Exception:
+                        logger.exception(
+                            "Failed to commit signed-document error capture for "
+                            "proposal %s; banner may not surface",
+                            proposal.id,
+                        )
+            elif proposal.signed_pdf_path:
                 try:
                     stamped_bytes = await download_object_bytes(
                         proposal.signed_pdf_path,
@@ -1304,6 +1597,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 proposal,
             )
             attachments.extend(extra_attachments)
+            missing_lines = missing_signed_lines + missing_lines
 
             final_body = body
             if missing_lines:

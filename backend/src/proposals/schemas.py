@@ -36,6 +36,28 @@ class SignatureFieldCoords(BaseModel):
     h: float = Field(gt=0, allow_inf_nan=False)
 
 
+class ProposalSigningDocumentResponse(BaseModel):
+    """Staff-safe metadata for a PDF that receives the signer signature."""
+
+    id: int
+    proposal_id: int
+    original_filename: str
+    file_size: int
+    content_type: str
+    signature_field_coords: SignatureFieldCoords | None = None
+    signed_pdf_path: str | None = None
+    signed_pdf_error: str | None = None
+    display_order: int
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ProposalSigningDocumentUpdate(BaseModel):
+    signature_field_coords: SignatureFieldCoords | None = None
+
+
 class ProposalBillingMixin(BaseModel):
     """Structured pricing fields shared by ProposalBase/Update/Response.
 
@@ -232,6 +254,7 @@ class ProposalResponse(ProposalBase):
     # when the stamper should auto-detect (bottom-right of last page).
     # Surfaced so the picker UI can re-open with the saved box drawn.
     signature_field_coords: SignatureFieldCoords | None = None
+    signing_documents: list[ProposalSigningDocumentResponse] = []
     terms_and_conditions: str | None = None
     created_at: datetime
     updated_at: datetime
@@ -334,6 +357,7 @@ class ProposalPublicResponse(BaseModel):
     # When true, the accept endpoint stamps the drawn signature onto
     # the master PDF and returns a downloadable countersigned copy.
     has_master_contract: bool = False
+    signing_document_count: int = 0
 
     model_config = ConfigDict(from_attributes=True)
 

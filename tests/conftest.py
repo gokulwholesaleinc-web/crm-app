@@ -59,7 +59,12 @@ from src.assignment.models import AssignmentRule
 from src.sequences.models import Sequence, SequenceEnrollment
 from src.quotes.models import Quote, QuoteLineItem, QuoteTemplate, ProductBundle, ProductBundleItem
 from src.payments.models import StripeCustomer, Product, Price, Payment, Subscription
-from src.proposals.models import Proposal, ProposalTemplate, ProposalView
+from src.proposals.models import (
+    Proposal,
+    ProposalSigningDocument,
+    ProposalTemplate,
+    ProposalView,
+)
 from src.contracts.models import Contract
 from src.meta.models import CompanyMetaData, MetaCredential, MetaLeadCapture
 from src.expenses.models import Expense

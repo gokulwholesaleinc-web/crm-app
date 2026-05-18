@@ -137,6 +137,76 @@ async def _run_production_migrations():
                 except asyncpg.PostgresError as exc:
                     logger.warning("Column migration skipped: %s", exc)
 
+            # Proposal multi-document signing. Keeps legacy proposal-level
+            # columns readable while new uploads land in this child table.
+            try:
+                await conn.execute("""
+                    CREATE TABLE IF NOT EXISTS proposal_signing_documents (
+                        id SERIAL PRIMARY KEY,
+                        proposal_id INTEGER NOT NULL REFERENCES proposals(id) ON DELETE CASCADE,
+                        original_filename VARCHAR(255) NOT NULL,
+                        file_size BIGINT NOT NULL DEFAULT 0,
+                        content_type VARCHAR(100) NOT NULL DEFAULT 'application/pdf',
+                        pdf_path TEXT NOT NULL,
+                        signature_field_coords JSONB,
+                        signed_pdf_path TEXT,
+                        signed_pdf_error TEXT,
+                        display_order INTEGER NOT NULL DEFAULT 0,
+                        created_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                        updated_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )
+                """)
+                await conn.execute(
+                    "CREATE INDEX IF NOT EXISTS ix_proposal_signing_documents_proposal_id "
+                    "ON proposal_signing_documents(proposal_id)"
+                )
+                await conn.execute(
+                    "CREATE INDEX IF NOT EXISTS ix_proposal_signing_documents_proposal_order "
+                    "ON proposal_signing_documents(proposal_id, display_order, id)"
+                )
+                await conn.execute("""
+                    INSERT INTO proposal_signing_documents (
+                        proposal_id,
+                        original_filename,
+                        file_size,
+                        content_type,
+                        pdf_path,
+                        signature_field_coords,
+                        signed_pdf_path,
+                        signed_pdf_error,
+                        display_order,
+                        created_by_id,
+                        updated_by_id,
+                        created_at,
+                        updated_at
+                    )
+                    SELECT
+                        p.id,
+                        'Master service agreement.pdf',
+                        0,
+                        'application/pdf',
+                        p.master_contract_pdf_path,
+                        p.signature_field_coords,
+                        p.signed_pdf_path,
+                        p.signed_pdf_error,
+                        0,
+                        p.created_by_id,
+                        p.updated_by_id,
+                        COALESCE(p.created_at, NOW()),
+                        COALESCE(p.updated_at, NOW())
+                    FROM proposals p
+                    WHERE p.master_contract_pdf_path IS NOT NULL
+                      AND NOT EXISTS (
+                          SELECT 1
+                          FROM proposal_signing_documents d
+                          WHERE d.proposal_id = p.id
+                      )
+                """)
+            except asyncpg.PostgresError as exc:
+                logger.warning("Failed to create proposal signing documents: %s", exc)
+
             # User approval gate: rejected emails block list
             try:
                 await conn.execute("""

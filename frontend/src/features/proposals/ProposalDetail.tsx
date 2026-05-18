@@ -15,6 +15,7 @@ import {
   EyeIcon,
   ClipboardDocumentIcon,
   TrophyIcon,
+  ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline';
 import { Button, HelpLink, Modal, ConfirmDialog, StatusBadge } from '../../components/ui';
 import { StickyActionBar } from '../../components/shared/StickyActionBar';
@@ -44,6 +45,7 @@ import { InlineSectionEditor } from '../../components/shared/InlineSectionEditor
 import {
   buildProposalTimelineSteps,
   buildProposalSendChecklist,
+  hasSigningDocumentSendBlocker,
 } from './proposalStatus';
 import {
   listProposalAttachments,
@@ -53,6 +55,11 @@ import {
   downloadProposalMasterContract,
   downloadProposalSignedPdf,
   uploadProposalMasterContract,
+  uploadProposalSigningDocument,
+  updateProposalSigningDocument,
+  deleteProposalSigningDocument,
+  downloadProposalSigningDocument,
+  downloadProposalSigningDocumentSignedPdf,
   PROPOSAL_MASTER_CONTRACT_MAX_BYTES,
 } from '../../api/proposals';
 import { formatDate } from '../../utils/formatters';
@@ -63,6 +70,7 @@ import type {
   ProposalCreate,
   ProposalUpdate,
   ProposalAttachment,
+  ProposalSigningDocument,
   SignatureFieldCoords,
 } from '../../types';
 
@@ -94,6 +102,7 @@ function ProposalDetailPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDealWonBanner, setShowDealWonBanner] = useState(false);
   const actionRowRef = useRef<HTMLDivElement>(null);
+  const signingDocumentsRef = useRef<HTMLDivElement>(null);
   const prevStatusRef = useRef<string | undefined>(undefined);
 
   const currentStatus = proposal?.status;
@@ -270,8 +279,14 @@ function ProposalDetailPage() {
   // failed (bad Gmail token, sandbox rejection). Require a recipient so the
   // frontend gates the 400 the backend would return without one.
   const canSendStatus = ['draft', 'sent', 'viewed'].includes(proposal.status ?? '');
-  const canSend = canSendStatus && Boolean(proposalRecipient);
+  const signingDocsBlockSend = hasSigningDocumentSendBlocker(proposal);
+  const canSend = canSendStatus && Boolean(proposalRecipient) && !signingDocsBlockSend;
   const sendLabel = isDraft ? 'Send' : 'Resend';
+  const sendDisabledTitle = !proposalRecipient
+    ? 'Set a designated signer email or attach a contact with an email before sending'
+    : signingDocsBlockSend
+      ? 'Place a signing area on every uploaded signing document before sending'
+      : undefined;
   const canAcceptReject = proposal.status === 'sent' || proposal.status === 'viewed';
   const canEdit = ['draft', 'sent', 'viewed'].includes(proposal.status ?? '');
 
@@ -282,6 +297,12 @@ function ProposalDetailPage() {
   const sendChecklist = buildProposalSendChecklist(proposal, {
     onEditContact: () => setShowEditModal(true),
     onEditValidUntil: () => setShowEditModal(true),
+    onManageSigningDocuments: () => {
+      signingDocumentsRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      });
+    },
   });
   const checklistReady = isChecklistReady(sendChecklist);
 
@@ -303,6 +324,7 @@ function ProposalDetailPage() {
             onClick={handleSend}
             disabled={sendProposalMutation.isPending || !canSend}
             variant={isDraft ? 'primary' : 'secondary'}
+            title={sendDisabledTitle}
           >
             {sendProposalMutation.isPending ? 'Sending...' : sendLabel}
           </Button>
@@ -354,11 +376,7 @@ function ProposalDetailPage() {
               onClick={handleSend}
               leftIcon={<PaperAirplaneIcon className="h-4 w-4" />}
               disabled={sendProposalMutation.isPending || !canSend}
-              title={
-                canSend
-                  ? undefined
-                  : 'Set a designated signer email or attach a contact with an email before sending'
-              }
+              title={sendDisabledTitle}
               variant={isDraft ? 'primary' : 'secondary'}
             >
               {sendProposalMutation.isPending ? 'Sending...' : sendLabel}
@@ -633,32 +651,37 @@ function ProposalDetailPage() {
               for forensics and billing disputes. */}
           <ProposalAuditCard proposal={proposal} />
 
-          {/* Master service agreement upload. Always visible so the
-              admin can attach the PDF after creating a proposal — the
-              card is the discoverable entry point. Locked (read-only)
-              once the proposal is signed so the signed audit bundle
-              stays immutable. */}
-          <MasterContractCard
-            proposalId={proposal.id}
-            currentPath={proposal.master_contract_pdf_path ?? null}
-            signedPdfPath={proposal.signed_pdf_path ?? null}
-            isLocked={Boolean(proposal.signed_at)}
-            initialError={masterUploadFailedMessage}
-            onUploaded={() => {
-              void refetch();
-            }}
-          />
-
-          {/* Visual placement of the signer's signature box on the
-              master contract. Only relevant once a master is on file;
-              locked once the proposal is signed. */}
-          {proposal.master_contract_pdf_path && (
-            <SignaturePlacementCard
+          <div ref={signingDocumentsRef}>
+            <SigningDocumentsCard
               proposalId={proposal.id}
-              currentCoords={proposal.signature_field_coords ?? null}
+              documents={proposal.signing_documents ?? []}
               isLocked={Boolean(proposal.signed_at)}
+              initialError={masterUploadFailedMessage}
+              onChanged={() => {
+                void refetch();
+              }}
             />
-          )}
+          </div>
+
+          {(proposal.signing_documents ?? []).length === 0 &&
+            proposal.master_contract_pdf_path && (
+              <>
+                <MasterContractCard
+                  proposalId={proposal.id}
+                  currentPath={proposal.master_contract_pdf_path ?? null}
+                  signedPdfPath={proposal.signed_pdf_path ?? null}
+                  isLocked={Boolean(proposal.signed_at)}
+                  onUploaded={() => {
+                    void refetch();
+                  }}
+                />
+                <SignaturePlacementCard
+                  proposalId={proposal.id}
+                  currentCoords={proposal.signature_field_coords ?? null}
+                  isLocked={Boolean(proposal.signed_at)}
+                />
+              </>
+            )}
 
           {/* Sharing */}
           <EntitySharing
@@ -976,6 +999,366 @@ function ProposalAttachmentsCard({ proposalId, isLocked }: ProposalAttachmentsCa
         cancelLabel="Cancel"
         variant="danger"
         isLoading={deleteMutation.isPending}
+      />
+    </div>
+  );
+}
+
+// -----------------------------------------------------------------
+// SigningDocumentsCard
+// -----------------------------------------------------------------
+
+interface SigningDocumentsCardProps {
+  proposalId: number;
+  documents: ProposalSigningDocument[];
+  isLocked: boolean;
+  initialError?: string | null;
+  onChanged: () => void;
+}
+
+function SigningDocumentsCard({
+  proposalId,
+  documents,
+  isLocked,
+  initialError = null,
+  onChanged,
+}: SigningDocumentsCardProps) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [viewingId, setViewingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(initialError);
+  const [pendingDelete, setPendingDelete] = useState<ProposalSigningDocument | null>(null);
+  const [placingDoc, setPlacingDoc] = useState<ProposalSigningDocument | null>(null);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+
+  useEffect(() => () => {
+    if (pdfUrl) {
+      URL.revokeObjectURL(pdfUrl);
+    }
+  }, [pdfUrl]);
+
+  const incompleteDocs = documents.filter((doc) => !doc.signature_field_coords);
+
+  const validateFiles = (files: File[]): string | null => {
+    const invalid = files.find((file) => file.type && file.type !== 'application/pdf');
+    if (invalid) return `${invalid.name} must be a PDF file.`;
+    const oversized = files.find((file) => file.size > PROPOSAL_MASTER_CONTRACT_MAX_BYTES);
+    if (oversized) return `${oversized.name} exceeds the 25 MB limit.`;
+    return null;
+  };
+
+  const handleFiles = async (fileList: FileList | null) => {
+    if (!fileList || fileList.length === 0 || isLocked) return;
+    const files = Array.from(fileList);
+    const validationError = validateFiles(files);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+    setUploading(true);
+    setError(null);
+    try {
+      for (const file of files) {
+        await uploadProposalSigningDocument(proposalId, file);
+      }
+      showSuccess(
+        `${files.length} signing document${files.length === 1 ? '' : 's'} uploaded`,
+      );
+      onChanged();
+    } catch (err) {
+      setError(extractApiErrorDetail(err) ?? 'Signing document upload failed.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
+    void handleFiles(e.dataTransfer.files);
+  };
+
+  const openBlob = (blob: Blob) => {
+    const url = URL.createObjectURL(blob);
+    const popup = window.open(url, '_blank', 'noopener,noreferrer');
+    if (!popup) {
+      URL.revokeObjectURL(url);
+      setError('Popup blocked — allow popups for this site to view PDFs.');
+      return;
+    }
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    setError(null);
+  };
+
+  const handleView = async (document: ProposalSigningDocument, signed: boolean) => {
+    const key = `${document.id}-${signed ? 'signed' : 'source'}`;
+    setViewingId(key);
+    setError(null);
+    try {
+      const blob = signed
+        ? await downloadProposalSigningDocumentSignedPdf(proposalId, document.id)
+        : await downloadProposalSigningDocument(proposalId, document.id);
+      openBlob(blob);
+    } catch (err) {
+      setError(
+        extractApiErrorDetail(err) ??
+          (signed ? 'Failed to load signed PDF.' : 'Failed to load signing document.'),
+      );
+    } finally {
+      setViewingId(null);
+    }
+  };
+
+  const handlePlace = async (document: ProposalSigningDocument) => {
+    if (isLocked) return;
+    setViewingId(`${document.id}-place`);
+    setError(null);
+    try {
+      const blob = await downloadProposalSigningDocument(proposalId, document.id);
+      const url = URL.createObjectURL(blob);
+      setPdfUrl((current) => {
+        if (current) URL.revokeObjectURL(current);
+        return url;
+      });
+      setPlacingDoc(document);
+    } catch (err) {
+      setError(extractApiErrorDetail(err) ?? 'Failed to load signing document.');
+    } finally {
+      setViewingId(null);
+    }
+  };
+
+  const closePicker = () => {
+    setPlacingDoc(null);
+    if (pdfUrl) {
+      URL.revokeObjectURL(pdfUrl);
+      setPdfUrl(null);
+    }
+  };
+
+  const savePlacement = async (coords: SignatureFieldCoords) => {
+    if (!placingDoc) return;
+    try {
+      await updateProposalSigningDocument(proposalId, placingDoc.id, coords);
+      showSuccess('Signing area saved');
+      onChanged();
+    } catch (err) {
+      showError(extractApiErrorDetail(err) ?? 'Failed to save signing area');
+      throw err;
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!pendingDelete) return;
+    try {
+      await deleteProposalSigningDocument(proposalId, pendingDelete.id);
+      setPendingDelete(null);
+      showSuccess('Signing document deleted');
+      onChanged();
+    } catch (err) {
+      showError(extractApiErrorDetail(err) ?? 'Failed to delete signing document');
+    }
+  };
+
+  return (
+    <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-gray-100 dark:border-gray-700">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+          Signing documents
+        </h2>
+        {isLocked && (
+          <span className="text-xs text-gray-500 dark:text-gray-400">
+            Locked — proposal signed
+          </span>
+        )}
+      </div>
+      <ol className="mt-3 space-y-1 text-xs text-gray-600 dark:text-gray-300">
+        <li>1. Upload every PDF that needs the client&rsquo;s signature.</li>
+        <li>2. Open each PDF and draw the signing area where signature and date should land.</li>
+        <li>3. Send unlocks only when every uploaded signing document is ready.</li>
+      </ol>
+
+      {!isLocked && (
+        <div
+          onDrop={handleDrop}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setIsDragging(true);
+          }}
+          onDragLeave={(e) => {
+            e.preventDefault();
+            setIsDragging(false);
+          }}
+          className={`mt-4 rounded border-2 border-dashed px-4 py-5 text-center transition-colors ${
+            isDragging
+              ? 'border-primary-500 bg-primary-50 dark:bg-primary-950/30'
+              : 'border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900'
+          }`}
+        >
+          <input
+            ref={inputRef}
+            type="file"
+            accept=".pdf,application/pdf"
+            multiple
+            className="sr-only"
+            onChange={(e) => {
+              void handleFiles(e.target.files);
+              e.target.value = '';
+            }}
+          />
+          <ArrowUpTrayIcon
+            className="mx-auto h-6 w-6 text-gray-400 dark:text-gray-500"
+            aria-hidden="true"
+          />
+          <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
+            Drop signing PDFs here, or
+          </p>
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            disabled={uploading}
+            className="mt-2 inline-flex items-center gap-1.5 text-sm font-medium text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 disabled:opacity-50"
+          >
+            {uploading ? 'Uploading…' : 'Choose PDFs'}
+          </button>
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            PDF only, up to 25 MB each
+          </p>
+        </div>
+      )}
+
+      {incompleteDocs.length > 0 && (
+        <div className="mt-4 flex items-start gap-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+          <ExclamationTriangleIcon className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden="true" />
+          <p>
+            Place a signing area on {incompleteDocs[0]?.original_filename ?? 'the first document'}
+            {incompleteDocs.length > 1 ? ` and ${incompleteDocs.length - 1} more` : ''} before sending.
+          </p>
+        </div>
+      )}
+
+      {error && (
+        <p
+          role="alert"
+          aria-live="polite"
+          className="mt-3 text-sm text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded px-3 py-2"
+        >
+          {error}
+        </p>
+      )}
+
+      {documents.length === 0 ? (
+        <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">
+          No signing documents uploaded. The proposal can still be signed with the on-page signature modal.
+        </p>
+      ) : (
+        <ul className="mt-4 divide-y divide-gray-200 dark:divide-gray-700 border border-gray-200 dark:border-gray-700 rounded">
+          {documents.map((document) => {
+            const ready = Boolean(document.signature_field_coords);
+            return (
+              <li key={document.id} className="px-3 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">
+                      {document.original_filename}
+                    </p>
+                    <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400 tabular-nums">
+                      {formatFileSize(document.file_size)}
+                      {document.signature_field_coords
+                        ? ` · signing area page ${document.signature_field_coords.page}`
+                        : ' · needs signing area'}
+                    </p>
+                    {document.signed_pdf_error && (
+                      <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                        {document.signed_pdf_error}
+                      </p>
+                    )}
+                  </div>
+                  <span
+                    className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${
+                      ready
+                        ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+                        : 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300'
+                    }`}
+                  >
+                    {ready ? 'Ready' : 'Needs area'}
+                  </span>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => void handleView(document, false)}
+                    isLoading={viewingId === `${document.id}-source`}
+                    leftIcon={<EyeIcon className="h-4 w-4" />}
+                  >
+                    View
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={ready ? 'secondary' : 'primary'}
+                    size="sm"
+                    onClick={() => void handlePlace(document)}
+                    disabled={isLocked}
+                    isLoading={viewingId === `${document.id}-place`}
+                  >
+                    {ready ? 'Edit area' : 'Place area'}
+                  </Button>
+                  {document.signed_pdf_path && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => void handleView(document, true)}
+                      isLoading={viewingId === `${document.id}-signed`}
+                    >
+                      Signed PDF
+                    </Button>
+                  )}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setPendingDelete(document)}
+                    disabled={isLocked}
+                    leftIcon={<TrashIcon className="h-4 w-4" />}
+                  >
+                    Delete
+                  </Button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      {placingDoc && pdfUrl && (
+        <Suspense fallback={null}>
+          <SignatureFieldPicker
+            isOpen
+            onClose={closePicker}
+            masterPdfUrl={pdfUrl}
+            currentCoords={placingDoc.signature_field_coords ?? null}
+            onSave={savePlacement}
+          />
+        </Suspense>
+      )}
+
+      <ConfirmDialog
+        isOpen={pendingDelete !== null}
+        onClose={() => setPendingDelete(null)}
+        onConfirm={confirmDelete}
+        title="Delete signing document"
+        message={
+          pendingDelete
+            ? `Delete "${pendingDelete.original_filename}"? It will no longer be signed with this proposal.`
+            : ''
+        }
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="danger"
       />
     </div>
   );

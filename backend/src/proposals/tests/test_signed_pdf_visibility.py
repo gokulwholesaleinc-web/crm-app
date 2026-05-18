@@ -208,7 +208,7 @@ class TestRestampServiceGuards:
             db_session, user, master_contract_pdf_path=None
         )
         service = ProposalService(db_session)
-        with pytest.raises(ValueError, match="master contract PDF"):
+        with pytest.raises(ValueError, match="signing document PDF"):
             await service.restamp_signed_pdf(proposal)
 
     async def test_rejects_when_no_signature_image(
