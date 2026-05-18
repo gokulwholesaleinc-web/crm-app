@@ -102,14 +102,20 @@ function App() {
             v7_relativeSplatPath: true,
           }}
         >
-          <GuideProvider>
-            <ErrorBoundary>
-              <Suspense fallback={<PageLoader />}>
+          <ErrorBoundary>
+            <Suspense fallback={<PageLoader />}>
+              {/* GuideProvider lives INSIDE ErrorBoundary so a runtime
+                  throw from the 593-line guide tour (DOM lookups, focus
+                  restore, scrollIntoView, account-pref mutations) lands
+                  on the boundary's fallback instead of taking the whole
+                  app down. */}
+              <GuideProvider>
                 <AppRoutes />
-              </Suspense>
-            </ErrorBoundary>
-            <Toaster
-              position="top-right"
+              </GuideProvider>
+            </Suspense>
+          </ErrorBoundary>
+          <Toaster
+            position="top-right"
               toastOptions={{
                 duration: 4000,
                 style: {
@@ -130,7 +136,6 @@ function App() {
                 },
               }}
             />
-          </GuideProvider>
         </BrowserRouter>
       </TenantProvider>
     </QueryClientProvider>

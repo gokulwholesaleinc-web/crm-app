@@ -50,6 +50,7 @@ import { accountKeys, useAccountPreferences } from '../../hooks/useAccount';
 import { useUserPreferences } from '../../hooks/useUserPreferences';
 import { Button } from '../../components/ui/Button';
 import { showError } from '../../utils/toast';
+import { extractApiErrorDetail } from '../../utils/errors';
 
 const EMPTY_COMPLETED_GUIDE_IDS: readonly string[] = [];
 
@@ -110,14 +111,30 @@ export function GuideProvider({ children }: { children: ReactNode }) {
       accountApi.updateAccountPreferences({
         guide_progress: toAccountGuideProgress(progress),
       }),
-    onSuccess: (data) => {
+    onSuccess: (data, variables) => {
       queryClient.setQueryData(accountKeys.preferences(), data);
-      setLocalPref('guideProgress', fromAccountGuideProgress(data.guide_progress));
+      const serverProgress = fromAccountGuideProgress(data.guide_progress);
+      // Only mark the local-progress key as migrated once the server has
+      // actually confirmed the write. Setting this before the mutate
+      // fires (as the original code did) makes a failed sync permanent —
+      // the migration effect short-circuits next time even though the
+      // server never received the progress.
+      migratedLocalProgressRef.current = guideProgressKey(
+        serverProgress ?? variables.progress,
+      );
+      if (hasGuideProgressState(serverProgress)) {
+        setLocalPref('guideProgress', serverProgress);
+      }
     },
     onError: (error, variables) => {
       console.warn('[guides] failed to sync guide progress', error);
       if (variables.notifyOnError) {
-        showError('Guide progress could not be saved to your account');
+        const detail = extractApiErrorDetail(error);
+        showError(
+          detail
+            ? `Guide progress could not be saved: ${detail}`
+            : 'Guide progress could not be saved to your account',
+        );
       }
     },
   });
@@ -138,7 +155,15 @@ export function GuideProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!isAuthenticated || accountPrefsQuery.isLoading || !accountPrefsQuery.data) {
+    if (!isAuthenticated || accountPrefsQuery.isLoading) {
+      return;
+    }
+
+    // A failed GET (network blip, 500, expired auth) leaves `data`
+    // undefined and `isError` set. Silently falling through here would
+    // make the local cache the permanent source of truth with no signal
+    // to the user, so surface it once instead of looping.
+    if (accountPrefsQuery.isError || !accountPrefsQuery.data) {
       return;
     }
 
@@ -158,7 +183,9 @@ export function GuideProvider({ children }: { children: ReactNode }) {
     if (migratedLocalProgressRef.current === localKey) {
       return;
     }
-    migratedLocalProgressRef.current = localKey;
+    // NOTE: we do NOT set migratedLocalProgressRef.current here — the
+    // mutation's onSuccess does, so a failed migration is retried on the
+    // next navigation instead of being silently dropped forever.
     syncGuideProgress({
       progress: progressToMigrate,
       notifyOnError: false,
@@ -166,6 +193,7 @@ export function GuideProvider({ children }: { children: ReactNode }) {
   }, [
     accountGuideProgress,
     accountPrefsQuery.data,
+    accountPrefsQuery.isError,
     accountPrefsQuery.isLoading,
     isAuthenticated,
     localGuideProgress,
@@ -175,23 +203,39 @@ export function GuideProvider({ children }: { children: ReactNode }) {
 
   const updateGuideProgress = useCallback(
     (updater: (prev: GuideProgress | undefined) => GuideProgress) => {
-      const next = updater(guideProgress);
-      setLocalPref('guideProgress', next);
-      if (isAuthenticated) {
-        migratedLocalProgressRef.current = guideProgressKey(next);
+      // Use the functional setter so two rapid completions (e.g. clicking
+      // Done on a multi-step tour) don't fight a stale-closure `prev`.
+      let next: GuideProgress | undefined;
+      setLocalPref('guideProgress', (prev) => {
+        next = updater(prev);
+        return next;
+      });
+      // `next` is set synchronously by the setter callback above.
+      if (isAuthenticated && next) {
+        // We DO NOT update migratedLocalProgressRef here. The mutation's
+        // onSuccess does that after the server confirms the write, so a
+        // failed sync stays retry-eligible instead of being marked done.
         syncGuideProgress({
           progress: next,
           notifyOnError: true,
         });
       }
     },
-    [guideProgress, isAuthenticated, setLocalPref, syncGuideProgress],
+    [isAuthenticated, setLocalPref, syncGuideProgress],
   );
 
   const startGuide = useCallback(
     (guideId: string) => {
       const guide = getGuideById(guideId);
-      if (!guide) return;
+      if (!guide) {
+        // Retired guide ID (server may still carry a completion for an
+        // old guide) or an empty fallback from startBestGuide. Warn so
+        // the launcher button doesn't look mysteriously dead.
+        if (guideId) {
+          console.warn('[guides] startGuide: unknown guide id', guideId);
+        }
+        return;
+      }
       setActiveGuideId(guide.id);
       setCurrentStepIndex(0);
       if (!guideMatchesPath(guide, location.pathname)) {
@@ -237,7 +281,12 @@ export function GuideProvider({ children }: { children: ReactNode }) {
       return;
     }
     const recommendedUnfinished = recommendedGuides.find((guide) => !isCompleted(guide.id));
-    startGuide((recommendedUnfinished ?? recommendedGuides[0] ?? availableGuides[0])?.id ?? '');
+    const best = recommendedUnfinished ?? recommendedGuides[0] ?? availableGuides[0];
+    // If no guide is available for the user's role, the launcher should
+    // not call us — but if a stale prompt path does, skip silently
+    // instead of asking startGuide to look up an empty id.
+    if (!best) return;
+    startGuide(best.id);
   }, [availableGuides, currentPageGuides, isCompleted, recommendedGuides, startGuide]);
 
   const value = useMemo<GuideContextValue>(
