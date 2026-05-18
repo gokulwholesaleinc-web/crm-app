@@ -105,13 +105,22 @@ async def upload_file_bytes(
 
 
 async def delete_object(object_key: str) -> None:
+    """Best-effort R2 deletion.
+
+    Callers that have already removed the owning DB row rely on this to
+    drain the object — a swallowed failure here leaves an orphan object
+    in R2 (and, for signed PDFs, real client signatures) with no admin
+    surface to find it. Log at ``error`` so Sentry picks it up; we still
+    don't raise so a single transient failure can't roll back the DB
+    delete the caller has already flushed.
+    """
     try:
         client = _get_r2_client()
         await _run_boto(
             lambda: client.delete_object(Bucket=_get_bucket_name(), Key=object_key)
         )
-    except Exception as e:
-        logger.warning("Failed to delete object %s: %s", object_key, e)
+    except Exception:
+        logger.exception("Failed to delete object %s", object_key)
 
 
 def is_object_storage_available() -> bool:

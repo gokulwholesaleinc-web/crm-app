@@ -16,6 +16,7 @@ import {
 
 } from '@heroicons/react/24/outline';
 import { showError } from '../../utils/toast';
+import { extractApiErrorDetail } from '../../utils/errors';
 import { Button, Input, Select, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { CampaignForm } from './components/CampaignForm';
 import { VolumeStats } from './components/VolumeStats';
@@ -300,7 +301,7 @@ export function CampaignsPage() {
       await deleteCampaign.mutateAsync(deleteConfirm.campaign.id);
       setDeleteConfirm(INITIAL_DELETE_CONFIRM);
     } catch (error) {
-      showError('Failed to delete campaign');
+      showError(extractApiErrorDetail(error) ?? 'Failed to delete campaign');
     }
   };
 
@@ -325,7 +326,7 @@ export function CampaignsPage() {
       setEditingCampaign(null);
       setFormDirty(false);
     } catch (error) {
-      showError('Failed to save campaign');
+      showError(extractApiErrorDetail(error) ?? 'Failed to save campaign');
     }
   };
 
