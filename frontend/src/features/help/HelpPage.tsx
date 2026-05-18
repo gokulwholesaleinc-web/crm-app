@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { MagnifyingGlassIcon } from '@heroicons/react/24/outline';
@@ -8,6 +8,10 @@ import { GuideHelpPanel } from '../guides/GuideHelpPanel';
 function HelpPage() {
   const [query, setQuery] = useState('');
   const [activeId, setActiveId] = useState<string>('getting-started');
+  // Pause scrollspy briefly after a click-to-scroll so the smooth-scroll
+  // doesn't immediately flip the active section back to whatever crosses
+  // the trigger band first.
+  const suppressSpyUntilRef = useRef<number>(0);
 
   const filteredSections = useMemo(() => {
     if (!query.trim()) return SECTIONS;
@@ -35,8 +39,45 @@ function HelpPage() {
     return () => window.removeEventListener('hashchange', scrollToHash);
   }, []);
 
+  // Scrollspy: highlight the Contents item for whichever section is
+  // currently anchored near the top of the viewport. Uses
+  // IntersectionObserver with a tall negative bottom margin so the
+  // "active" zone is a thin band ~25% from the top — the same place a
+  // reader's eye lands.
+  useEffect(() => {
+    if (typeof IntersectionObserver === 'undefined') return;
+    const sectionIds = filteredSections.map((s) => s.id);
+    const targets = sectionIds
+      .map((id) => document.getElementById(`help-section-${id}`))
+      .filter((el): el is HTMLElement => el != null);
+    if (targets.length === 0) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (Date.now() < suppressSpyUntilRef.current) return;
+        // Pick the entry closest to the top of the viewport. `entries`
+        // only includes the ones that crossed the threshold this tick,
+        // so favor the smallest positive boundingClientRect.top among
+        // those currently intersecting.
+        const visible = entries
+          .filter((e) => e.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        if (visible.length === 0) return;
+        const id = visible[0]?.target.id.replace(/^help-section-/, '');
+        if (id) setActiveId(id);
+      },
+      // top 0%, bottom -70% → trigger band is the upper 30% of viewport.
+      { rootMargin: '0px 0px -70% 0px', threshold: 0 },
+    );
+    targets.forEach((el) => observer.observe(el));
+    return () => observer.disconnect();
+  }, [filteredSections]);
+
   const handleSelect = (id: string) => {
     setActiveId(id);
+    // Avoid the smooth-scroll triggering an intermediate section's
+    // intersection and flipping `activeId` away before settling.
+    suppressSpyUntilRef.current = Date.now() + 800;
     const el = document.getElementById(`help-section-${id}`);
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'start' });
