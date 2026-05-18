@@ -5,10 +5,8 @@ from datetime import date
 import pytest
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.core.data_scope import DataScope
 from src.core.entity_access import _resolve_entity, require_entity_access
-
 
 # ---------------------------------------------------------------------------
 # TestResolveEntity
@@ -129,6 +127,8 @@ class TestResolveEntity:
             ("lead", "leads"),
             ("opportunity", "opportunities"),
             ("proposal", "proposals"),
+            ("quote", "quotes"),
+            ("contract", "contracts"),
             ("payment", "payments"),
             ("activity", "activities"),
             ("expense", "expenses"),

@@ -6,20 +6,19 @@ a user can access based on their role:
 - sales_rep/viewer: see only own records + shared records
 """
 
-import logging
 import time
 from dataclasses import dataclass, field
 from typing import Annotated, Any
 
-import sqlalchemy.exc
 from fastapi import Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-logger = logging.getLogger(__name__)
-
 from src.auth.dependencies import get_current_active_user
 from src.auth.models import User
+from src.core.entity_types import canonical_plural
+from src.core.models import EntityShare
+from src.core.share_permissions import VALID_SHARE_PERMISSIONS
 from src.database import get_db
 from src.roles.models import RoleName
 
@@ -59,7 +58,7 @@ class DataScope:
 
     def get_shared_ids(self, entity_type: str) -> list[int]:
         """Get entity IDs shared with this user for a given entity type."""
-        return self.shared_entity_ids.get(entity_type, [])
+        return self.shared_entity_ids.get(canonical_plural(entity_type), [])
 
 
 def invalidate_scope_cache(user_id: int | None = None) -> None:
@@ -125,25 +124,13 @@ async def get_data_scope(
 
     # Sales rep and viewer: load shared entity IDs
     shared = {}
-    try:
-        from src.core.models import EntityShare
-        result = await db.execute(
-            select(EntityShare.entity_type, EntityShare.entity_id)
-            .where(EntityShare.shared_with_user_id == current_user.id)
-        )
-        for entity_type, entity_id in result.all():
-            shared.setdefault(entity_type, []).append(entity_id)
-    except (ImportError, sqlalchemy.exc.ProgrammingError, sqlalchemy.exc.OperationalError) as exc:
-        # EntityShare table may not exist yet during migrations — quiet fallback.
-        logger.debug("Could not load shared entities (table missing?): %s", exc)
-    except Exception:
-        # Any other failure (timeout, interface error, ...) means the user will
-        # silently lose visibility of records shared with them. Log loudly so
-        # operators can diagnose; still fall back to an empty share map.
-        logger.exception(
-            "Failed to load shared entity IDs for user_id=%s — shared records will be invisible",
-            current_user.id,
-        )
+    result = await db.execute(
+        select(EntityShare.entity_type, EntityShare.entity_id)
+        .where(EntityShare.shared_with_user_id == current_user.id)
+        .where(EntityShare.permission_level.in_(VALID_SHARE_PERMISSIONS))
+    )
+    for entity_type, entity_id in result.all():
+        shared.setdefault(canonical_plural(entity_type), []).append(entity_id)
 
     scope = DataScope(
         user_id=current_user.id,

@@ -11,16 +11,14 @@ Validates:
 
 import pytest
 from httpx import AsyncClient
-
-from src.auth.security import get_password_hash, create_access_token
 from src.auth.models import User
-from src.leads.models import Lead, LeadSource
+from src.auth.security import create_access_token, get_password_hash
 from src.contacts.models import Contact
-from src.companies.models import Company
-from src.opportunities.models import Opportunity, PipelineStage
-from src.roles.models import Role, UserRole
+from src.core.data_scope import invalidate_scope_cache
 from src.core.models import EntityShare
-
+from src.leads.models import Lead, LeadSource
+from src.opportunities.models import PipelineStage
+from src.roles.models import Role, UserRole
 
 # =========================================================================
 # Helper fixtures
@@ -146,6 +144,28 @@ def _token(user: User) -> dict:
     return {"Authorization": f"Bearer {token}"}
 
 
+async def _share_lead(
+    db_session,
+    lead: Lead,
+    shared_with: User,
+    shared_by: User,
+    permission_level: str = "view",
+    entity_type: str = "leads",
+) -> EntityShare:
+    share = EntityShare(
+        entity_type=entity_type,
+        entity_id=lead.id,
+        shared_with_user_id=shared_with.id,
+        shared_by_user_id=shared_by.id,
+        permission_level=permission_level,
+    )
+    db_session.add(share)
+    await db_session.commit()
+    await db_session.refresh(share)
+    invalidate_scope_cache(shared_with.id)
+    return share
+
+
 @pytest.fixture
 async def lead_source(db_session):
     source = LeadSource(name="TestSource", is_active=True)
@@ -160,6 +180,7 @@ async def pipeline_stage(db_session):
     stage = PipelineStage(
         name="Discovery", order=1, color="#6366f1",
         probability=20, is_won=False, is_lost=False, is_active=True,
+        pipeline_type="lead",
     )
     db_session.add(stage)
     await db_session.commit()
@@ -400,6 +421,30 @@ class TestSharingEndpoints:
         assert response.status_code == 409
 
     @pytest.mark.asyncio
+    async def test_legacy_singular_duplicate_share_returns_conflict(
+        self, client: AsyncClient, db_session, sales_rep_a, sales_rep_b, rep_a_lead,
+    ):
+        """Existing singular share rows still block duplicate canonical shares."""
+        await _share_lead(
+            db_session,
+            rep_a_lead,
+            sales_rep_b,
+            sales_rep_a,
+            entity_type="lead",
+        )
+
+        response = await client.post(
+            "/api/sharing",
+            json={
+                "entity_type": "leads",
+                "entity_id": rep_a_lead.id,
+                "shared_with_user_id": sales_rep_b.id,
+            },
+            headers=_token(sales_rep_a),
+        )
+        assert response.status_code == 409
+
+    @pytest.mark.asyncio
     async def test_list_entity_shares(
         self, client: AsyncClient, sales_rep_a, sales_rep_b, rep_a_lead,
     ):
@@ -422,6 +467,61 @@ class TestSharingEndpoints:
         data = response.json()
         assert len(data["items"]) == 1
         assert data["items"][0]["shared_with_user_id"] == sales_rep_b.id
+
+    @pytest.mark.asyncio
+    async def test_non_accessor_cannot_list_entity_shares(
+        self, client: AsyncClient, sales_rep_b, rep_a_lead,
+    ):
+        """A user who cannot access the record cannot enumerate its shares."""
+        response = await client.get(
+            f"/api/sharing/leads/{rep_a_lead.id}",
+            headers=_token(sales_rep_b),
+        )
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_shared_recipient_cannot_reshare(
+        self, client: AsyncClient, db_session, sales_rep_a, sales_rep_b,
+        manager_user, rep_a_lead,
+    ):
+        """A view-only recipient cannot grant the same record to someone else."""
+        await _share_lead(db_session, rep_a_lead, sales_rep_b, sales_rep_a)
+
+        response = await client.post(
+            "/api/sharing",
+            json={
+                "entity_type": "leads",
+                "entity_id": rep_a_lead.id,
+                "shared_with_user_id": manager_user.id,
+                "permission_level": "edit",
+            },
+            headers=_token(sales_rep_b),
+        )
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_singular_entity_type_is_stored_canonical(
+        self, client: AsyncClient, sales_rep_a, sales_rep_b, rep_a_lead,
+    ):
+        """Singular share requests are stored as canonical plural rows."""
+        response = await client.post(
+            "/api/sharing",
+            json={
+                "entity_type": "lead",
+                "entity_id": rep_a_lead.id,
+                "shared_with_user_id": sales_rep_b.id,
+                "permission_level": "view",
+            },
+            headers=_token(sales_rep_a),
+        )
+        assert response.status_code == 201
+        assert response.json()["entity_type"] == "leads"
+
+        response = await client.get(
+            f"/api/leads/{rep_a_lead.id}",
+            headers=_token(sales_rep_b),
+        )
+        assert response.status_code == 200
 
     @pytest.mark.asyncio
     async def test_revoke_share(
@@ -466,16 +566,7 @@ class TestSharedRecordAccess:
         sales_rep_a, sales_rep_b, rep_a_lead, rep_b_lead,
     ):
         """After sharing, rep B should see rep A's lead in their list."""
-        # Share rep A's lead with rep B
-        share = EntityShare(
-            entity_type="leads",
-            entity_id=rep_a_lead.id,
-            shared_with_user_id=sales_rep_b.id,
-            shared_by_user_id=sales_rep_a.id,
-            permission_level="view",
-        )
-        db_session.add(share)
-        await db_session.commit()
+        await _share_lead(db_session, rep_a_lead, sales_rep_b, sales_rep_a)
 
         response = await client.get("/api/leads", headers=_token(sales_rep_b))
         assert response.status_code == 200
@@ -490,15 +581,7 @@ class TestSharedRecordAccess:
         sales_rep_a, sales_rep_b, rep_a_lead,
     ):
         """After sharing, rep B should be able to get rep A's lead by ID."""
-        share = EntityShare(
-            entity_type="leads",
-            entity_id=rep_a_lead.id,
-            shared_with_user_id=sales_rep_b.id,
-            shared_by_user_id=sales_rep_a.id,
-            permission_level="view",
-        )
-        db_session.add(share)
-        await db_session.commit()
+        await _share_lead(db_session, rep_a_lead, sales_rep_b, sales_rep_a)
 
         response = await client.get(
             f"/api/leads/{rep_a_lead.id}", headers=_token(sales_rep_b),
@@ -507,21 +590,106 @@ class TestSharedRecordAccess:
         assert response.json()["email"] == "alice@test.com"
 
     @pytest.mark.asyncio
+    async def test_view_share_cannot_move_lead(
+        self, client: AsyncClient, db_session, sales_rep_a, sales_rep_b,
+        rep_a_lead, pipeline_stage,
+    ):
+        """A view share grants read access, not kanban mutation access."""
+        await _share_lead(db_session, rep_a_lead, sales_rep_b, sales_rep_a)
+
+        response = await client.post(
+            f"/api/leads/{rep_a_lead.id}/move",
+            json={"new_stage_id": pipeline_stage.id},
+            headers=_token(sales_rep_b),
+        )
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_edit_share_can_move_lead(
+        self, client: AsyncClient, db_session, sales_rep_a, sales_rep_b,
+        rep_a_lead, pipeline_stage,
+    ):
+        """An edit share can mutate the shared lead."""
+        await _share_lead(
+            db_session,
+            rep_a_lead,
+            sales_rep_b,
+            sales_rep_a,
+            permission_level="edit",
+        )
+
+        response = await client.post(
+            f"/api/leads/{rep_a_lead.id}/move",
+            json={"new_stage_id": pipeline_stage.id},
+            headers=_token(sales_rep_b),
+        )
+        assert response.status_code == 200
+        assert response.json()["pipeline_stage_id"] == pipeline_stage.id
+
+    @pytest.mark.asyncio
+    async def test_legacy_singular_edit_share_can_move_lead(
+        self, client: AsyncClient, db_session, sales_rep_a, sales_rep_b,
+        rep_a_lead, pipeline_stage,
+    ):
+        """Legacy singular share rows still honor edit permissions."""
+        await _share_lead(
+            db_session,
+            rep_a_lead,
+            sales_rep_b,
+            sales_rep_a,
+            permission_level="edit",
+            entity_type="lead",
+        )
+
+        response = await client.post(
+            f"/api/leads/{rep_a_lead.id}/move",
+            json={"new_stage_id": pipeline_stage.id},
+            headers=_token(sales_rep_b),
+        )
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_view_share_cannot_convert_lead(
+        self, client: AsyncClient, db_session, sales_rep_a, sales_rep_b,
+        rep_a_lead,
+    ):
+        """A view share cannot convert another user's lead."""
+        await _share_lead(db_session, rep_a_lead, sales_rep_b, sales_rep_a)
+
+        response = await client.post(
+            f"/api/leads/{rep_a_lead.id}/convert/contact",
+            json={"create_company": False},
+            headers=_token(sales_rep_b),
+        )
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_shared_lead_appears_in_kanban(
+        self, client: AsyncClient, db_session, sales_rep_a, sales_rep_b,
+        rep_a_lead, pipeline_stage,
+    ):
+        """Shared leads appear on the recipient's kanban board."""
+        rep_a_lead.pipeline_stage_id = pipeline_stage.id
+        await db_session.commit()
+        await db_session.refresh(rep_a_lead)
+        await _share_lead(db_session, rep_a_lead, sales_rep_b, sales_rep_a)
+
+        response = await client.get("/api/leads/kanban", headers=_token(sales_rep_b))
+        assert response.status_code == 200
+        stage_leads = [
+            lead
+            for stage in response.json()["stages"]
+            for lead in stage["leads"]
+        ]
+        assert rep_a_lead.id in {lead["id"] for lead in stage_leads}
+
+    @pytest.mark.asyncio
     async def test_revoked_share_removes_access(
         self, client: AsyncClient, db_session,
         sales_rep_a, sales_rep_b, rep_a_lead,
     ):
         """After revoking share, rep B should no longer see rep A's lead."""
-        share = EntityShare(
-            entity_type="leads",
-            entity_id=rep_a_lead.id,
-            shared_with_user_id=sales_rep_b.id,
-            shared_by_user_id=sales_rep_a.id,
-            permission_level="view",
-        )
-        db_session.add(share)
-        await db_session.commit()
-        await db_session.refresh(share)
+        share = await _share_lead(db_session, rep_a_lead, sales_rep_b, sales_rep_a)
 
         # Verify access
         response = await client.get(
@@ -533,12 +701,27 @@ class TestSharedRecordAccess:
         await db_session.delete(share)
         await db_session.commit()
 
-        # Invalidate scope cache so the revocation takes effect immediately
-        from src.core.data_scope import invalidate_scope_cache
         invalidate_scope_cache(sales_rep_b.id)
 
         # Access should be denied
         response = await client.get(
             f"/api/leads/{rep_a_lead.id}", headers=_token(sales_rep_b),
+        )
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_sales_rep_cannot_create_lead_for_peer(
+        self, client: AsyncClient, sales_rep_a, sales_rep_b,
+    ):
+        """Sales reps cannot create leads directly assigned to teammates."""
+        response = await client.post(
+            "/api/leads",
+            json={
+                "first_name": "Peer",
+                "last_name": "Lead",
+                "email": "peer.lead@test.com",
+                "owner_id": sales_rep_b.id,
+            },
+            headers=_token(sales_rep_a),
         )
         assert response.status_code == 403

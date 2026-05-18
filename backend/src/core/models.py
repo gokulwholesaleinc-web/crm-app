@@ -1,7 +1,15 @@
 """Core models used across the CRM application."""
 
 
-from sqlalchemy import ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    CheckConstraint,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.core.mixins.auditable import TimestampMixin
@@ -94,6 +102,10 @@ class EntityShare(Base, TimestampMixin):
     )  # "view", "edit", or "assignee" (assignee == owner-equivalent for visibility + edit)
 
     __table_args__ = (
+        CheckConstraint(
+            "permission_level IN ('view', 'edit', 'assignee')",
+            name="ck_entity_shares_permission_level",
+        ),
         Index("ix_entity_shares_entity", "entity_type", "entity_id"),
         Index("ix_entity_shares_shared_with", "shared_with_user_id"),
         UniqueConstraint(
