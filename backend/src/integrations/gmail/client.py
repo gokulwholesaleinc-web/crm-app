@@ -22,6 +22,10 @@ class GmailAuthError(Exception):
     """Raised when the Gmail API returns 401 — caller should mark connection failed."""
 
 
+class GmailMessageNotFound(Exception):
+    """Raised when a Gmail message disappears before it can be fetched."""
+
+
 class GmailClient:
     def __init__(
         self,
@@ -157,7 +161,15 @@ class GmailClient:
 
     async def get_message(self, message_id: str) -> dict:
         """Fetch a full message and return a normalised dict."""
-        data = await self._get(f"users/me/messages/{message_id}", format="full")
+        try:
+            data = await self._get(f"users/me/messages/{message_id}", format="full")
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 404:
+                raise GmailMessageNotFound(
+                    f"Gmail message {message_id} is no longer available"
+                ) from exc
+            raise
+
         parsed = _parse_message(data)
 
         # Hydrate any inline image parts that Gmail returned without inline

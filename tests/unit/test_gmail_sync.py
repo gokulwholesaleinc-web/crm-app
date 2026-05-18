@@ -236,6 +236,51 @@ class TestSyncInbound:
         assert rows[0].message_id == "<abc123@gmail.example.com>"
 
     @pytest.mark.asyncio
+    async def test_missing_history_message_is_skipped(self, connection, db):
+        """Deleted Gmail messages from history should advance the cursor without error state."""
+        state = GmailSyncState(
+            user_id=connection.user_id,
+            last_history_id="100",
+            failure_count=0,
+        )
+        db.add(state)
+        await db.commit()
+
+        history = {
+            "history": [
+                {"id": "101", "messagesAdded": [{"message": {"id": "gone123"}}]}
+            ]
+        }
+
+        routes = {
+            "users/me/history": history,
+        }
+        http = _make_http_client(routes)
+
+        with patch("src.integrations.gmail.client.httpx.AsyncClient", return_value=http):
+            from src.integrations.gmail.client import GmailClient as _GC
+
+            orig_init = _GC.__init__
+
+            def patched_init(self, conn, db_, http=None):
+                orig_init(self, conn, db_, http=http)
+
+            with patch.object(_GC, "__init__", patched_init):
+                await GmailSyncWorker.sync_account(connection, db)
+
+        state_row = (await db.execute(
+            select(GmailSyncState).where(GmailSyncState.user_id == connection.user_id)
+        )).scalar_one()
+        assert state_row.last_history_id == "101"
+        assert state_row.failure_count == 0
+        assert state_row.last_error is None
+
+        eq_rows = (await db.execute(select(EmailQueue))).scalars().all()
+        ib_rows = (await db.execute(select(InboundEmail))).scalars().all()
+        assert eq_rows == []
+        assert ib_rows == []
+
+    @pytest.mark.asyncio
     async def test_inbound_dedupes_on_second_run(self, connection, db, test_user):
         """Same message seen on two syncs should not create duplicate InboundEmail rows."""
         state = GmailSyncState(

@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.integrations.gmail.client import (
     GmailAuthError,
     GmailClient,
+    GmailMessageNotFound,
     _first_address,
     _hydrate_inline_attachments,
     _parse_address_list,
@@ -230,6 +231,14 @@ def _make_gmail_message(
 
 
 class TestGetMessage:
+    @pytest.mark.asyncio
+    async def test_missing_message_raises_typed_not_found(self):
+        """Gmail can return stale IDs from history/list when a message was deleted."""
+        client, _ = _make_client(_make_conn(), ({"error": "not found"}, 404))
+
+        with pytest.raises(GmailMessageNotFound):
+            await client.get_message("gone")
+
     @pytest.mark.asyncio
     async def test_extracts_rfc_headers(self):
         """get_message should extract subject, from, to, message_id, in_reply_to."""
