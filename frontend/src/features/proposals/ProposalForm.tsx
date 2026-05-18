@@ -11,6 +11,15 @@ import { useUnsavedChangesWarning } from '../../hooks/useUnsavedChangesWarning';
 import { PendingMasterContractField } from './PendingMasterContractField';
 import type { ProposalCreate } from '../../types';
 
+/** Progress reported by the parent while signing PDFs upload after a
+ *  successful create. Lets the submit button announce which file is
+ *  currently uploading instead of going dark mid-loop. */
+export interface SigningUploadStatus {
+  current: number;
+  total: number;
+  fileName: string;
+}
+
 interface ProposalFormProps {
   /** Called with form data plus pending signing PDFs (create flow only).
    *  The parent uploads them after the proposal id exists; signature boxes
@@ -18,6 +27,10 @@ interface ProposalFormProps {
   onSubmit: (data: ProposalCreate, pendingSigningDocs?: File[]) => void;
   onCancel: () => void;
   isLoading?: boolean;
+  /** Non-null while the parent is uploading the stashed signing PDFs.
+   *  Drives an in-progress label so the user can see N/M progress instead
+   *  of staring at a frozen modal between create-row and navigate. */
+  signingUploadStatus?: SigningUploadStatus | null;
   initialData?: Partial<ProposalCreate>;
   /** Form mode discriminator. Edit mode no longer carries the
    *  master-contract widget — that surface lives on the detail page
@@ -29,6 +42,7 @@ export function ProposalForm({
   onSubmit,
   onCancel,
   isLoading,
+  signingUploadStatus = null,
   initialData,
   proposalId,
 }: ProposalFormProps) {
@@ -324,6 +338,7 @@ export function ProposalForm({
         {isCreating && (
           <PendingMasterContractField
             value={pendingSigningDocs}
+            disabled={isLoading || signingUploadStatus != null}
             onChange={(files) => {
               setPendingSigningDocs(files);
               setTouched(true);
@@ -359,12 +374,34 @@ export function ProposalForm({
       </div>
 
       {/* Actions */}
-      <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-        <Button type="button" variant="secondary" onClick={onCancel}>
+      <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+        {signingUploadStatus && (
+          <p
+            aria-live="polite"
+            className="text-xs text-gray-600 dark:text-gray-300 sm:mr-auto"
+          >
+            Uploading signing document {signingUploadStatus.current} of{' '}
+            {signingUploadStatus.total}: <span className="font-medium">{signingUploadStatus.fileName}</span>
+          </p>
+        )}
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={onCancel}
+          disabled={signingUploadStatus != null}
+        >
           Cancel
         </Button>
-        <Button type="submit" disabled={!formData.title.trim()} isLoading={isLoading}>
-          {isEditing ? 'Save' : 'Create Proposal'}
+        <Button
+          type="submit"
+          disabled={!formData.title.trim() || signingUploadStatus != null}
+          isLoading={isLoading || signingUploadStatus != null}
+        >
+          {signingUploadStatus
+            ? `Uploading ${signingUploadStatus.current}/${signingUploadStatus.total}…`
+            : isEditing
+              ? 'Save'
+              : 'Create Proposal'}
         </Button>
       </div>
       <MissingRelationDialog
