@@ -13,47 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.constants import HTTPStatus
 from src.core.data_scope import DataScope, check_record_access_or_shared
-
-# Canonical singular → plural map. Must match the entity_type keys used by
-# EntityShare rows and DataScope.shared_entity_ids (see core/constants.py
-# ENTITY_TYPE_COMPANIES="companies", etc). A naive `normalized + "s"`
-# produces "companys"/"opportunitys"/"activitys", which silently drops
-# shared access for those entity types.
-_ENTITY_PLURALS = {
-    "contact": "contacts",
-    "company": "companies",
-    "lead": "leads",
-    "opportunity": "opportunities",
-    "proposal": "proposals",
-    "payment": "payments",
-    "activity": "activities",
-    "expense": "expenses",
-    "campaign": "campaigns",
-}
-
-# Reverse map: plural -> singular. Used to canonicalise inputs like
-# "opportunities" / "companies" — naive rstrip("s") would mangle these into
-# "opportunitie" / "companie" and silently fall through every if-branch.
-_ENTITY_SINGULARS = {plural: singular for singular, plural in _ENTITY_PLURALS.items()}
-
-
-def canonical_singular(entity_type: str) -> str:
-    """Return the canonical singular form of an entity type input.
-
-    Accepts either singular ("contact") or plural ("contacts") forms.
-    Unknown inputs are returned lowercased unchanged.
-    """
-    lower = entity_type.lower()
-    if lower in _ENTITY_PLURALS:
-        return lower
-    if lower in _ENTITY_SINGULARS:
-        return _ENTITY_SINGULARS[lower]
-    return lower
-
-
-# Backwards-compatible alias for the old private name. Internal callers in
-# this module continue to import it; remove once those are migrated.
-_canonical_singular = canonical_singular
+from src.core.entity_types import canonical_plural, canonical_singular
 
 
 async def _resolve_entity(db: AsyncSession, entity_type: str, entity_id: int):
@@ -62,8 +22,8 @@ async def _resolve_entity(db: AsyncSession, entity_type: str, entity_id: int):
     Supports both singular and plural forms of entity_type so callers can
     pass either "contact" or "contacts".
     """
-    normalized = _canonical_singular(entity_type)
-    plural = _ENTITY_PLURALS.get(normalized, normalized)
+    normalized = canonical_singular(entity_type)
+    plural = canonical_plural(normalized)
 
     # Lazy imports to avoid circular dependencies.
     if normalized == "contact":
@@ -81,6 +41,12 @@ async def _resolve_entity(db: AsyncSession, entity_type: str, entity_id: int):
     elif normalized == "proposal":
         from src.proposals.models import Proposal
         model = Proposal
+    elif normalized == "quote":
+        from src.quotes.models import Quote
+        model = Quote
+    elif normalized == "contract":
+        from src.contracts.models import Contract
+        model = Contract
     elif normalized == "payment":
         from src.payments.models import Payment
         model = Payment

@@ -2,18 +2,15 @@
 
 import time
 
-import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.core.data_scope import (
+    _SCOPE_CACHE_TTL,
     DataScope,
     _scope_cache,
-    _SCOPE_CACHE_TTL,
     get_data_scope,
     invalidate_scope_cache,
 )
 from src.core.models import EntityShare
-
 
 # ---------------------------------------------------------------------------
 # TestDataScope — dataclass behaviour
@@ -193,6 +190,23 @@ class TestSharedEntities:
 
         scope = await get_data_scope(_sales_rep_user, db_session)
         assert 77 in scope.get_shared_ids("contacts")
+
+    async def test_singular_share_rows_are_canonicalized(
+        self, db_session: AsyncSession, seed_roles, _sales_rep_user
+    ):
+        """Legacy singular EntityShare rows still surface under canonical keys."""
+        share = EntityShare(
+            entity_type="lead",
+            entity_id=88,
+            shared_with_user_id=_sales_rep_user.id,
+            shared_by_user_id=_sales_rep_user.id,
+        )
+        db_session.add(share)
+        await db_session.commit()
+
+        scope = await get_data_scope(_sales_rep_user, db_session)
+        assert 88 in scope.get_shared_ids("leads")
+        assert 88 in scope.get_shared_ids("lead")
 
     async def test_sales_rep_with_no_shares_has_empty_dict(
         self, db_session: AsyncSession, seed_roles, _sales_rep_user

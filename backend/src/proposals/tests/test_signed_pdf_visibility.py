@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 
 import pytest
 import pytest_asyncio
+from botocore.exceptions import ClientError
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
@@ -319,3 +320,164 @@ class TestRestampEndpoint:
             headers=_auth_headers(user),
         )
         assert resp.status_code == 400
+
+
+class TestSignedPdfDownload:
+    """``GET /api/proposals/{id}/signed-pdf`` failure mapping.
+
+    Mirrors ``download_master_contract``'s R2 error contract:
+    * 404 when ``signed_pdf_path`` is null or the R2 object is gone.
+    * 503 on transient R2 / unexpected failures.
+    * 200 + ``application/pdf`` body on the happy path.
+
+    The endpoint imports ``download_object_bytes`` inside the function
+    body, so patching the module attribute on
+    ``src.attachments.object_storage`` is what actually takes effect.
+    """
+
+    async def test_returns_404_when_signed_pdf_path_null(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
+        user = await _make_user(db_session)
+        proposal = await _make_proposal(db_session, user)
+        assert proposal.signed_pdf_path is None
+
+        resp = await client.get(
+            f"/api/proposals/{proposal.id}/signed-pdf",
+            headers=_auth_headers(user),
+        )
+        assert resp.status_code == 404
+        assert "No signed PDF on file" in resp.json().get("detail", "")
+
+    async def test_returns_pdf_bytes_on_happy_path(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        user = await _make_user(db_session)
+        proposal = await _make_proposal(db_session, user)
+        proposal.signed_pdf_path = "proposals/9/signed.pdf"
+        await db_session.commit()
+
+        expected = b"%PDF-1.7\n...signed bytes..."
+
+        async def fake_download(key: str) -> bytes:
+            assert key == "proposals/9/signed.pdf"
+            return expected
+
+        monkeypatch.setattr(
+            "src.attachments.object_storage.download_object_bytes",
+            fake_download,
+        )
+
+        resp = await client.get(
+            f"/api/proposals/{proposal.id}/signed-pdf",
+            headers=_auth_headers(user),
+        )
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == "application/pdf"
+        assert resp.content == expected
+
+    @pytest.mark.parametrize("r2_code", ["NoSuchKey", "404", "NotFound"])
+    async def test_returns_404_when_r2_object_missing(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        monkeypatch: pytest.MonkeyPatch,
+        r2_code: str,
+    ):
+        user = await _make_user(db_session)
+        proposal = await _make_proposal(db_session, user)
+        proposal.signed_pdf_path = "proposals/9/missing.pdf"
+        await db_session.commit()
+
+        async def fake_download(key: str) -> bytes:
+            raise ClientError(
+                {"Error": {"Code": r2_code, "Message": "gone"}},
+                "GetObject",
+            )
+
+        monkeypatch.setattr(
+            "src.attachments.object_storage.download_object_bytes",
+            fake_download,
+        )
+
+        resp = await client.get(
+            f"/api/proposals/{proposal.id}/signed-pdf",
+            headers=_auth_headers(user),
+        )
+        assert resp.status_code == 404
+        assert "re-stamp" in resp.json().get("detail", "").lower()
+
+    async def test_returns_503_on_other_client_error(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        user = await _make_user(db_session)
+        proposal = await _make_proposal(db_session, user)
+        proposal.signed_pdf_path = "proposals/9/signed.pdf"
+        await db_session.commit()
+
+        async def fake_download(key: str) -> bytes:
+            raise ClientError(
+                {"Error": {"Code": "InternalError", "Message": "boom"}},
+                "GetObject",
+            )
+
+        monkeypatch.setattr(
+            "src.attachments.object_storage.download_object_bytes",
+            fake_download,
+        )
+
+        resp = await client.get(
+            f"/api/proposals/{proposal.id}/signed-pdf",
+            headers=_auth_headers(user),
+        )
+        assert resp.status_code == 503
+
+    async def test_returns_503_on_unexpected_exception(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        user = await _make_user(db_session)
+        proposal = await _make_proposal(db_session, user)
+        proposal.signed_pdf_path = "proposals/9/signed.pdf"
+        await db_session.commit()
+
+        async def fake_download(key: str) -> bytes:
+            raise RuntimeError("network kaput")
+
+        monkeypatch.setattr(
+            "src.attachments.object_storage.download_object_bytes",
+            fake_download,
+        )
+
+        resp = await client.get(
+            f"/api/proposals/{proposal.id}/signed-pdf",
+            headers=_auth_headers(user),
+        )
+        assert resp.status_code == 503
+
+    async def test_endpoint_403_for_non_owner(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
+        owner = await _make_user(
+            db_session, is_superuser=False, role="sales_rep"
+        )
+        intruder = await _make_user(
+            db_session, is_superuser=False, role="sales_rep"
+        )
+        proposal = await _make_proposal(db_session, owner)
+        proposal.signed_pdf_path = "proposals/9/signed.pdf"
+        await db_session.commit()
+
+        resp = await client.get(
+            f"/api/proposals/{proposal.id}/signed-pdf",
+            headers=_auth_headers(intruder),
+        )
+        assert resp.status_code == 403

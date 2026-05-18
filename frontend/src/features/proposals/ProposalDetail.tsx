@@ -27,12 +27,9 @@ import {
   useSendProposal,
   useAcceptProposal,
   useRejectProposal,
-  useResendProposalPaymentLink,
-  useRetryProposalBilling,
   useRestampProposalSignedPdf,
   useUpdateProposalSignatureCoords,
 } from '../../hooks/useProposals';
-import { ProposalBillingCard } from './ProposalBillingCard';
 import { ProposalAuditCard } from './ProposalAuditCard';
 // Lazy-loaded because pdf.js (~300 KB gzipped) only needs to land in
 // the bundle when an admin actually opens the picker.
@@ -54,6 +51,7 @@ import {
   deleteProposalAttachment,
   openProposalAttachmentPreview,
   downloadProposalMasterContract,
+  downloadProposalSignedPdf,
   uploadProposalMasterContract,
   PROPOSAL_MASTER_CONTRACT_MAX_BYTES,
 } from '../../api/proposals';
@@ -90,8 +88,6 @@ function ProposalDetailPage() {
   const sendProposalMutation = useSendProposal();
   const acceptProposalMutation = useAcceptProposal();
   const rejectProposalMutation = useRejectProposal();
-  const resendPaymentLinkMutation = useResendProposalPaymentLink();
-  const retryBillingMutation = useRetryProposalBilling();
   const restampSignedPdfMutation = useRestampProposalSignedPdf();
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -179,36 +175,6 @@ function ProposalDetailPage() {
       showSuccess('Proposal rejected');
     } catch {
       showError('Failed to reject proposal');
-    }
-  };
-
-  const handleResendPaymentLink = async () => {
-    try {
-      const result = await resendPaymentLinkMutation.mutateAsync(proposal.id);
-      if (result.action === 'already_paid_reconciled') {
-        showSuccess('Already paid — status reconciled');
-      } else if (result.action === 'regenerated') {
-        showSuccess('Checkout session expired — new link generated and emailed');
-      } else {
-        showSuccess('Payment link re-emailed to the customer');
-      }
-    } catch (err) {
-      showError(extractApiErrorDetail(err) ?? 'Failed to resend payment link');
-    }
-  };
-
-  const handleRetryBilling = async () => {
-    try {
-      const updated = await retryBillingMutation.mutateAsync(proposal.id);
-      if (updated.stripe_payment_url) {
-        showSuccess('Billing spawned — payment link emailed to the customer');
-      } else if (updated.billing_error) {
-        showError(`Billing still failing: ${updated.billing_error}`);
-      } else {
-        showSuccess('Billing retried');
-      }
-    } catch (err) {
-      showError(extractApiErrorDetail(err) ?? 'Failed to retry billing');
     }
   };
 
@@ -308,18 +274,6 @@ function ProposalDetailPage() {
   const sendLabel = isDraft ? 'Send' : 'Resend';
   const canAcceptReject = proposal.status === 'sent' || proposal.status === 'viewed';
   const canEdit = ['draft', 'sent', 'viewed'].includes(proposal.status ?? '');
-  const canResendPaymentLink =
-    proposal.status === 'awaiting_payment' &&
-    !proposal.paid_at &&
-    Boolean(proposal.stripe_invoice_id || proposal.stripe_checkout_session_id);
-  // Retry billing covers the case where accept landed (signature recorded)
-  // but the Stripe spawn failed. The backend refuses retry once any
-  // Stripe artifact is present, so the button only matters when none are.
-  const canRetryBilling =
-    ['accepted', 'awaiting_payment'].includes(proposal.status ?? '') &&
-    !proposal.stripe_invoice_id &&
-    !proposal.stripe_checkout_session_id &&
-    !proposal.stripe_payment_url;
 
   // Build the timeline + checklist from the proposal record. Checklist
   // hides itself once everything required passes, so it only nags when
@@ -410,25 +364,6 @@ function ProposalDetailPage() {
               {sendProposalMutation.isPending ? 'Sending...' : sendLabel}
             </Button>
           )}
-          {canResendPaymentLink && (
-            <Button
-              onClick={handleResendPaymentLink}
-              leftIcon={<PaperAirplaneIcon className="h-4 w-4" />}
-              disabled={resendPaymentLinkMutation.isPending}
-            >
-              {resendPaymentLinkMutation.isPending ? 'Resending...' : 'Resend Payment Link'}
-            </Button>
-          )}
-          {canRetryBilling && (
-            <Button
-              onClick={handleRetryBilling}
-              leftIcon={<ArrowPathIcon className="h-4 w-4" />}
-              disabled={retryBillingMutation.isPending}
-            >
-              {retryBillingMutation.isPending ? 'Retrying...' : 'Retry Billing'}
-            </Button>
-          )}
-
           {/* SECONDARY — common follow-ups, always visible when applicable. */}
           {canAcceptReject && (
             <>
@@ -534,7 +469,7 @@ function ProposalDetailPage() {
         </div>
       )}
 
-      {/* Status timeline — tells the Draft → Sent → Viewed → Signed → Paid
+      {/* Status timeline — tells the Draft → Sent → Viewed → Signed
           story at a glance. Replaces the implicit "stack two status pills
           and bury dates in the sidebar" pattern. */}
       <StatusTimeline steps={timelineSteps} />
@@ -693,12 +628,6 @@ function ProposalDetailPage() {
             </dl>
           </div>
 
-          {/* Billing — shows the structured pricing Giancarlo picked on
-              create + any Stripe artifact that was spawned on e-sign
-              (invoice id / subscription id / pay URL) so the CRM side
-              mirrors what the client sees on the public page. */}
-          <ProposalBillingCard proposal={proposal} />
-
           {/* E-sign + view audit trail. Signer name/email/IP/UA +
               timestamp on accept, plus the full public-link view log
               for forensics and billing disputes. */}
@@ -712,6 +641,7 @@ function ProposalDetailPage() {
           <MasterContractCard
             proposalId={proposal.id}
             currentPath={proposal.master_contract_pdf_path ?? null}
+            signedPdfPath={proposal.signed_pdf_path ?? null}
             isLocked={Boolean(proposal.signed_at)}
             initialError={masterUploadFailedMessage}
             onUploaded={() => {
@@ -1058,6 +988,11 @@ function ProposalAttachmentsCard({ proposalId, isLocked }: ProposalAttachmentsCa
 interface MasterContractCardProps {
   proposalId: number;
   currentPath: string | null;
+  /** When set, the proposal has been signed and a stamped copy exists
+   *  on R2 — View PDF switches to that copy so the operator sees the
+   *  audit-bundle output (signature overlay + audit page) rather than
+   *  the bare master. */
+  signedPdfPath: string | null;
   isLocked: boolean;
   /** Persistent error surface for the post-create retry path. When the
    *  two-step create flow fails on step 2, ProposalsPage navigates here
@@ -1080,6 +1015,7 @@ interface MasterContractCardProps {
 function MasterContractCard({
   proposalId,
   currentPath,
+  signedPdfPath,
   isLocked,
   initialError = null,
   onUploaded,
@@ -1100,19 +1036,24 @@ function MasterContractCard({
   const [viewing, setViewing] = useState(false);
   const [error, setError] = useState<string | null>(initialError);
 
-  // Revoke the view-blob after the new tab has had time to load it;
-  // immediate revoke races the open and the viewer shows nothing.
+  // Defer blob revoke 60s after window.open — immediate revoke races the
+  // open and the new-tab viewer shows nothing. Clear on unmount so we
+  // don't leak object URLs.
   const revokeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => {
     if (revokeTimerRef.current) clearTimeout(revokeTimerRef.current);
   }, []);
 
+  const hasSignedPdf = Boolean(signedPdfPath);
+
   const handleView = async () => {
-    if (!currentPath) return;
+    if (!currentPath && !hasSignedPdf) return;
     setViewing(true);
     setError(null);
     try {
-      const blob = await downloadProposalMasterContract(proposalId);
+      const blob = hasSignedPdf
+        ? await downloadProposalSignedPdf(proposalId)
+        : await downloadProposalMasterContract(proposalId);
       const url = URL.createObjectURL(blob);
       // window.open returns null when a popup blocker fires — strict
       // blockers treat the post-fetch open as a stale user-gesture.
@@ -1121,7 +1062,7 @@ function MasterContractCard({
         URL.revokeObjectURL(url);
         if (!isMountedRef.current) return;
         setError(
-          'Popup blocked — allow popups for this site to view the master contract.',
+          'Popup blocked — allow popups for this site to view the PDF.',
         );
         return;
       }
@@ -1130,7 +1071,10 @@ function MasterContractCard({
     } catch (err) {
       if (!isMountedRef.current) return;
       setError(
-        extractApiErrorDetail(err) ?? 'Failed to load master contract.',
+        extractApiErrorDetail(err) ??
+          (hasSignedPdf
+            ? 'Failed to load signed PDF.'
+            : 'Failed to load master contract.'),
       );
     } finally {
       if (isMountedRef.current) {
@@ -1184,8 +1128,16 @@ function MasterContractCard({
           {currentPath}
         </p>
       )}
+      {/* When a master is on file but the signer hasn't signed yet, the
+          View button shows the bare master — surface that so the operator
+          knows what they're about to open. */}
+      {currentPath && !hasSignedPdf && (
+        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          Master PDF (unsigned)
+        </p>
+      )}
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        {currentPath && (
+        {(currentPath || hasSignedPdf) && (
           <Button
             type="button"
             variant="secondary"
@@ -1195,7 +1147,7 @@ function MasterContractCard({
             isLoading={viewing}
             leftIcon={<EyeIcon className="h-4 w-4" />}
           >
-            View PDF
+            {hasSignedPdf ? 'View signed PDF' : 'View PDF'}
           </Button>
         )}
         <Button

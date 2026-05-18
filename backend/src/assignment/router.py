@@ -13,7 +13,7 @@ from src.assignment.schemas import (
 from src.assignment.service import AssignmentService
 from src.core.constants import HTTPStatus
 from src.core.permissions import require_manager_or_above
-from src.core.router_utils import CurrentUser, DBSession, raise_not_found
+from src.core.router_utils import DBSession, raise_not_found
 
 router = APIRouter(prefix="/api/assignment-rules", tags=["assignment"])
 
@@ -36,7 +36,7 @@ async def create_rule(
 
 @router.get("", response_model=list[AssignmentRuleResponse])
 async def list_rules(
-    current_user: CurrentUser,
+    current_user: ManagerOrAbove,
     db: DBSession,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
@@ -51,7 +51,7 @@ async def list_rules(
 @router.get("/{rule_id}", response_model=AssignmentRuleResponse)
 async def get_rule(
     rule_id: int,
-    current_user: CurrentUser,
+    current_user: ManagerOrAbove,
     db: DBSession,
 ):
     """Get an assignment rule by ID."""
@@ -95,7 +95,7 @@ async def delete_rule(
 @router.get("/{rule_id}/stats", response_model=list[AssignmentStatsResponse])
 async def get_stats(
     rule_id: int,
-    current_user: CurrentUser,
+    current_user: ManagerOrAbove,
     db: DBSession,
 ):
     """Get assignment statistics for a rule's team members."""

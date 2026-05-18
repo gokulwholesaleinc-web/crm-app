@@ -86,34 +86,6 @@ export const rejectProposal = async (proposalId: number): Promise<Proposal> => {
   return response.data;
 };
 
-export interface ResendPaymentLinkResult {
-  action: 'resent' | 'regenerated' | 'already_paid_reconciled';
-  stripe_invoice_id?: string;
-  hosted_invoice_url?: string | null;
-  stripe_checkout_session_id?: string;
-  stripe_payment_url?: string | null;
-}
-
-export const resendProposalPaymentLink = async (
-  proposalId: number,
-): Promise<ResendPaymentLinkResult> => {
-  const response = await apiClient.post<ResendPaymentLinkResult>(
-    `${PROPOSALS_BASE}/${proposalId}/resend-payment-link`,
-  );
-  return response.data;
-};
-
-/**
- * Re-run Stripe billing spawn for a proposal whose initial spawn failed.
- * Refuses if the proposal already has any Stripe artifact.
- */
-export const retryProposalBilling = async (proposalId: number): Promise<Proposal> => {
-  const response = await apiClient.post<Proposal>(
-    `${PROPOSALS_BASE}/${proposalId}/retry-billing`,
-  );
-  return response.data;
-};
-
 export const restampProposalSignedPdf = async (proposalId: number): Promise<Proposal> => {
   const response = await apiClient.post<Proposal>(
     `${PROPOSALS_BASE}/${proposalId}/restamp`,
@@ -354,6 +326,22 @@ export const downloadProposalMasterContract = async (
 };
 
 /**
+ * Fetch the stamped signed-copy PDF bytes (master contract + signature
+ * overlay + audit page). Returns 404 if the proposal isn't signed yet
+ * or the accept-time stamper fail-softed without producing a copy —
+ * the caller should surface that to the user so they can re-stamp.
+ */
+export const downloadProposalSignedPdf = async (
+  proposalId: number,
+): Promise<Blob> => {
+  const response = await apiClient.get(
+    `${PROPOSALS_BASE}/${proposalId}/signed-pdf`,
+    { responseType: 'blob' },
+  );
+  return response.data;
+};
+
+/**
  * Upload (or replace) a master service agreement PDF on a proposal.
  *
  * Used by the create flow to land a stashed file after
@@ -389,8 +377,6 @@ export const proposalsApi = {
   sendWithEmail: sendProposalWithEmail,
   accept: acceptProposal,
   reject: rejectProposal,
-  resendPaymentLink: resendProposalPaymentLink,
-  retryBilling: retryProposalBilling,
   restampSignedPdf: restampProposalSignedPdf,
   listTemplates: listProposalTemplates,
   createTemplate: createProposalTemplate,
@@ -405,6 +391,7 @@ export const proposalsApi = {
   publicAttachmentDownloadUrl: publicProposalAttachmentDownloadUrl,
   duplicate: duplicateProposal,
   downloadMasterContract: downloadProposalMasterContract,
+  downloadSignedPdf: downloadProposalSignedPdf,
   uploadMasterContract: uploadProposalMasterContract,
 };
 

@@ -6,11 +6,10 @@ import pytest
 import pytest_asyncio
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.auth.models import User
 from src.auth.security import create_access_token, get_password_hash
 from src.core.models import EntityShare
-
+from src.roles.models import RoleName, UserRole
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -199,6 +198,32 @@ class TestAdminSharesAuthz:
         response = await client.get(
             "/api/sharing/admin", headers=_headers(manager_user)
         )
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_admin_authz_uses_user_roles_source_of_truth(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        seed_roles: list,
+    ):
+        """An admin UserRole grants access even if users.role is stale."""
+        user = User(
+            email="sharing_user_role_admin@example.com",
+            hashed_password=get_password_hash("password123"),
+            full_name="UserRole Admin",
+            is_active=True,
+            is_superuser=False,
+            role="sales_rep",
+        )
+        db_session.add(user)
+        await db_session.flush()
+        admin_role = next(r for r in seed_roles if r.name == RoleName.ADMIN.value)
+        db_session.add(UserRole(user_id=user.id, role_id=admin_role.id))
+        await db_session.commit()
+        await db_session.refresh(user)
+
+        response = await client.get("/api/sharing/admin", headers=_headers(user))
         assert response.status_code == 200
 
 

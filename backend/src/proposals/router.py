@@ -32,7 +32,6 @@ from src.core.router_utils import (
     raise_bad_request,
     raise_not_found,
 )
-from src.email.service import assert_gmail_connected
 from src.events.service import PROPOSAL_ACCEPTED, PROPOSAL_REJECTED, PROPOSAL_SENT, emit
 from src.proposals.attachment_views import (
     ProposalAttachmentView,
@@ -873,6 +872,73 @@ async def download_master_contract(
     return Response(content=content, media_type="application/pdf")
 
 
+@router.get("/{proposal_id}/signed-pdf")
+@limiter.limit("30/minute")
+async def download_signed_pdf(
+    proposal_id: int,
+    request: Request,
+    current_user: CurrentUser,
+    db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
+):
+    """Stream the stamped signed-copy PDF bytes back to staff.
+
+    Returns 404 when no signed PDF is on file (proposal not yet signed,
+    or the accept-time stamper fail-softed without producing a copy —
+    in which case the operator should hit ``/restamp`` first). Mirrors
+    the master-contract endpoint's R2 failure mapping so a missing
+    object surfaces a clear 404 instead of a 503.
+    """
+    from botocore.exceptions import ClientError
+
+    from src.attachments.object_storage import download_object_bytes
+
+    service = ProposalService(db)
+    proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
+    check_record_access_or_shared(
+        proposal, current_user, data_scope.role_name,
+        shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_PROPOSALS),
+    )
+    if not proposal.signed_pdf_path:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND,
+            detail="No signed PDF on file",
+        )
+    try:
+        content = await download_object_bytes(proposal.signed_pdf_path)
+    except ClientError as exc:
+        response = getattr(exc, "response", None) or {}
+        err = response.get("Error", {}) if isinstance(response, dict) else {}
+        code = err.get("Code", "")
+        if code in ("NoSuchKey", "404", "NotFound"):
+            logger.warning(
+                "Signed PDF object missing for proposal %s (key=%r): %s",
+                proposal_id, proposal.signed_pdf_path, code,
+            )
+            raise HTTPException(
+                status_code=HTTPStatus.NOT_FOUND,
+                detail="Signed PDF file missing from storage — re-stamp to regenerate",
+            ) from exc
+        logger.exception(
+            "R2 ClientError fetching signed PDF for proposal %s (code=%s)",
+            proposal_id, code,
+        )
+        raise HTTPException(
+            status_code=HTTPStatus.SERVICE_UNAVAILABLE,
+            detail="File storage temporarily unavailable — try again later",
+        ) from exc
+    except Exception as exc:
+        logger.exception(
+            "Unexpected error fetching signed PDF for proposal %s",
+            proposal_id,
+        )
+        raise HTTPException(
+            status_code=HTTPStatus.SERVICE_UNAVAILABLE,
+            detail="File storage temporarily unavailable — try again later",
+        ) from exc
+    return Response(content=content, media_type="application/pdf")
+
+
 @router.get("/{proposal_id}", response_model=ProposalResponse)
 async def get_proposal(
     proposal_id: int,
@@ -960,27 +1026,6 @@ async def send_proposal(
     return ProposalResponse.model_validate(proposal)
 
 
-@router.post("/{proposal_id}/retry-billing", response_model=ProposalResponse)
-async def retry_proposal_billing(
-    proposal_id: int,
-    current_user: CurrentUser,
-    db: DBSession,
-):
-    """Re-run the Stripe spawn for a proposal whose billing previously failed.
-
-    Used after fixing a Stripe mis-configuration (missing key, wrong
-    permissions) on an already-accepted proposal. Refuses if a payment
-    URL is already present so we can't double-charge.
-    """
-    service = ProposalService(db)
-    proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
-    check_ownership(proposal, current_user, EntityNames.PROPOSAL)
-    with value_error_as_400():
-        await assert_gmail_connected(db, current_user.id)
-        proposal = await service.retry_billing(proposal)
-    return ProposalResponse.model_validate(proposal)
-
-
 @router.post("/{proposal_id}/restamp", response_model=ProposalResponse)
 async def restamp_proposal_signed_pdf(
     proposal_id: int,
@@ -1001,35 +1046,6 @@ async def restamp_proposal_signed_pdf(
     with value_error_as_400():
         proposal = await service.restamp_signed_pdf(proposal)
     return ProposalResponse.model_validate(proposal)
-
-
-# ``/{proposal_id}/refresh-from-quote`` endpoint removed 2026-05-14 —
-# quotes router unmounted; proposals are no longer hydrated from quotes.
-
-
-@router.post("/{proposal_id}/resend-payment-link")
-async def resend_proposal_payment_link(
-    proposal_id: int,
-    request: Request,
-    current_user: CurrentUser,
-    db: DBSession,
-):
-    """Re-emit the existing Stripe Invoice's payment link to the customer."""
-    service = ProposalService(db)
-    proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
-    check_ownership(proposal, current_user, EntityNames.PROPOSAL)
-    before = {"status": proposal.status, "stripe_invoice_id": proposal.stripe_invoice_id}
-    with value_error_as_400():
-        await assert_gmail_connected(db, current_user.id)
-        result = await service.resend_payment_link(proposal)
-    ip_address = get_client_ip(request)
-    await audit_entity_update(
-        db, "proposal", proposal.id, current_user.id,
-        before,
-        {"action": result["action"], "stripe_invoice_id": result.get("stripe_invoice_id")},
-        ip_address,
-    )
-    return result
 
 
 @router.get("/{proposal_id}/pdf")

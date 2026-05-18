@@ -38,7 +38,6 @@ from src.email.branded_templates import (
 from src.email.pdf_render import pdf_logo_allowed_hosts, render_html_to_pdf
 from src.email.service import EmailService, assert_gmail_connected
 from src.email.types import EmailAttachment
-from src.payments.service import PaymentService
 from src.proposals.models import Proposal, ProposalTemplate, ProposalView
 from src.proposals.pdf_stamper import StampInputs, stamp_master_with_signature
 from src.proposals.schemas import ProposalCreate, ProposalUpdate
@@ -91,46 +90,6 @@ PROPOSAL_SORTABLE_FIELDS: dict[str, Any] = {
     "view_count": Proposal.view_count,
     "created_at": Proposal.created_at,
 }
-
-
-def _resolve_billing(proposal: Proposal) -> dict | None:
-    """Flatten a proposal's billable terms into a dict the PaymentService can act on.
-
-    Returns ``None`` when no billable amount can be derived, which tells
-    ``_maybe_spawn_billing`` to skip Stripe entirely and leave the
-    proposal in plain ``accepted`` state.
-
-    Quote-fallback removed 2026-05-14 — quotes router unmounted.
-    Proposals must now carry their own ``amount`` + ``payment_type``.
-    """
-    if proposal.amount is None or Decimal(str(proposal.amount)) <= 0:
-        return None
-
-    amount = Decimal(str(proposal.amount))
-    currency = proposal.currency or "USD"
-    payment_type = proposal.payment_type or "one_time"
-    interval = proposal.recurring_interval
-    interval_count = proposal.recurring_interval_count
-
-    if payment_type == "subscription":
-        if not interval:
-            # Mis-configured subscription (no interval). Fall back to a
-            # one-time charge rather than silently emailing an endless
-            # retainer that the client didn't agree to.
-            payment_type = "one_time"
-            interval = None
-            interval_count = None
-        else:
-            interval_count = interval_count or 1
-
-    return {
-        "payment_type": payment_type,
-        "amount": amount,
-        "currency": currency,
-        "interval": interval,
-        "interval_count": interval_count,
-        "description": proposal.title,
-    }
 
 
 def _designated_email_for(proposal: Proposal) -> str:
@@ -533,17 +492,13 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
             prior_error = proposal.signed_pdf_error
             proposal.signed_pdf_path = signed_key
             proposal.signed_pdf_error = None
-            await self.db.flush()
-            # Don't refresh() here — a connection blip post-flush would
-            # raise SQLAlchemyError that get_db's narrow handler rolls
-            # back, losing the success write AND any prior error-clear.
-            # The row is already attached to the session; downstream
-            # readers see the updated columns without a server round-trip.
-            if prior_error:
-                logger.info(
-                    "Signed PDF re-stamp succeeded for proposal %s (cleared error: %r)",
-                    proposal.id, prior_error[:200],
-                )
+            # Commit happens in the ``else`` branch below so the success
+            # write lands before unrelated downstream work runs — a flush
+            # alone would sit in get_db's outer transaction, and any
+            # non-DB exception further down propagates past get_db's
+            # narrow (OSError | SQLAlchemyError) handler without
+            # triggering rollback, leaving the session closed with the
+            # success write uncommitted.
         except PdfReadError as exc:
             logger.exception(
                 "Master PDF unreadable for proposal %s", proposal.id,
@@ -551,7 +506,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
             proposal.signed_pdf_error = (
                 f"Master PDF is corrupt or unreadable: {str(exc)[:900]}"
             )
-            await self.db.flush()
+            await self._commit_stamp_capture(proposal.id)
         except ClientError as exc:
             logger.exception(
                 "R2 storage error stamping signed PDF for proposal %s",
@@ -564,14 +519,39 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
             proposal.signed_pdf_error = (
                 f"Object storage temporarily unavailable ({code}): {message}"[:1000]
             )
-            await self.db.flush()
+            await self._commit_stamp_capture(proposal.id)
         except Exception as exc:
             logger.exception(
                 "Failed to stamp/upload signed PDF for proposal %s",
                 proposal.id,
             )
             proposal.signed_pdf_error = str(exc)[:1000]
-            await self.db.flush()
+            await self._commit_stamp_capture(proposal.id)
+        else:
+            # Success path — commit the prior_error clear + signed_pdf_path
+            # write so the operator-visible state persists regardless of
+            # what happens downstream in the accept flow.
+            await self._commit_stamp_capture(proposal.id)
+            if prior_error:
+                logger.info(
+                    "Signed PDF re-stamp succeeded for proposal %s "
+                    "(cleared error: %r)",
+                    proposal.id, prior_error[:200],
+                )
+
+    async def _commit_stamp_capture(self, proposal_id: int) -> None:
+        """Persist a fail-soft stamp result (success or error-capture)
+        before unrelated downstream work runs. Wrapped so a commit
+        failure is logged but doesn't unwind the accept itself."""
+        try:
+            await self.db.commit()
+        except Exception:
+            logger.exception(
+                "Failed to commit stamp capture for proposal %s; the "
+                "operator-visible signed_pdf_path/signed_pdf_error may "
+                "not surface until the request transaction closes",
+                proposal_id,
+            )
 
     async def restamp_signed_pdf(self, proposal: Proposal) -> Proposal:
         """Re-run the fail-soft stamp path; guards prevent post-dating
@@ -601,353 +581,6 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
             signed_at=proposal.signed_at,
         )
         await self.db.refresh(proposal)
-        return proposal
-
-    async def _maybe_spawn_billing(self, proposal: Proposal) -> None:
-        """Create the Stripe Invoice or Checkout Session for an accepted
-        proposal, if pricing is resolvable and Stripe is configured.
-
-        Mutates the proposal row with the resulting Stripe ids + payment
-        url and moves status to 'awaiting_payment'. Stripe errors are
-        captured on ``proposal.billing_error`` (so the CRM admin can see
-        them and retry) instead of bubbling up and unwinding the
-        acceptance — the client signed, that has to stick.
-        """
-        billing = _resolve_billing(proposal)
-        if billing is None:
-            return
-
-        payments = PaymentService(self.db)
-        try:
-            if billing["payment_type"] == "one_time":
-                result = await payments.create_invoice_for_proposal(
-                    proposal_id=proposal.id,
-                    contact_id=proposal.contact_id,
-                    company_id=proposal.company_id,
-                    amount=billing["amount"],
-                    currency=billing["currency"],
-                    description=billing["description"],
-                    owner_id=proposal.owner_id,
-                )
-                proposal.stripe_invoice_id = result["stripe_invoice_id"]
-                proposal.stripe_payment_url = result["stripe_payment_url"]
-            else:
-                base = settings.FRONTEND_BASE_URL.rstrip("/")
-                if not base:
-                    proposal.billing_error = (
-                        "FRONTEND_BASE_URL is not configured; cannot build "
-                        "subscription checkout return URL"
-                    )
-                    logger.warning(
-                        "FRONTEND_BASE_URL is not set; skipping subscription "
-                        "checkout for proposal %s",
-                        proposal.id,
-                    )
-                    await self.db.flush()
-                    return
-                public_path = f"/proposals/public/{proposal.public_token}"
-                result = await payments.create_subscription_checkout_for_proposal(
-                    proposal_id=proposal.id,
-                    contact_id=proposal.contact_id,
-                    company_id=proposal.company_id,
-                    amount=billing["amount"],
-                    currency=billing["currency"],
-                    description=billing["description"],
-                    interval=billing["interval"],
-                    interval_count=billing["interval_count"],
-                    success_url=f"{base}{public_path}?paid=1",
-                    cancel_url=f"{base}{public_path}",
-                )
-                proposal.stripe_checkout_session_id = result["stripe_checkout_session_id"]
-                proposal.stripe_payment_url = result["stripe_payment_url"]
-        except ValueError as exc:
-            # Stripe disabled, customer-resolution failed, or an API
-            # error bubbled up. Record the error on the proposal so the
-            # CRM admin can see "billing setup failed" and retry; don't
-            # unwind the acceptance.
-            logger.warning(
-                "Billing spawn failed for proposal %s: %s", proposal.id, exc,
-            )
-            proposal.billing_error = str(exc)
-            await self.db.flush()
-            return
-
-        proposal.status = "awaiting_payment"
-        proposal.invoice_sent_at = datetime.now(UTC)
-        proposal.billing_error = None
-        await self.db.flush()
-
-    # Minimum gap between back-to-back resends of the same proposal's
-    # payment link. The row lock protects against simultaneous clicks
-    # from racing inside Stripe; this protects the customer's inbox
-    # from rapid sequential clicks (admin retries, double-submit on a
-    # mobile button, etc.).
-    RESEND_COOLDOWN_SECONDS = 60
-
-    async def resend_payment_link(self, proposal: Proposal) -> dict:
-        """Re-emit the proposal's payment link.
-
-        Two billing modes:
-        - Invoice flow: Stripe `Invoice.send_invoice` re-emails the same
-          invoice. Never creates a new one (open/draft are reusable).
-        - Checkout-session flow: open sessions are re-emailed as-is;
-          expired sessions are regenerated with a fresh idempotency key
-          and the new URL is emailed to the customer.
-
-        Acquires SELECT FOR UPDATE so concurrent clicks can't both spawn
-        a Stripe write. 60s cooldown via `invoice_sent_at` protects the
-        customer's inbox.
-        """
-        from src.payments.service import _get_stripe
-
-        # Lock the row for the duration of the transaction. Postgres
-        # honors this; SQLite (test) treats it as a no-op which is fine
-        # because tests are single-threaded.
-        locked = await self.db.execute(
-            select(Proposal).where(Proposal.id == proposal.id).with_for_update(),
-        )
-        proposal = locked.scalar_one()
-
-        if proposal.paid_at is not None:
-            raise ValueError("Proposal is already paid")
-        if proposal.status not in ("accepted", "awaiting_payment"):
-            raise ValueError(
-                f"Cannot resend payment link for proposal in '{proposal.status}' status",
-            )
-        if proposal.invoice_sent_at is not None:
-            elapsed = (datetime.now(UTC) - proposal.invoice_sent_at).total_seconds()
-            if elapsed < self.RESEND_COOLDOWN_SECONDS:
-                wait = int(self.RESEND_COOLDOWN_SECONDS - elapsed)
-                raise ValueError(
-                    f"Payment link was sent recently; please wait {wait}s before resending.",
-                )
-
-        stripe = _get_stripe()
-        if not stripe:
-            raise ValueError(
-                "Stripe is not configured — set STRIPE_SECRET_KEY in the environment",
-            )
-
-        if proposal.stripe_invoice_id:
-            return await self._resend_invoice(proposal, stripe)
-
-        if proposal.stripe_checkout_session_id:
-            return await self._resend_checkout_session(proposal, stripe)
-
-        if proposal.stripe_subscription_id:
-            raise ValueError(
-                "Subscription is active — Stripe charges the saved payment method "
-                "on the next billing cycle, no resend needed",
-            )
-
-        raise ValueError(
-            "No Stripe artifact on this proposal — accept it first to spawn billing",
-        )
-
-    async def _resend_invoice(self, proposal: Proposal, stripe) -> dict:
-        try:
-            inv = stripe.Invoice.retrieve(proposal.stripe_invoice_id)
-        except Exception as exc:
-            raise ValueError(f"Failed to retrieve invoice: {exc}") from exc
-
-        inv_status = getattr(inv, "status", None)
-        if inv_status == "paid":
-            # DB drift — webhook missed. Reconcile rather than spawn.
-            proposal.status = "paid"
-            proposal.paid_at = datetime.now(UTC)
-            await self.db.flush()
-            return {
-                "action": "already_paid_reconciled",
-                "stripe_invoice_id": proposal.stripe_invoice_id,
-                "hosted_invoice_url": getattr(inv, "hosted_invoice_url", None),
-            }
-        if inv_status in ("void", "uncollectible"):
-            raise ValueError(
-                f"Invoice was {inv_status} — clone the proposal to bill again",
-            )
-        if inv_status not in ("open", "draft"):
-            raise ValueError(
-                f"Cannot resend invoice in '{inv_status}' status",
-            )
-
-        try:
-            stripe.Invoice.send_invoice(proposal.stripe_invoice_id)
-        except Exception as exc:
-            raise ValueError(f"Stripe rejected resend: {exc}") from exc
-
-        proposal.invoice_sent_at = datetime.now(UTC)
-        await self.db.flush()
-
-        return {
-            "action": "resent",
-            "stripe_invoice_id": proposal.stripe_invoice_id,
-            "hosted_invoice_url": getattr(inv, "hosted_invoice_url", None),
-        }
-
-    async def _resend_checkout_session(self, proposal: Proposal, stripe) -> dict:
-        """Resend or regenerate a subscription Checkout Session.
-
-        Stripe Checkout Sessions expire after 24h. If the existing session
-        is still ``open`` we just re-email its URL; if it's ``expired`` we
-        spawn a replacement using a fresh idempotency key derived from the
-        old session id (so a network retry within the regeneration call
-        lands on the same new session, but the next deliberate retry
-        creates yet another).
-        """
-        old_session_id = proposal.stripe_checkout_session_id
-        try:
-            sess = stripe.checkout.Session.retrieve(old_session_id)
-        except Exception as exc:
-            raise ValueError(f"Failed to retrieve checkout session: {exc}") from exc
-
-        sess_status = getattr(sess, "status", None)
-        if sess_status == "complete":
-            # Webhook missed. Reconcile rather than spawn.
-            proposal.status = "paid"
-            proposal.paid_at = datetime.now(UTC)
-            await self.db.flush()
-            return {
-                "action": "already_paid_reconciled",
-                "stripe_checkout_session_id": old_session_id,
-                "stripe_payment_url": proposal.stripe_payment_url,
-            }
-        if sess_status == "open":
-            await self._email_checkout_link(proposal, proposal.stripe_payment_url)
-            proposal.invoice_sent_at = datetime.now(UTC)
-            await self.db.flush()
-            return {
-                "action": "resent",
-                "stripe_checkout_session_id": old_session_id,
-                "stripe_payment_url": proposal.stripe_payment_url,
-            }
-        if sess_status != "expired":
-            raise ValueError(
-                f"Cannot resend checkout session in '{sess_status}' status",
-            )
-
-        billing = _resolve_billing(proposal)
-        if billing is None or billing["payment_type"] != "subscription":
-            raise ValueError(
-                "Proposal billing terms can no longer be resolved as a subscription; "
-                "edit the proposal pricing and use Retry Billing.",
-            )
-
-        base = settings.FRONTEND_BASE_URL.rstrip("/")
-        if not base:
-            raise ValueError(
-                "FRONTEND_BASE_URL is not configured; cannot build checkout return URL",
-            )
-        public_path = f"/proposals/public/{proposal.public_token}"
-
-        payments = PaymentService(self.db)
-        try:
-            result = await payments.create_subscription_checkout_for_proposal(
-                proposal_id=proposal.id,
-                contact_id=proposal.contact_id,
-                company_id=proposal.company_id,
-                amount=billing["amount"],
-                currency=billing["currency"],
-                description=billing["description"],
-                interval=billing["interval"],
-                interval_count=billing["interval_count"],
-                success_url=f"{base}{public_path}?paid=1",
-                cancel_url=f"{base}{public_path}",
-                idempotency_key=f"proposal_sub_{proposal.id}_after_{old_session_id}",
-            )
-        except ValueError:
-            raise
-        except Exception as exc:
-            raise ValueError(f"Failed to create new checkout session: {exc}") from exc
-
-        proposal.stripe_checkout_session_id = result["stripe_checkout_session_id"]
-        proposal.stripe_payment_url = result["stripe_payment_url"]
-        proposal.invoice_sent_at = datetime.now(UTC)
-        await self.db.flush()
-
-        await self._email_checkout_link(proposal, result["stripe_payment_url"])
-
-        return {
-            "action": "regenerated",
-            "stripe_checkout_session_id": result["stripe_checkout_session_id"],
-            "stripe_payment_url": result["stripe_payment_url"],
-        }
-
-    async def _email_checkout_link(self, proposal: Proposal, url: str | None) -> None:
-        """Send the customer a fresh email pointing at the checkout URL.
-
-        Routed through the proposal owner's Gmail OAuth connection when
-        present (same path as `send_signed_copy_to_client`). Failure is
-        logged but does not unwind the regeneration — the new URL is
-        already saved on the proposal and the public page surfaces it.
-        """
-        if not url:
-            return
-        recipient = (
-            (proposal.signer_email or proposal.designated_signer_email or "").strip()
-            or (proposal.contact.email if proposal.contact else "")
-        )
-        if not recipient:
-            logger.warning(
-                "Cannot email checkout link for proposal %s: no recipient address",
-                proposal.id,
-            )
-            return
-
-        branding = await self.get_branding_for_proposal(proposal)
-        company = escape(branding.get("company_name") or "Your provider")
-        title = escape(proposal.title)
-        body = (
-            f"<p>Hi,</p>"
-            f"<p>The previous payment link for <strong>{title}</strong> "
-            f"expired. Please use the link below to complete payment:</p>"
-            f'<p><a href="{escape(url)}">Pay now</a></p>'
-            f"<p>{company}</p>"
-        )
-
-        try:
-            email_service = EmailService(self.db)
-            await email_service.queue_email(
-                to_email=recipient,
-                subject=f"New payment link — {proposal.title}",
-                body=body,
-                sent_by_id=proposal.owner_id,
-                entity_type="proposals",
-                entity_id=proposal.id,
-            )
-        except Exception:
-            logger.warning(
-                "Failed to email new checkout link for proposal %s",
-                proposal.id,
-                exc_info=True,
-            )
-
-    async def retry_billing(self, proposal: Proposal) -> Proposal:
-        """Re-run billing spawn for a proposal that previously failed.
-
-        Caller must already have authorization on the proposal
-        (enforced at the router). Refuses if the proposal already has
-        ANY Stripe artifact (invoice id, checkout session id, or
-        payment url) — checking only payment_url left a hole where a
-        partial spawn that set invoice_id but failed before the
-        hosted_invoice_url fetch would let a retry create a second
-        invoice. Use Resend Payment Link to recover from those cases.
-        """
-        if proposal.status not in ("accepted", "awaiting_payment"):
-            raise ValueError(
-                "Only accepted/awaiting_payment proposals can be retried",
-            )
-        if (
-            proposal.stripe_invoice_id
-            or proposal.stripe_checkout_session_id
-            or proposal.stripe_payment_url
-        ):
-            raise ValueError(
-                "Proposal already has a Stripe artifact; cannot retry. "
-                "Use Resend Payment Link to recover the existing invoice.",
-            )
-        # _maybe_spawn_billing mutates `proposal` in-place and flushes,
-        # so we can return the same instance — no refresh required.
-        await self._maybe_spawn_billing(proposal)
         return proposal
 
     async def reject_proposal_public(
@@ -1607,16 +1240,65 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         # the proposal accepted but without a signed-copy email. The CRM
         # user can resend from the admin UI.
         try:
-            pdf_bytes = await self.generate_proposal_pdf(
-                proposal.id,
-                proposal.owner_id or 0,
-                include_signature=True,
-            )
-            attachments: list[EmailAttachment] = [EmailAttachment(
-                filename=f"proposal-{proposal.proposal_number}-signed.pdf",
-                content=pdf_bytes,
-                content_type="application/pdf",
-            )]
+            # Prefer the stamped master service agreement (the legally
+            # executed document the signer expects to receive) over the
+            # branded HTML→PDF summary. The HTML version is still useful
+            # as a cover page when no master is on file. R2 failures
+            # fall back to the generated PDF so a transient storage blip
+            # doesn't silently strip the attachment.
+            attachments: list[EmailAttachment] = []
+            stamped_attached = False
+            if proposal.signed_pdf_path:
+                try:
+                    stamped_bytes = await download_object_bytes(
+                        proposal.signed_pdf_path,
+                    )
+                    attachments.append(EmailAttachment(
+                        filename=f"proposal-{proposal.proposal_number}-signed.pdf",
+                        content=stamped_bytes,
+                        content_type="application/pdf",
+                    ))
+                    stamped_attached = True
+                except Exception as exc:
+                    # Non-fatal — the generated PDF below keeps the email
+                    # useful even when R2 is unreachable. We also stamp
+                    # ``signed_pdf_error`` so the operator-visible amber
+                    # banner on the proposal detail page picks this up:
+                    # without it, the signer would receive the HTML cover
+                    # PDF instead of the legally executed master with no
+                    # operator-visible signal. Commit (not flush) so the
+                    # capture survives even if queue_email below raises.
+                    logger.warning(
+                        "Failed to fetch signed-PDF object %r for proposal %s; "
+                        "falling back to generated copy",
+                        proposal.signed_pdf_path, proposal.id,
+                        exc_info=True,
+                    )
+                    proposal.signed_pdf_error = (
+                        "Signed copy could not be loaded from storage at "
+                        "email-send time; the signer received a fallback "
+                        f"copy. Re-stamp to reissue. ({str(exc)[:400]})"
+                    )[:1000]
+                    try:
+                        await self.db.commit()
+                    except Exception:
+                        logger.exception(
+                            "Failed to commit signed_pdf_error capture for "
+                            "proposal %s; banner may not surface",
+                            proposal.id,
+                        )
+
+            if not stamped_attached:
+                pdf_bytes = await self.generate_proposal_pdf(
+                    proposal.id,
+                    proposal.owner_id or 0,
+                    include_signature=True,
+                )
+                attachments.append(EmailAttachment(
+                    filename=f"proposal-{proposal.proposal_number}-signed.pdf",
+                    content=pdf_bytes,
+                    content_type="application/pdf",
+                ))
 
             extra_attachments, missing_lines = await self._collect_proposal_attachments(
                 proposal,

@@ -1,7 +1,5 @@
 """Sharing endpoints for record collaboration between users."""
 
-
-import logging
 from datetime import datetime
 from typing import Annotated
 
@@ -19,20 +17,17 @@ from src.core.data_scope import (
     get_data_scope,
     invalidate_scope_cache,
 )
-from src.core.entity_access import _resolve_entity, canonical_singular
+from src.core.entity_access import _resolve_entity
+from src.core.entity_types import canonical_singular, entity_type_variants
 from src.core.models import EntityShare
 from src.core.router_utils import CurrentUser, DBSession
+from src.core.share_permissions import (
+    VALID_SHARE_PERMISSIONS,
+    require_owner_or_manager_access,
+)
 from src.notifications.service import NotificationService
 
-logger = logging.getLogger(__name__)
-
 router = APIRouter(prefix="/api/sharing", tags=["sharing"])
-
-# Singular form for notification copy and audit-row keying comes from
-# canonical_singular (core.entity_access), which knows every shareable
-# entity type. A local dict drifts (PR #266 missed activity/payment/expense,
-# leaking shared activities to be audit-keyed under "activities" while the
-# rest of the codebase queries history under "activity").
 
 
 class ShareRequest(BaseModel):
@@ -66,11 +61,10 @@ async def share_entity(
 ):
     """Share an entity with another user.
 
-    Caller must be able to access the target record (owner, share recipient,
-    admin, or manager). Prevents reps from granting peers access to records
-    they themselves cannot see.
+    Caller must own the target record or have manager/admin scope. Prevents
+    view-only recipients from granting peers access or escalating permissions.
     """
-    if request.permission_level not in ("view", "edit", "assignee"):
+    if request.permission_level not in VALID_SHARE_PERMISSIONS:
         raise HTTPException(
             status_code=HTTPStatus.BAD_REQUEST,
             detail="permission_level must be 'view', 'edit', or 'assignee'",
@@ -88,20 +82,35 @@ async def share_entity(
             status_code=HTTPStatus.NOT_FOUND,
             detail=f"{request.entity_type} {request.entity_id} not found",
         )
-    check_record_access_or_shared(
+    entity_type = plural
+    require_owner_or_manager_access(
         entity,
         current_user,
         data_scope.role_name,
-        shared_entity_ids=data_scope.get_shared_ids(plural),
-        entity_type=plural,
+        detail="Only the owner, admins, and managers can share this record",
     )
 
+    target_result = await db.execute(
+        select(User.id).where(
+            User.id == request.shared_with_user_id,
+            User.is_active.is_(True),
+        )
+    )
+    if target_result.scalar_one_or_none() is None:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND,
+            detail="User to share with not found",
+        )
+
+    entity_type_inputs = entity_type_variants(request.entity_type)
     existing = await db.execute(
-        select(EntityShare).where(
-            EntityShare.entity_type == request.entity_type,
+        select(EntityShare.id)
+        .where(
+            EntityShare.entity_type.in_(entity_type_inputs),
             EntityShare.entity_id == request.entity_id,
             EntityShare.shared_with_user_id == request.shared_with_user_id,
         )
+        .limit(1)
     )
     if existing.scalar_one_or_none():
         raise HTTPException(
@@ -110,7 +119,7 @@ async def share_entity(
         )
 
     share = EntityShare(
-        entity_type=request.entity_type,
+        entity_type=entity_type,
         entity_id=request.entity_id,
         shared_with_user_id=request.shared_with_user_id,
         shared_by_user_id=current_user.id,
@@ -118,31 +127,23 @@ async def share_entity(
     )
     db.add(share)
     await db.flush()
-    await db.refresh(share)
-    invalidate_scope_cache(request.shared_with_user_id)
 
     # Audit row keyed to the shared record so it surfaces in that entity's history.
-    try:
-        await AuditService(db).log_change(
-            entity_type=canonical_singular(request.entity_type),
-            entity_id=request.entity_id,
-            user_id=current_user.id,
-            action="share",
-            changes=[{
-                "field": "shared_with_user_id",
-                "old": None,
-                "new": request.shared_with_user_id,
-                "permission_level": request.permission_level,
-            }],
-        )
-    except Exception:
-        logger.exception(
-            "share audit log failed for entity=%s/%s shared_with=%s",
-            request.entity_type, request.entity_id, request.shared_with_user_id,
-        )
+    await AuditService(db).log_change(
+        entity_type=canonical_singular(entity_type),
+        entity_id=request.entity_id,
+        user_id=current_user.id,
+        action="share",
+        changes=[{
+            "field": "shared_with_user_id",
+            "old": None,
+            "new": request.shared_with_user_id,
+            "permission_level": request.permission_level,
+        }],
+    )
 
     sharer_name = current_user.full_name or current_user.email
-    entity_singular = canonical_singular(request.entity_type)
+    entity_singular = canonical_singular(entity_type)
     if request.permission_level == "assignee":
         notif_type = "record_assigned_to_you"
         title = f"{sharer_name} assigned a {entity_singular} to you"
@@ -152,23 +153,19 @@ async def share_entity(
         title = f"{sharer_name} shared a {entity_singular} with you"
         message = f"A {entity_singular} was shared with you (id={request.entity_id})"
 
-    try:
-        notif_service = NotificationService(db)
-        await notif_service.create_notification(
-            user_id=request.shared_with_user_id,
-            type=notif_type,
-            title=title,
-            message=message,
-            entity_type=request.entity_type,
-            entity_id=request.entity_id,
-        )
-    except Exception:
-        logger.exception(
-            "share notification failed for user_id=%s entity=%s/%s — share row was created",
-            request.shared_with_user_id,
-            request.entity_type,
-            request.entity_id,
-        )
+    notif_service = NotificationService(db)
+    await notif_service.create_notification(
+        user_id=request.shared_with_user_id,
+        type=notif_type,
+        title=title,
+        message=message,
+        entity_type=entity_type,
+        entity_id=request.entity_id,
+    )
+
+    await db.commit()
+    await db.refresh(share)
+    invalidate_scope_cache(request.shared_with_user_id)
 
     return ShareResponse.model_validate(share)
 
@@ -179,11 +176,28 @@ async def list_entity_shares(
     entity_id: int,
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
 ):
     """List all shares for a specific entity."""
+    entity, plural = await _resolve_entity(db, entity_type, entity_id)
+    if entity is None:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND,
+            detail=f"{entity_type} {entity_id} not found",
+        )
+
+    check_record_access_or_shared(
+        entity,
+        current_user,
+        data_scope.role_name,
+        shared_entity_ids=data_scope.get_shared_ids(plural),
+        entity_type=plural,
+    )
+
+    entity_type_inputs = entity_type_variants(entity_type)
     result = await db.execute(
         select(EntityShare).where(
-            EntityShare.entity_type == entity_type,
+            EntityShare.entity_type.in_(entity_type_inputs),
             EntityShare.entity_id == entity_id,
         )
     )
@@ -198,8 +212,9 @@ async def revoke_share(
     share_id: int,
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
 ):
-    """Revoke a share. Only the person who shared or an admin can revoke."""
+    """Revoke a share as the sharer, recipient, manager, or admin."""
     result = await db.execute(
         select(EntityShare).where(EntityShare.id == share_id)
     )
@@ -212,7 +227,7 @@ async def revoke_share(
 
     if (
         not current_user.is_superuser
-        and current_user.role not in ("admin", "manager")
+        and data_scope.role_name not in ("admin", "manager")
         and current_user.id not in (share.shared_by_user_id, share.shared_with_user_id)
     ):
         raise HTTPException(
@@ -226,32 +241,26 @@ async def revoke_share(
     revoked_permission = share.permission_level
     await db.delete(share)
     await db.flush()
-    # Invalidate scope cache so the shared-with user loses access immediately
-    invalidate_scope_cache(shared_with_id)
 
     # Mirror audit row for the unshare event, same keying as POST /api/sharing.
-    try:
-        await AuditService(db).log_change(
-            entity_type=canonical_singular(revoked_entity_type),
-            entity_id=revoked_entity_id,
-            user_id=current_user.id,
-            action="unshare",
-            changes=[{
-                "field": "shared_with_user_id",
-                "old": shared_with_id,
-                "new": None,
-                "permission_level": revoked_permission,
-            }],
-        )
-    except Exception:
-        logger.exception(
-            "unshare audit log failed for share_id=%s entity=%s/%s",
-            share_id, revoked_entity_type, revoked_entity_id,
-        )
+    await AuditService(db).log_change(
+        entity_type=canonical_singular(revoked_entity_type),
+        entity_id=revoked_entity_id,
+        user_id=current_user.id,
+        action="unshare",
+        changes=[{
+            "field": "shared_with_user_id",
+            "old": shared_with_id,
+            "new": None,
+            "permission_level": revoked_permission,
+        }],
+    )
+    await db.commit()
+    invalidate_scope_cache(shared_with_id)
 
 
 # ---------------------------------------------------------------------------
-# Admin-only listing endpoint
+# Admin/manager listing endpoint
 # ---------------------------------------------------------------------------
 
 
@@ -281,6 +290,7 @@ class AdminShareListResponse(BaseModel):
 async def admin_list_shares(
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
     entity_type: str | None = Query(None),
     shared_with_user_id: int | None = Query(None),
     shared_by_user_id: int | None = Query(None),
@@ -288,8 +298,8 @@ async def admin_list_shares(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
 ):
-    """Admin-only: list all EntityShare rows across the system with filters."""
-    if not current_user.is_superuser and current_user.role not in ("admin", "manager"):
+    """List all EntityShare rows for admins and managers."""
+    if not current_user.is_superuser and data_scope.role_name not in ("admin", "manager"):
         raise HTTPException(
             status_code=HTTPStatus.FORBIDDEN,
             detail="Only admins and managers can access this endpoint",
@@ -316,7 +326,9 @@ async def admin_list_shares(
     )
 
     if entity_type is not None:
-        base_query = base_query.where(EntityShare.entity_type == entity_type)
+        base_query = base_query.where(
+            EntityShare.entity_type.in_(entity_type_variants(entity_type))
+        )
     if shared_with_user_id is not None:
         base_query = base_query.where(EntityShare.shared_with_user_id == shared_with_user_id)
     if shared_by_user_id is not None:

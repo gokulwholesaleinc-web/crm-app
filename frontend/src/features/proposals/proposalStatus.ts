@@ -8,17 +8,27 @@ import type { Proposal } from '../../types';
 import type { TimelineStep } from '../../components/shared/StatusTimeline';
 import type { ChecklistItem } from '../../components/shared/checklist';
 
-const STATUS_ORDER = ['draft', 'sent', 'viewed', 'accepted', 'awaiting_payment', 'paid'];
+const STATUS_ORDER = ['draft', 'sent', 'viewed', 'accepted'];
+
+// Pre-2026-05-18 proposals could land in 'awaiting_payment' or 'paid'
+// when proposals still spawned Stripe artifacts on accept. Those rows
+// are still in the DB and need to render correctly — collapse them to
+// 'accepted' rank so a fully-signed-and-paid legacy proposal shows the
+// Signed step as completed, not as upcoming behind a "current" Draft.
+const LEGACY_STATUS_ALIAS: Record<string, string> = {
+  awaiting_payment: 'accepted',
+  paid: 'accepted',
+};
 
 // Once a proposal hits any of these states, edits would mutate
-// something the customer has already committed to. Used to gate the
-// edit modal + status transitions. (The /refresh-from-quote endpoint
-// was retired with the quotes router on 2026-05-14.)
+// something the customer has already committed to. Includes legacy
+// terminal billing statuses so a paid pre-cutover proposal stays locked.
 const LOCKED_STATUSES = new Set(['signed', 'accepted', 'awaiting_payment', 'paid']);
 
 function rankStatus(status: string | undefined): number {
   if (!status) return 0;
-  const idx = STATUS_ORDER.indexOf(status);
+  const canonical = LEGACY_STATUS_ALIAS[status] ?? status;
+  const idx = STATUS_ORDER.indexOf(canonical);
   return idx === -1 ? 0 : idx;
 }
 
@@ -28,15 +38,11 @@ export function isProposalLocked(proposal: Proposal): boolean {
   return LOCKED_STATUSES.has(proposal.status ?? '');
 }
 
-function hasBillingAmount(proposal: Proposal): boolean {
-  return Boolean(proposal.amount && Number(proposal.amount) > 0);
-}
-
 /**
- * Build the Draft → Sent → Viewed → Signed → Paid timeline. Step state
- * derives from the actual timestamps on the proposal (sent_at, viewed_at,
- * signed_at, paid_at) — falling back to status ranking when a timestamp
- * isn't available. Rejected proposals collapse to a Draft → Sent → Rejected
+ * Build the Draft → Sent → Viewed → Signed timeline. Step state derives
+ * from the actual timestamps on the proposal (sent_at, viewed_at,
+ * signed_at) — falling back to status ranking when a timestamp isn't
+ * available. Rejected proposals collapse to a Draft → Sent → Rejected
  * three-step view so the timeline still reads.
  */
 export function buildProposalTimelineSteps(proposal: Proposal): TimelineStep[] {
@@ -67,12 +73,6 @@ export function buildProposalTimelineSteps(proposal: Proposal): TimelineStep[] {
     return 'upcoming';
   };
 
-  // Paid is only meaningful for proposals that actually carry a billing
-  // amount — a one-time $0 proposal still goes Draft → Sent → Viewed →
-  // Signed and stops there. Mark Paid as skipped in that case so the
-  // timeline doesn't look unfinished forever.
-  const hasBilling = hasBillingAmount(proposal);
-
   return [
     { key: 'draft', label: 'Draft', at: proposal.created_at, state: stepState(0) },
     {
@@ -96,19 +96,13 @@ export function buildProposalTimelineSteps(proposal: Proposal): TimelineStep[] {
         ? `Signed by ${proposal.signer_name}`
         : undefined,
     },
-    {
-      key: 'paid',
-      label: 'Paid',
-      at: proposal.paid_at ?? null,
-      state: hasBilling ? stepState(5) : 'skipped',
-    },
   ];
 }
 
 /**
  * Build the pre-send checklist. Only renders when the proposal is in a
- * sendable status (draft/sent/viewed) — accepted/paid proposals have no
- * send action so there's nothing to gate.
+ * sendable status (draft/sent/viewed) — accepted proposals have no send
+ * action so there's nothing to gate.
  */
 export function buildProposalSendChecklist(
   proposal: Proposal,
@@ -145,20 +139,6 @@ export function buildProposalSendChecklist(
     state: hasEntity,
     hint: hasEntity ? undefined : 'Attach a contact or company so we can route the signed copy.',
     action: hasEntity ? undefined : { label: 'Edit', onClick: options.onEditContact },
-  });
-
-  // Billing is optional — a free strategy doc proposal doesn't need it.
-  // Marked optional so it surfaces as a hint without blocking send.
-  const hasBilling = hasBillingAmount(proposal);
-  items.push({
-    key: 'billing',
-    label: hasBilling
-      ? `Billing configured (${proposal.payment_type === 'subscription' ? 'subscription' : 'one-time'})`
-      : 'Billing (optional)',
-    state: hasBilling ? true : 'optional',
-    hint: hasBilling
-      ? undefined
-      : 'No invoice will spawn on accept. Add a billing amount if you want Stripe to handle payment.',
   });
 
   // Expired valid_until is a warning, not a hard block — the backend

@@ -5,7 +5,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 
 # Semantic-search embedding removed (PR #281); table preserved for future re-enable.
 from src.audit.utils import (
@@ -32,12 +32,16 @@ from src.core.router_utils import (
     build_list_responses_with_tags,
     build_response_with_tags,
     calculate_pages,
-    check_ownership,
     effective_owner_id,
     get_entity_or_404,
     parse_json_filters,
     parse_tag_ids,
     raise_bad_request,
+)
+from src.core.share_permissions import (
+    get_writable_shared_entity_ids,
+    require_owner_or_manager_access,
+    require_record_write_access,
 )
 from src.events.service import LEAD_CREATED, LEAD_UPDATED, emit
 from src.leads.conversion import LeadConverter
@@ -284,8 +288,19 @@ async def create_lead(
     request: Request,
     current_user: Annotated[User, Depends(require_permission("leads", "create"))],
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
 ):
     """Create a new lead."""
+    if (
+        not data_scope.can_see_all()
+        and lead_data.owner_id is not None
+        and lead_data.owner_id != current_user.id
+    ):
+        raise HTTPException(
+            status_code=HTTPStatus.FORBIDDEN,
+            detail="Only managers and admins can assign leads to other users",
+        )
+
     service = LeadService(db)
     try:
         lead = await service.create(lead_data, current_user.id)
@@ -427,7 +442,14 @@ async def get_lead_kanban(
         Lead.pipeline_stage_id.in_([s.id for s in stages]),
     )
     if resolved_owner_id:
-        leads_query = leads_query.where(Lead.owner_id == resolved_owner_id)
+        if data_scope.can_see_all():
+            leads_query = leads_query.where(Lead.owner_id == resolved_owner_id)
+        else:
+            visible_lead_filters = [Lead.owner_id == resolved_owner_id]
+            shared_ids = data_scope.get_shared_ids(ENTITY_TYPE_LEADS)
+            if shared_ids:
+                visible_lead_filters.append(Lead.id.in_(shared_ids))
+            leads_query = leads_query.where(or_(*visible_lead_filters))
     leads_query = leads_query.order_by(Lead.score.desc())
     leads_result = await db.execute(leads_query)
     all_leads = list(leads_result.scalars().all())
@@ -490,27 +512,33 @@ async def send_campaign(
 ):
     """Send personalized email campaign to selected leads.
 
-    Only sends to leads the caller can access (owned or shared). Leads
-    outside the caller's data scope are silently filtered out of the
+    Only sends to leads the caller can update (owned or edit/assignee-shared).
+    Leads outside the caller's data scope are silently filtered out of the
     batch — we intentionally do NOT surface "forbidden" per lead to
     avoid leaking which IDs exist in other users' pipelines.
     """
     from src.email.service import EmailService, render_template
 
     email_service = EmailService(db)
+    service = LeadService(db)
     sent_count = 0
     errors = []
-    shared_ids = set(data_scope.get_shared_ids(ENTITY_TYPE_LEADS))
+    writable_shared_ids = await get_writable_shared_entity_ids(
+        db, current_user.id, ENTITY_TYPE_LEADS,
+    )
     can_see_all = data_scope.can_see_all()
 
     for lead_id in request_data.lead_ids:
-        service = LeadService(db)
         lead = await service.get_by_id(lead_id)
         if not lead or not lead.email:
             errors.append({"lead_id": lead_id, "error": "Lead not found or no email"})
             continue
 
-        if not can_see_all and lead.owner_id != current_user.id and lead.id not in shared_ids:
+        if (
+            not can_see_all
+            and lead.owner_id != current_user.id
+            and lead.id not in writable_shared_ids
+        ):
             # Don't reveal whether the lead exists; treat as inaccessible.
             errors.append({"lead_id": lead_id, "error": "Lead not found or no email"})
             continue
@@ -556,9 +584,12 @@ async def move_lead(
     """
     service = LeadService(db)
     lead = await get_entity_or_404(service, lead_id, EntityNames.LEAD)
-    check_record_access_or_shared(
-        lead, current_user, data_scope.role_name,
-        shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_LEADS),
+    await require_record_write_access(
+        db,
+        lead,
+        ENTITY_TYPE_LEADS,
+        current_user,
+        data_scope.role_name,
     )
 
     stage = await _resolve_lead_stage(db, request.new_stage_id)
@@ -600,6 +631,7 @@ async def update_lead(
     request: Request,
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
 ):
     """Update a lead.
 
@@ -609,12 +641,27 @@ async def update_lead(
     """
     service = LeadService(db)
     lead = await get_entity_or_404(service, lead_id, EntityNames.LEAD)
-    check_ownership(lead, current_user, EntityNames.LEAD)
+    await require_record_write_access(
+        db,
+        lead,
+        ENTITY_TYPE_LEADS,
+        current_user,
+        data_scope.role_name,
+    )
 
     old_owner_id = lead.owner_id
     old_stage_id = lead.pipeline_stage_id
 
     update_fields = list(lead_data.model_dump(exclude_unset=True).keys())
+    if (
+        "owner_id" in update_fields
+        and lead_data.owner_id != old_owner_id
+        and not data_scope.can_see_all()
+    ):
+        raise HTTPException(
+            status_code=HTTPStatus.FORBIDDEN,
+            detail="Only managers and admins can reassign leads",
+        )
 
     # Pre-validate the new stage before service.update writes it so a
     # bad stage_id rejects cleanly instead of FK-failing mid-transaction.
@@ -682,11 +729,17 @@ async def delete_lead(
     request: Request,
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
 ):
     """Delete a lead."""
     service = LeadService(db)
     lead = await get_entity_or_404(service, lead_id, EntityNames.LEAD)
-    check_ownership(lead, current_user, EntityNames.LEAD)
+    require_owner_or_manager_access(
+        lead,
+        current_user,
+        data_scope.role_name,
+        detail="You do not have permission to delete this lead",
+    )
 
     ip_address = get_client_ip(request)
     await audit_entity_delete(db, "lead", lead.id, current_user.id, ip_address)
@@ -706,9 +759,12 @@ async def convert_to_contact(
     """Convert a lead to a contact."""
     service = LeadService(db)
     lead = await get_entity_or_404(service, lead_id, EntityNames.LEAD)
-    check_record_access_or_shared(
-        lead, current_user, data_scope.role_name,
-        shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_LEADS),
+    await require_record_write_access(
+        db,
+        lead,
+        ENTITY_TYPE_LEADS,
+        current_user,
+        data_scope.role_name,
     )
 
     if lead.converted_contact_id:
@@ -748,9 +804,12 @@ async def full_conversion(
     """
     service = LeadService(db)
     lead = await get_entity_or_404(service, lead_id, EntityNames.LEAD)
-    check_record_access_or_shared(
-        lead, current_user, data_scope.role_name,
-        shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_LEADS),
+    await require_record_write_access(
+        db,
+        lead,
+        ENTITY_TYPE_LEADS,
+        current_user,
+        data_scope.role_name,
     )
 
     if lead.converted_contact_id:
