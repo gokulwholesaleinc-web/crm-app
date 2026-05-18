@@ -22,6 +22,10 @@ const apiClientMock = vi.hoisted(() => ({
 }));
 vi.mock('../../api/client', () => ({
   apiClient: apiClientMock,
+  // Re-exported by authStore at module init. The mock has to satisfy
+  // every named export the consumer touches, even when the test
+  // doesn't exercise the token-getter wiring itself.
+  registerAuthTokenGetter: vi.fn(),
 }));
 
 const basePayment = {

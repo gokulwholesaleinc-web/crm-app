@@ -42,12 +42,18 @@ class TestLeadAssignmentNotification:
     async def test_assigning_lead_to_another_user_creates_notification(
         self,
         client: AsyncClient,
-        auth_headers: dict,
+        manager_auth_headers: dict,
         db_session: AsyncSession,
         test_user: User,
         test_lead_source: LeadSource,
     ):
-        """Creating a lead assigned to a different user should notify that user."""
+        """Creating a lead assigned to a different user should notify that user.
+
+        Uses manager_auth_headers because the lead-create gate added in
+        the 2026-05-18 sharing-permissions PR refuses cross-user owner
+        assignment for sales_rep accounts. The notification wiring
+        itself is owner-agnostic — manager creds let us exercise it.
+        """
         # Create a second user to assign to
         other_user = User(
             email="other@example.com",
@@ -62,7 +68,7 @@ class TestLeadAssignmentNotification:
 
         response = await client.post(
             "/api/leads",
-            headers=auth_headers,
+            headers=manager_auth_headers,
             json={
                 "first_name": "Notify",
                 "last_name": "Lead",
@@ -89,12 +95,16 @@ class TestLeadAssignmentNotification:
     async def test_updating_lead_owner_creates_notification(
         self,
         client: AsyncClient,
-        auth_headers: dict,
+        manager_auth_headers: dict,
         db_session: AsyncSession,
         test_user: User,
         test_lead: Lead,
     ):
-        """Changing lead owner should create a notification for the new owner."""
+        """Changing lead owner should create a notification for the new owner.
+
+        Uses manager_auth_headers — same rationale as the create test:
+        cross-user reassignment is manager-gated as of 2026-05-18.
+        """
         new_owner = User(
             email="newowner@example.com",
             hashed_password="hashed",
@@ -108,7 +118,7 @@ class TestLeadAssignmentNotification:
 
         response = await client.patch(
             f"/api/leads/{test_lead.id}",
-            headers=auth_headers,
+            headers=manager_auth_headers,
             json={"owner_id": new_owner.id},
         )
         assert response.status_code == 200
