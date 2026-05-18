@@ -915,26 +915,11 @@ function LeadsPage() {
                       />
                     </th>
                     <SortableTh field="name" label="Name" sortBy={sortBy} sortDir={sortDir} onToggle={handleSortToggle} />
-                    <th
-                      scope="col"
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
-                    >
-                      Company
-                    </th>
+                    <SortableTh field="company" label="Company" sortBy={sortBy} sortDir={sortDir} onToggle={handleSortToggle} />
                     <SortableTh field="status" label="Status" sortBy={sortBy} sortDir={sortDir} onToggle={handleSortToggle} />
-                    <th
-                      scope="col"
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
-                    >
-                      Stage
-                    </th>
+                    <SortableTh field="stage" label="Stage" sortBy={sortBy} sortDir={sortDir} onToggle={handleSortToggle} />
                     <SortableTh field="score" label="Score" sortBy={sortBy} sortDir={sortDir} onToggle={handleSortToggle} helpText={SCORE_HEADER_HINT} />
-                    <th
-                      scope="col"
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
-                    >
-                      Source
-                    </th>
+                    <SortableTh field="source" label="Source" sortBy={sortBy} sortDir={sortDir} onToggle={handleSortToggle} />
                     <SortableTh field="created_at" label="Created" sortBy={sortBy} sortDir={sortDir} onToggle={handleSortToggle} />
                     <th scope="col" className="relative px-6 py-3">
                       <span className="sr-only">Actions</span>
