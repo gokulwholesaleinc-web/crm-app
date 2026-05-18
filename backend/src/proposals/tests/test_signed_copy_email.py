@@ -271,6 +271,15 @@ class TestSendSignedCopyToClient:
             f"proposal-{proposal.proposal_number}-signed.pdf"
         )
         assert attachments[0]["content"] == generated_bytes
+        # The fallback also stamps signed_pdf_error so the proposal
+        # detail page's amber banner surfaces the recovery action.
+        # Without this marker the signer would receive the HTML cover
+        # PDF with NO operator-visible signal — the silent-failure
+        # mode this marker was added to prevent.
+        await db_session.refresh(proposal)
+        assert proposal.signed_pdf_error is not None
+        assert "signer received a fallback copy" in proposal.signed_pdf_error
+        assert "R2 unreachable" in proposal.signed_pdf_error
 
     async def test_uses_generated_pdf_when_signed_pdf_path_null(
         self,

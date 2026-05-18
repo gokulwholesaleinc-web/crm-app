@@ -492,17 +492,13 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
             prior_error = proposal.signed_pdf_error
             proposal.signed_pdf_path = signed_key
             proposal.signed_pdf_error = None
-            await self.db.flush()
-            # Don't refresh() here — a connection blip post-flush would
-            # raise SQLAlchemyError that get_db's narrow handler rolls
-            # back, losing the success write AND any prior error-clear.
-            # The row is already attached to the session; downstream
-            # readers see the updated columns without a server round-trip.
-            if prior_error:
-                logger.info(
-                    "Signed PDF re-stamp succeeded for proposal %s (cleared error: %r)",
-                    proposal.id, prior_error[:200],
-                )
+            # Commit happens in the ``else`` branch below so the success
+            # write lands before unrelated downstream work runs — a flush
+            # alone would sit in get_db's outer transaction, and any
+            # non-DB exception further down propagates past get_db's
+            # narrow (OSError | SQLAlchemyError) handler without
+            # triggering rollback, leaving the session closed with the
+            # success write uncommitted.
         except PdfReadError as exc:
             logger.exception(
                 "Master PDF unreadable for proposal %s", proposal.id,
@@ -510,7 +506,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
             proposal.signed_pdf_error = (
                 f"Master PDF is corrupt or unreadable: {str(exc)[:900]}"
             )
-            await self.db.flush()
+            await self._commit_stamp_capture(proposal.id)
         except ClientError as exc:
             logger.exception(
                 "R2 storage error stamping signed PDF for proposal %s",
@@ -523,14 +519,39 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
             proposal.signed_pdf_error = (
                 f"Object storage temporarily unavailable ({code}): {message}"[:1000]
             )
-            await self.db.flush()
+            await self._commit_stamp_capture(proposal.id)
         except Exception as exc:
             logger.exception(
                 "Failed to stamp/upload signed PDF for proposal %s",
                 proposal.id,
             )
             proposal.signed_pdf_error = str(exc)[:1000]
-            await self.db.flush()
+            await self._commit_stamp_capture(proposal.id)
+        else:
+            # Success path — commit the prior_error clear + signed_pdf_path
+            # write so the operator-visible state persists regardless of
+            # what happens downstream in the accept flow.
+            await self._commit_stamp_capture(proposal.id)
+            if prior_error:
+                logger.info(
+                    "Signed PDF re-stamp succeeded for proposal %s "
+                    "(cleared error: %r)",
+                    proposal.id, prior_error[:200],
+                )
+
+    async def _commit_stamp_capture(self, proposal_id: int) -> None:
+        """Persist a fail-soft stamp result (success or error-capture)
+        before unrelated downstream work runs. Wrapped so a commit
+        failure is logged but doesn't unwind the accept itself."""
+        try:
+            await self.db.commit()
+        except Exception:
+            logger.exception(
+                "Failed to commit stamp capture for proposal %s; the "
+                "operator-visible signed_pdf_path/signed_pdf_error may "
+                "not surface until the request transaction closes",
+                proposal_id,
+            )
 
     async def restamp_signed_pdf(self, proposal: Proposal) -> Proposal:
         """Re-run the fail-soft stamp path; guards prevent post-dating
@@ -1238,15 +1259,34 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                         content_type="application/pdf",
                     ))
                     stamped_attached = True
-                except Exception:
-                    # Logged but non-fatal — the generated PDF below
-                    # keeps the email useful even when R2 is unreachable.
+                except Exception as exc:
+                    # Non-fatal — the generated PDF below keeps the email
+                    # useful even when R2 is unreachable. We also stamp
+                    # ``signed_pdf_error`` so the operator-visible amber
+                    # banner on the proposal detail page picks this up:
+                    # without it, the signer would receive the HTML cover
+                    # PDF instead of the legally executed master with no
+                    # operator-visible signal. Commit (not flush) so the
+                    # capture survives even if queue_email below raises.
                     logger.warning(
                         "Failed to fetch signed-PDF object %r for proposal %s; "
                         "falling back to generated copy",
                         proposal.signed_pdf_path, proposal.id,
                         exc_info=True,
                     )
+                    proposal.signed_pdf_error = (
+                        "Signed copy could not be loaded from storage at "
+                        "email-send time; the signer received a fallback "
+                        f"copy. Re-stamp to reissue. ({str(exc)[:400]})"
+                    )[:1000]
+                    try:
+                        await self.db.commit()
+                    except Exception:
+                        logger.exception(
+                            "Failed to commit signed_pdf_error capture for "
+                            "proposal %s; banner may not surface",
+                            proposal.id,
+                        )
 
             if not stamped_attached:
                 pdf_bytes = await self.generate_proposal_pdf(

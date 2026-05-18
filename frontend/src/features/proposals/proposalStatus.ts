@@ -10,14 +10,25 @@ import type { ChecklistItem } from '../../components/shared/checklist';
 
 const STATUS_ORDER = ['draft', 'sent', 'viewed', 'accepted'];
 
+// Pre-2026-05-18 proposals could land in 'awaiting_payment' or 'paid'
+// when proposals still spawned Stripe artifacts on accept. Those rows
+// are still in the DB and need to render correctly — collapse them to
+// 'accepted' rank so a fully-signed-and-paid legacy proposal shows the
+// Signed step as completed, not as upcoming behind a "current" Draft.
+const LEGACY_STATUS_ALIAS: Record<string, string> = {
+  awaiting_payment: 'accepted',
+  paid: 'accepted',
+};
+
 // Once a proposal hits any of these states, edits would mutate
-// something the customer has already committed to. Used to gate the
-// edit modal + status transitions.
-const LOCKED_STATUSES = new Set(['signed', 'accepted']);
+// something the customer has already committed to. Includes legacy
+// terminal billing statuses so a paid pre-cutover proposal stays locked.
+const LOCKED_STATUSES = new Set(['signed', 'accepted', 'awaiting_payment', 'paid']);
 
 function rankStatus(status: string | undefined): number {
   if (!status) return 0;
-  const idx = STATUS_ORDER.indexOf(status);
+  const canonical = LEGACY_STATUS_ALIAS[status] ?? status;
+  const idx = STATUS_ORDER.indexOf(canonical);
   return idx === -1 ? 0 : idx;
 }
 
