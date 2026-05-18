@@ -17,6 +17,7 @@ const DEFAULTS: AccountPreferences = {
   currency_display: 'USD',
   theme: 'system',
   default_landing: '/dashboard',
+  guide_progress: {},
 };
 
 vi.mock('../../../../hooks/useAccount', () => ({

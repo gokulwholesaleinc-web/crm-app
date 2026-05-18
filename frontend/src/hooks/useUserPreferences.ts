@@ -41,6 +41,12 @@ export interface UserPreferences {
   hiddenNavIds?: string[];
   signature?: string;
   listDefaults?: Partial<Record<ListPageKey, ListPageDefaults>>;
+  guideProgress?: {
+    completedGuideIds?: string[];
+    firstRunDismissedAt?: string;
+    disabledAt?: string;
+    lastResetAt?: string;
+  };
 }
 
 const VERSION = 'v1';
@@ -100,6 +106,35 @@ function sanitizeTabDefaults(
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
+function sanitizeGuideProgress(
+  raw: unknown,
+): UserPreferences['guideProgress'] | undefined {
+  if (!isPlainObject(raw)) return undefined;
+  const progress: NonNullable<UserPreferences['guideProgress']> = {};
+  if (Array.isArray(raw.completedGuideIds)) {
+    const completedGuideIds = Array.from(
+      new Set(
+        raw.completedGuideIds.filter(
+          (x): x is string => typeof x === 'string' && x.length > 0,
+        ),
+      ),
+    ).sort();
+    if (completedGuideIds.length > 0) {
+      progress.completedGuideIds = completedGuideIds;
+    }
+  }
+  if (typeof raw.firstRunDismissedAt === 'string' && raw.firstRunDismissedAt.length > 0) {
+    progress.firstRunDismissedAt = raw.firstRunDismissedAt;
+  }
+  if (typeof raw.disabledAt === 'string' && raw.disabledAt.length > 0) {
+    progress.disabledAt = raw.disabledAt;
+  }
+  if (typeof raw.lastResetAt === 'string' && raw.lastResetAt.length > 0) {
+    progress.lastResetAt = raw.lastResetAt;
+  }
+  return Object.keys(progress).length > 0 ? progress : undefined;
+}
+
 /**
  * Validate a parsed JSON blob from localStorage against the
  * UserPreferences shape, dropping any field that doesn't match. Manual
@@ -126,6 +161,8 @@ function sanitizePrefs(raw: unknown): UserPreferences {
   if (td) cleaned.tabDefaults = td;
   const ld = sanitizeListDefaults(raw.listDefaults);
   if (ld) cleaned.listDefaults = ld;
+  const gp = sanitizeGuideProgress(raw.guideProgress);
+  if (gp) cleaned.guideProgress = gp;
   return cleaned;
 }
 

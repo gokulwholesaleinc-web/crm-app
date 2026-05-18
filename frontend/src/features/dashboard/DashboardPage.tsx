@@ -217,8 +217,11 @@ function DashboardPage() {
   }
 
   return (
-    <div className="space-y-4 sm:space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+    <div className="space-y-4 sm:space-y-6" data-guide="dashboard-page">
+      <div
+        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+        data-guide="dashboard-header"
+      >
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">Dashboard</h1>
           <p className="mt-0.5 sm:mt-1 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
@@ -232,7 +235,10 @@ function DashboardPage() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 gap-3 sm:gap-6 sm:grid-cols-2 lg:grid-cols-4 stagger-fade-in">
+      <div
+        className="grid grid-cols-1 gap-3 sm:gap-6 sm:grid-cols-2 lg:grid-cols-4 stagger-fade-in"
+        data-guide="dashboard-kpis"
+      >
         {isLoadingKpis ? (
           <>
             <SkeletonCard />
@@ -372,10 +378,14 @@ function DashboardPage() {
       )}
 
       {/* Shared with me */}
-      <SharedWithMeWidget />
+      <div data-guide="dashboard-shared">
+        <SharedWithMeWidget />
+      </div>
 
       {/* Report Widgets */}
-      <ReportWidgetsSection />
+      <div data-guide="dashboard-report-widgets">
+        <ReportWidgetsSection />
+      </div>
 
       {/* Charts Section */}
       <div className="grid grid-cols-1 gap-3 sm:gap-6 lg:grid-cols-2">

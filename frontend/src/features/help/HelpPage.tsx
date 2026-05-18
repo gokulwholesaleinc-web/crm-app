@@ -3,6 +3,7 @@ import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import { SECTIONS } from './helpContent';
+import { GuideHelpPanel } from '../guides/GuideHelpPanel';
 
 function HelpPage() {
   const [query, setQuery] = useState('');
@@ -16,7 +17,7 @@ function HelpPage() {
     );
   }, [query]);
 
-  // Honor URL hashes like #tutorial-send-invoice so shared deep links land
+  // Honor URL hashes like #tutorial-create-invoice so shared deep links land
   // on the right walkthrough. The browser's native hash-scroll fires before
   // React mounts the article elements, so we re-scroll on mount and on
   // hashchange.
@@ -43,7 +44,7 @@ function HelpPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-guide="help-page">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Help &amp; User Guide</h1>
@@ -63,6 +64,8 @@ function HelpPage() {
           leftIcon={<MagnifyingGlassIcon />}
         />
       </Card>
+
+      <GuideHelpPanel />
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Table of contents */}

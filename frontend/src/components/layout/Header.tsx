@@ -19,6 +19,7 @@ import { useTheme } from '../../hooks/useTheme';
 import { NotificationBell } from '../notifications/NotificationBell';
 import { UserPreferencesModal } from '../settings/UserPreferencesModal';
 import { GlobalSearch } from './GlobalSearch';
+import { GuideLauncher } from '../../features/guides/GuideLauncher';
 
 export interface User {
   id: string;
@@ -78,7 +79,10 @@ export function Header({
 
       {/* Desktop Search */}
       {showSearch && (
-        <div className="hidden sm:flex flex-1 max-w-md lg:max-w-lg ml-4 lg:ml-0">
+        <div
+          className="hidden sm:flex flex-1 max-w-md lg:max-w-lg ml-4 lg:ml-0"
+          data-guide="global-search"
+        >
           <label htmlFor="desktop-search" className="sr-only">
             Search contacts, companies, leads, and proposals
           </label>
@@ -132,6 +136,7 @@ export function Header({
           className="p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 touch-manipulation"
           onClick={toggleTheme}
           aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+          data-guide="theme-toggle"
         >
           {isDark ? (
             <SunIcon className="h-5 w-5 sm:h-6 sm:w-6" aria-hidden="true" />
@@ -140,8 +145,12 @@ export function Header({
           )}
         </button>
 
+        <GuideLauncher />
+
         {/* Notifications */}
-        <NotificationBell />
+        <div data-guide="notifications">
+          <NotificationBell />
+        </div>
 
         {/* User Menu - touch-friendly with larger tap targets */}
         <Menu as="div" className="relative">

@@ -136,7 +136,7 @@ export default function UserApprovalsPage() {
   const getRoleForUser = (id: number): ApprovalRole => selectedRoles[id] ?? 'sales_rep';
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div className="space-y-4 sm:space-y-6" data-guide="approvals-page">
       <div>
         <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">User Approvals</h1>
         <p className="mt-1 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
@@ -145,9 +145,10 @@ export default function UserApprovalsPage() {
       </div>
 
       {/* Pending Requests */}
-      <Card>
-        <CardHeader title="Pending Requests" description="Users who signed in with Google and are awaiting approval" />
-        <CardBody>
+      <div data-guide="approvals-pending">
+        <Card>
+          <CardHeader title="Pending Requests" description="Users who signed in with Google and are awaiting approval" />
+          <CardBody>
           {loadingPending ? (
             <div className="flex items-center justify-center py-8">
               <Spinner size="md" />
@@ -222,10 +223,12 @@ export default function UserApprovalsPage() {
               </table>
             </div>
           )}
-        </CardBody>
-      </Card>
+          </CardBody>
+        </Card>
+      </div>
 
       {/* Rejected Emails */}
+      <div data-guide="approvals-rejected">
       <Card>
         <CardHeader title="Rejected Emails" description="Emails that have been blocked from signing in" />
         <CardBody>
@@ -277,6 +280,7 @@ export default function UserApprovalsPage() {
           )}
         </CardBody>
       </Card>
+      </div>
 
       {rejectTarget && (
         <RejectModal

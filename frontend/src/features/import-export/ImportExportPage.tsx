@@ -790,8 +790,8 @@ export function ImportExportPage() {
   ];
 
   return (
-    <div className="space-y-6">
-      <div>
+    <div className="space-y-6" data-guide="import-export-page">
+      <div data-guide="import-export-export">
         <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">Import / Export</h1>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
           Import and export your CRM data as CSV files
@@ -799,7 +799,7 @@ export function ImportExportPage() {
       </div>
 
       {/* Export Section */}
-      <div>
+      <div data-guide="import-export-import">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3">Export Data</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {entityConfigs.map((config) => (

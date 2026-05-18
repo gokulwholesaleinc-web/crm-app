@@ -14,6 +14,7 @@ import { useAuthStore } from './store/authStore';
 import { useTheme } from './hooks/useTheme';
 import { TenantProvider, useTenant } from './providers/TenantProvider';
 import { apiClient } from './api/client';
+import { GuideProvider } from './features/guides/GuideProvider';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -103,31 +104,38 @@ function App() {
         >
           <ErrorBoundary>
             <Suspense fallback={<PageLoader />}>
-              <AppRoutes />
+              {/* GuideProvider lives INSIDE ErrorBoundary so a runtime
+                  throw from the 593-line guide tour (DOM lookups, focus
+                  restore, scrollIntoView, account-pref mutations) lands
+                  on the boundary's fallback instead of taking the whole
+                  app down. */}
+              <GuideProvider>
+                <AppRoutes />
+              </GuideProvider>
             </Suspense>
           </ErrorBoundary>
           <Toaster
             position="top-right"
-            toastOptions={{
-            duration: 4000,
-            style: {
-              background: '#363636',
-              color: '#fff',
-            },
-            success: {
-              duration: 3000,
-              style: {
-                background: '#10B981',
-              },
-            },
-            error: {
-              duration: 5000,
-              style: {
-                background: '#EF4444',
-              },
-            },
-            }}
-          />
+              toastOptions={{
+                duration: 4000,
+                style: {
+                  background: '#363636',
+                  color: '#fff',
+                },
+                success: {
+                  duration: 3000,
+                  style: {
+                    background: '#10B981',
+                  },
+                },
+                error: {
+                  duration: 5000,
+                  style: {
+                    background: '#EF4444',
+                  },
+                },
+              }}
+            />
         </BrowserRouter>
       </TenantProvider>
     </QueryClientProvider>

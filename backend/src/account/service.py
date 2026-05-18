@@ -76,7 +76,10 @@ class AccountPrefsService:
     ) -> UserPreferences:
         row = await self.get_or_create_preferences(user_id)
         for field, value in data.model_dump(exclude_unset=True).items():
-            setattr(row, field, value)
+            next_value = value
+            if field == "guide_progress":
+                next_value = value or {}
+            setattr(row, field, next_value)
         await self.db.flush()
         await self.db.refresh(row)
         return row

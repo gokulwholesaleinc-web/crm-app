@@ -644,9 +644,12 @@ function LeadsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-guide="leads-page">
       {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div
+        className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+        data-guide="leads-header"
+      >
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">Leads</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
@@ -656,6 +659,7 @@ function LeadsPage() {
         <div className="flex items-center gap-3">
           <Link
             to="/pipeline"
+            data-guide="leads-pipeline-link"
             className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-500"
             aria-label="Open the pipeline kanban board"
           >
@@ -695,7 +699,10 @@ function LeadsPage() {
       </div>
 
       {/* Search and Filters */}
-      <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-4 border border-transparent dark:border-gray-700">
+      <div
+        className="bg-white dark:bg-gray-800 shadow rounded-lg p-4 border border-transparent dark:border-gray-700"
+        data-guide="leads-filters"
+      >
         <div className="flex flex-col gap-3 sm:flex-row sm:gap-4">
           <div className="flex-1">
             <label htmlFor="search" className="sr-only">
@@ -777,7 +784,10 @@ function LeadsPage() {
       )}
 
       {/* Leads Table */}
-      <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden border border-transparent dark:border-gray-700">
+      <div
+        className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden border border-transparent dark:border-gray-700"
+        data-guide="leads-table"
+      >
         {isLoading ? (
           <SkeletonTable rows={5} cols={7} />
         ) : leads.length === 0 ? (

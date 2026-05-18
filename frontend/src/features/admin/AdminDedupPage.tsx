@@ -255,7 +255,7 @@ export default function AdminDedupPage() {
   const totalDupes = clusters.reduce((sum, c) => sum + (c.member_count - 1), 0);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-guide="dedup-page">
       <div className="flex items-center gap-3">
         <UsersIcon className="h-6 w-6 text-gray-500 dark:text-gray-400" aria-hidden="true" />
         <div>
@@ -266,7 +266,7 @@ export default function AdminDedupPage() {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-end gap-3">
+      <div className="flex flex-wrap items-end gap-3" data-guide="dedup-controls">
         <Select
           id="dedup-entity"
           label="Entity type"
@@ -347,33 +347,35 @@ export default function AdminDedupPage() {
         </div>
       )}
 
-      {isLoading ? (
-        <div className="flex justify-center py-12">
-          <Spinner size="lg" />
-        </div>
-      ) : error ? (
-        <div className="p-4 bg-red-50 dark:bg-red-900/20 rounded-md text-sm text-red-700 dark:text-red-300">
-          Failed to load clusters: {error instanceof Error ? error.message : String(error)}
-        </div>
-      ) : clusters.length === 0 ? (
-        <div className="text-center py-12 text-sm text-gray-500 dark:text-gray-400">
-          No duplicate clusters found for {entityType} on {key}. Nothing to clean up here.
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {clusters.map((c) => (
-            <ClusterCard
-              key={`${c.key}:${c.key_value}`}
-              entityType={entityType}
-              cluster={c}
-              busy={merge.isPending && pendingMerge?.cluster.key_value === c.key_value}
-              onMerge={(winnerId, loserIds) =>
-                setPendingMerge({ cluster: c, winnerId, loserIds })
-              }
-            />
-          ))}
-        </div>
-      )}
+      <div data-guide="dedup-results">
+        {isLoading ? (
+          <div className="flex justify-center py-12">
+            <Spinner size="lg" />
+          </div>
+        ) : error ? (
+          <div className="p-4 bg-red-50 dark:bg-red-900/20 rounded-md text-sm text-red-700 dark:text-red-300">
+            Failed to load clusters: {error instanceof Error ? error.message : String(error)}
+          </div>
+        ) : clusters.length === 0 ? (
+          <div className="text-center py-12 text-sm text-gray-500 dark:text-gray-400">
+            No duplicate clusters found for {entityType} on {key}. Nothing to clean up here.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {clusters.map((c) => (
+              <ClusterCard
+                key={`${c.key}:${c.key_value}`}
+                entityType={entityType}
+                cluster={c}
+                busy={merge.isPending && pendingMerge?.cluster.key_value === c.key_value}
+                onMerge={(winnerId, loserIds) =>
+                  setPendingMerge({ cluster: c, winnerId, loserIds })
+                }
+              />
+            ))}
+          </div>
+        )}
+      </div>
 
       <ConfirmDialog
         isOpen={pendingMerge !== null}
