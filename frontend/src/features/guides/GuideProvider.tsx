@@ -367,18 +367,65 @@ function prefersReducedMotion(): boolean {
 
 function getPanelStyle(rect: DOMRect | null): CSSProperties | undefined {
   if (!rect) return undefined;
-  const panelWidth = Math.min(360, window.innerWidth - 32);
-  const left = Math.min(
-    Math.max(16, rect.left + rect.width / 2 - panelWidth / 2),
-    window.innerWidth - panelWidth - 16,
-  );
+  const PANEL_WIDTH_MAX = 360;
+  const PANEL_HEIGHT = 220;
+  const GAP = 12;
+  const EDGE_PAD = 16;
+  const panelWidth = Math.min(PANEL_WIDTH_MAX, window.innerWidth - 32);
+  const clampHorizontal = (x: number) =>
+    Math.min(Math.max(EDGE_PAD, x), window.innerWidth - panelWidth - EDGE_PAD);
+  const clampVertical = (y: number) =>
+    Math.min(Math.max(EDGE_PAD, y), window.innerHeight - PANEL_HEIGHT - EDGE_PAD);
+
   const spaceBelow = window.innerHeight - rect.bottom;
-  const top = spaceBelow > 240
-    ? rect.bottom + 12
-    : Math.max(16, rect.top - 232);
+  const spaceAbove = rect.top;
+  const spaceRight = window.innerWidth - rect.right;
+  const spaceLeft = rect.left;
+
+  // Tall narrow targets (sidebars, vertical nav rails) span most of the
+  // viewport height — placing the panel above/below them lands ON the
+  // sidebar. Detect that case and prefer horizontal placement.
+  const isTallNarrow =
+    rect.height > window.innerHeight * 0.5 && rect.width < panelWidth;
+
+  if (isTallNarrow) {
+    if (spaceRight >= panelWidth + GAP + EDGE_PAD) {
+      return {
+        left: rect.right + GAP,
+        top: clampVertical(rect.top + Math.min(rect.height / 2 - PANEL_HEIGHT / 2, 32)),
+        width: panelWidth,
+      };
+    }
+    if (spaceLeft >= panelWidth + GAP + EDGE_PAD) {
+      return {
+        left: rect.left - panelWidth - GAP,
+        top: clampVertical(rect.top + Math.min(rect.height / 2 - PANEL_HEIGHT / 2, 32)),
+        width: panelWidth,
+      };
+    }
+  }
+
+  const horizCenter = rect.left + rect.width / 2 - panelWidth / 2;
+  if (spaceBelow >= PANEL_HEIGHT + GAP) {
+    return { left: clampHorizontal(horizCenter), top: rect.bottom + GAP, width: panelWidth };
+  }
+  if (spaceAbove >= PANEL_HEIGHT + GAP) {
+    return {
+      left: clampHorizontal(horizCenter),
+      top: rect.top - PANEL_HEIGHT - GAP,
+      width: panelWidth,
+    };
+  }
+  // Last resort: right of target, then left, then center-clamped.
+  if (spaceRight >= panelWidth + GAP + EDGE_PAD) {
+    return { left: rect.right + GAP, top: clampVertical(rect.top), width: panelWidth };
+  }
+  if (spaceLeft >= panelWidth + GAP + EDGE_PAD) {
+    return { left: rect.left - panelWidth - GAP, top: clampVertical(rect.top), width: panelWidth };
+  }
   return {
-    left,
-    top,
+    left: clampHorizontal(horizCenter),
+    top: clampVertical(rect.top - PANEL_HEIGHT - GAP),
     width: panelWidth,
   };
 }
