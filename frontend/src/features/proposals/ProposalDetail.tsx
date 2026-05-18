@@ -226,8 +226,9 @@ function ProposalDetailPage() {
       await updateProposalMutation.mutateAsync({ id: proposal.id, data });
       setShowEditModal(false);
       showSuccess('Proposal updated');
-    } catch {
-      showError('Failed to update proposal');
+    } catch (err) {
+      showError(extractApiErrorDetail(err) ?? 'Failed to update proposal');
+      throw err;
     }
   };
 

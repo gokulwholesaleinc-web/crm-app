@@ -10,6 +10,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { registerAuthTokenGetter } from '../api/client';
 import { clearTenantSlugOnLogout } from '../providers/TenantProvider';
+import { purgeProposalDrafts } from '../features/proposals/proposalDrafts';
 import { safeStorage } from '../utils/safeStorage';
 
 const safeLocalStorage = {
@@ -92,6 +93,7 @@ export const useAuthStore = create<AuthState>()(
       logout: () => {
         // Clear all session-scoped state in one place so every caller
         // (PrivateRoute, useLogout hook, authApi.logout) gets a clean slate.
+        purgeProposalDrafts();
         clearTenantSlugOnLogout();
         set({
           user: null,

@@ -28,10 +28,12 @@ if (
   };
   Object.defineProperty(globalThis, 'localStorage', {
     configurable: true,
+    writable: true,
     value: storage,
   });
   Object.defineProperty(window, 'localStorage', {
     configurable: true,
+    writable: true,
     value: storage,
   });
 }
