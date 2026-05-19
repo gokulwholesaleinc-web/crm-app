@@ -22,6 +22,17 @@ ZERO_DECIMAL_CURRENCIES = {
     "XPF",
 }
 
+# Stripe's only three-decimal currencies. Charges are submitted in
+# thousandths (e.g. BHD 1.234 → 1234) and Stripe rounds the last digit
+# to zero, so callers should still avoid sub-fil precision client-side.
+THREE_DECIMAL_CURRENCIES = {
+    "BHD",
+    "JOD",
+    "KWD",
+    "OMR",
+    "TND",
+}
+
 
 def normalize_currency(currency: str) -> str:
     code = (currency or "").upper()
@@ -31,15 +42,25 @@ def normalize_currency(currency: str) -> str:
 
 
 def currency_exponent(currency: str) -> int:
-    return 0 if normalize_currency(currency) in ZERO_DECIMAL_CURRENCIES else 2
+    code = normalize_currency(currency)
+    if code in ZERO_DECIMAL_CURRENCIES:
+        return 0
+    if code in THREE_DECIMAL_CURRENCIES:
+        return 3
+    return 2
+
+
+def _quantizer(exponent: int) -> Decimal:
+    if exponent == 0:
+        return Decimal("1")
+    return Decimal("1").scaleb(-exponent)
 
 
 def to_stripe_minor_units(amount: float | int | Decimal | str, currency: str) -> int:
     """Convert a display amount to Stripe's integer minor-unit amount."""
     exponent = currency_exponent(currency)
     dec = amount if isinstance(amount, Decimal) else Decimal(str(amount))
-    quantizer = Decimal("1") if exponent == 0 else Decimal("0.01")
-    normalized = dec.quantize(quantizer, rounding=ROUND_HALF_UP)
+    normalized = dec.quantize(_quantizer(exponent), rounding=ROUND_HALF_UP)
     return int((normalized * (Decimal(10) ** exponent)).quantize(Decimal("1")))
 
 
@@ -47,5 +68,4 @@ def from_stripe_minor_units(amount: int | str, currency: str) -> Decimal:
     """Convert Stripe's integer minor-unit amount to a display Decimal."""
     exponent = currency_exponent(currency)
     dec = Decimal(int(amount)) / (Decimal(10) ** exponent)
-    quantizer = Decimal("1") if exponent == 0 else Decimal("0.01")
-    return dec.quantize(quantizer, rounding=ROUND_HALF_UP)
+    return dec.quantize(_quantizer(exponent), rounding=ROUND_HALF_UP)

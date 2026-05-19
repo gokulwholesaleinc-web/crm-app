@@ -3,6 +3,7 @@
 import hashlib
 import logging
 import uuid
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -14,7 +15,7 @@ from src.core.base_service import CRUDService
 from src.core.constants import DEFAULT_PAGE_SIZE
 from src.core.sorting import build_order_clauses
 from src.email.types import EmailAttachment
-from src.payments.amounts import to_stripe_minor_units
+from src.payments.amounts import to_stripe_minor_units as _to_stripe_amount
 from src.payments.exceptions import NoRecipientEmailError
 from src.payments.models import (
     Payment,
@@ -38,20 +39,17 @@ PAYMENT_SORTABLE_FIELDS: dict[str, Any] = {
 }
 
 
-# Common: rounding money to integer cents. Stripe expects amounts as ints.
-# Use banker's-rounding-free half-up so $19.995 → 2000¢, not 1999¢.
-def _to_cents(amount: float | int | Decimal | str) -> int:
-    """Convert a USD display amount to integer cents.
+def _today_utc_iso() -> str:
+    """UTC date stamp for idempotency-key salting.
 
-    Uses Decimal + ROUND_HALF_UP so values like 19.995 round to 2000
-    (not 1999, which is what naive int/truncation produces).
+    Stripe caches idempotency keys for 24h. Without a per-day salt, the
+    same logical input (e.g. weekly $100 "Consulting" invoice to the same
+    customer) reuses yesterday's cached Session/Invoice and collapses
+    into the original — silent missed billings. Salting with today's UTC
+    date keeps genuine retries (same instant, same input) on the cached
+    key while letting tomorrow's legitimate repeat get a fresh one.
     """
-    return to_stripe_minor_units(amount, "USD")
-
-
-def _to_stripe_amount(amount: float | int | Decimal | str, currency: str) -> int:
-    """Convert a display amount to Stripe's currency-aware integer amount."""
-    return to_stripe_minor_units(amount, currency)
+    return datetime.now(UTC).date().isoformat()
 
 
 def _stable_stripe_idempotency_key(prefix: str, *parts: object) -> str:
@@ -313,6 +311,7 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
             currency.lower(),
             success_url,
             cancel_url,
+            _today_utc_iso(),
         )
         session = stripe.checkout.Session.create(
             **session_params,
@@ -398,6 +397,7 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
             user_id,
             stripe_amount,
             currency.lower(),
+            _today_utc_iso(),
         )
         intent = stripe.PaymentIntent.create(
             **intent_params,
@@ -969,6 +969,7 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
             description,
             due_days,
             quote_id,
+            _today_utc_iso(),
         )
         invoice = self._stripe_create_finalize_send_invoice(
             stripe=stripe,
@@ -1133,13 +1134,23 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         # Stable key over the logical request shape so a network retry
         # collapses to one Session. Includes success_url + cancel_url so
         # changing the redirect target spawns a fresh Session instead of
-        # silently returning the cached one with the old URLs.
+        # silently returning the cached one with the old URLs. Day-bucket
+        # salt prevents weekly/monthly repeat charges with identical
+        # parameters from collapsing into yesterday's cached Session.
         stripe_amount = _to_stripe_amount(amount, currency)
-        idem_payload = (
-            f"{customer_id}|{user_id}|{stripe_amount}|{currency.lower()}"
-            f"|{interval}|{interval_count}|{description}|{success_url}|{cancel_url}"
+        idempotency_key = _stable_stripe_idempotency_key(
+            "sub_chk",
+            customer_id,
+            user_id,
+            stripe_amount,
+            currency.lower(),
+            interval,
+            interval_count,
+            description,
+            success_url,
+            cancel_url,
+            _today_utc_iso(),
         )
-        idempotency_key = f"sub_chk_{hashlib.sha256(idem_payload.encode()).hexdigest()[:24]}"
 
         session = stripe.checkout.Session.create(
             mode="subscription",
@@ -1254,10 +1265,23 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
             ],
             metadata={"proposal_id": str(proposal_id)},
             subscription_data={"metadata": {"proposal_id": str(proposal_id)}},
-            # Deterministic key — same reasoning as create_invoice_for_proposal.
-            # Callers regenerating an expired session must pass a distinct key
-            # so Stripe doesn't return the (still-cached) original.
-            idempotency_key=idempotency_key or f"proposal_sub_{proposal_id}_v1",
+            # Stable key over the proposal's logical billing shape. Salting
+            # with amount/currency/interval prevents the original mistake:
+            # if an admin edits the proposal price and the customer
+            # re-accepts within 24h, the bare ``proposal_sub_{id}_v1`` key
+            # would return Stripe's cached Session for the OLD amount and
+            # silently charge the wrong price. Caller can still pass an
+            # explicit override key (e.g. when regenerating an expired
+            # session intentionally).
+            idempotency_key=idempotency_key
+            or _stable_stripe_idempotency_key(
+                "proposal_sub",
+                proposal_id,
+                stripe_amount,
+                currency.lower(),
+                interval,
+                interval_count,
+            ),
         )
 
         return {

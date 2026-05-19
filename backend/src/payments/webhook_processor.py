@@ -165,6 +165,15 @@ class WebhookProcessor:
             await self._handle_async_payment_failed(obj)
         elif event_type == "setup_intent.succeeded":
             await self._handle_setup_intent_succeeded(obj)
+        else:
+            # Stripe is still happy with the 200 ack — we de-dup below
+            # so they don't retry — but a future event we silently no-op
+            # would never surface otherwise. Log once per delivery.
+            logger.info(
+                "stripe webhook unhandled event_type=%s event_id=%s",
+                event_type,
+                event_id,
+            )
 
         # Mark processed AFTER all handlers ran so a mid-processing crash
         # allows Stripe to retry. The dedup above still protects against
