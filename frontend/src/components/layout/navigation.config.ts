@@ -63,7 +63,19 @@ export const DEFAULT_SECONDARY_NAVIGATION: NavItem[] = [
 export const STORAGE_KEY_MAIN = 'crm-sidebar-order:v1';
 export const STORAGE_KEY_SECONDARY = 'crm-sidebar-secondary-order:v1';
 
-export const ADMIN_ONLY_IDS = new Set(['admin', 'admin-audit', 'approvals', 'admin-sharing', 'admin-dedup']);
+export const ADMIN_ONLY_IDS = new Set(['admin', 'admin-audit', 'approvals', 'admin-sharing']);
+export const MANAGER_OR_ADMIN_IDS = new Set(['admin-dedup']);
+
+export function canSeeSecondaryNavItem(
+  itemId: string,
+  user?: { role?: string | null; is_superuser?: boolean | null } | null,
+): boolean {
+  const isAdmin = user?.is_superuser === true || user?.role === 'admin';
+  const isManagerOrAbove = isAdmin || user?.role === 'manager';
+  if (ADMIN_ONLY_IDS.has(itemId)) return isAdmin;
+  if (MANAGER_OR_ADMIN_IDS.has(itemId)) return isManagerOrAbove;
+  return true;
+}
 
 export function readStoredOrder(key: string): string[] | null {
   const parsed = safeStorage.getJson<unknown>(key);

@@ -179,7 +179,6 @@ class TestGoogleCalendarStatus:
     ):
         """Google 400 invalid_grant → credential.is_active=False + GoogleCalendarAuthError raised."""
         import httpx
-
         from src.integrations.google_calendar import service as svc_module
         from src.integrations.google_calendar.models import GoogleCalendarCredential
         from src.integrations.google_calendar.service import (
@@ -233,7 +232,6 @@ class TestGoogleCalendarStatus:
     ):
         """Google 400 with non-fatal error code → credential stays active, user can retry."""
         import httpx
-
         from src.integrations.google_calendar import service as svc_module
         from src.integrations.google_calendar.models import GoogleCalendarCredential
         from src.integrations.google_calendar.service import GoogleCalendarService

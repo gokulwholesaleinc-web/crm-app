@@ -10,7 +10,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.auth.models import User
 from src.auth.security import get_password_hash
-from src.roles.models import Role
+from src.roles.models import DEFAULT_PERMISSIONS, Role
 
 
 class TestListRoles:
@@ -58,6 +58,12 @@ class TestListRoles:
         admin_role = next(r for r in data if r["name"] == "admin")
         assert admin_role["permissions"] is not None
         assert "leads" in admin_role["permissions"]
+        assert "opportunities" not in admin_role["permissions"]
+
+    def test_default_permissions_exclude_deleted_opportunities(self):
+        """Deleted opportunities are not exposed as an active RBAC surface."""
+        for permissions in DEFAULT_PERMISSIONS.values():
+            assert "opportunities" not in permissions
 
     @pytest.mark.asyncio
     async def test_list_roles_unauthorized(

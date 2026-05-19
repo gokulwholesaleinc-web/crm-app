@@ -8,7 +8,7 @@ import { useUserPreferences } from '../../hooks/useUserPreferences';
 import {
   DEFAULT_MAIN_NAVIGATION,
   DEFAULT_SECONDARY_NAVIGATION,
-  ADMIN_ONLY_IDS,
+  canSeeSecondaryNavItem,
   type NavItem,
 } from './navigation.config';
 
@@ -31,11 +31,9 @@ export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
     setMobileDarkLogoError(false);
   }, [tenant?.logo_url_dark]);
 
-  const isMobileAdmin = mobileUser?.is_superuser || mobileUser?.role === 'admin';
-  const mobileSecondaryNav = DEFAULT_SECONDARY_NAVIGATION.filter((item) => {
-    if (ADMIN_ONLY_IDS.has(item.id)) return isMobileAdmin;
-    return true;
-  });
+  const mobileSecondaryNav = DEFAULT_SECONDARY_NAVIGATION.filter((item) =>
+    canSeeSecondaryNavItem(item.id, mobileUser)
+  );
 
   const { prefs } = useUserPreferences();
   const hidden = new Set(prefs.hiddenNavIds ?? []);

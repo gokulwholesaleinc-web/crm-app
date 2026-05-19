@@ -373,7 +373,7 @@ function AppRoutes() {
       <Route
         path="/admin/dedup"
         element={
-          <PrivateRoute allowedRoles={['admin']}>
+          <PrivateRoute allowedRoles={['admin', 'manager']}>
             <ErrorBoundary>
               <AdminDedupPage />
             </ErrorBoundary>

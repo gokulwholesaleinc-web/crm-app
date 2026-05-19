@@ -6,11 +6,31 @@ import type { User } from '../store/authStore';
 
 // Mock authStore so we can control user state without hitting localStorage
 vi.mock('../store/authStore', () => {
-  let _user: User | null = null;
+  let _state: {
+    user: User | null;
+    isAuthenticated: boolean;
+    isLoading: boolean;
+    updateUser: ReturnType<typeof vi.fn>;
+  } = {
+    user: null,
+    isAuthenticated: false,
+    isLoading: false,
+    updateUser: vi.fn(),
+  };
   return {
-    useAuthStore: (selector: (state: { user: User | null }) => unknown) =>
-      selector({ user: _user }),
-    __setUser: (u: User | null) => { _user = u; },
+    useAuthStore: (selector: (state: typeof _state) => unknown) =>
+      selector(_state),
+    __setUser: (u: User | null) => {
+      _state = { ..._state, user: u, isAuthenticated: !!u };
+    },
+    __resetAuth: () => {
+      _state = {
+        user: null,
+        isAuthenticated: false,
+        isLoading: false,
+        updateUser: vi.fn(),
+      };
+    },
   };
 });
 
@@ -19,12 +39,13 @@ vi.mock('../api/roles', () => ({
   rolesApi: {
     listRoles: vi.fn(),
     getMyPermissions: vi.fn(),
+    assignRole: vi.fn(),
   },
 }));
 
 import { usePermissions, useMyPermissions } from './usePermissions';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { __setUser } = await import('../store/authStore') as any;
+const { __setUser, __resetAuth } = await import('../store/authStore') as any;
 import { rolesApi } from '../api/roles';
 
 function makeWrapper() {
@@ -47,64 +68,92 @@ const BASE_USER: User = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  __setUser(null);
+  __resetAuth();
 });
 
 describe('usePermissions', () => {
   it('defaults to sales_rep permissions when no user is set', () => {
-    const { result } = renderHook(() => usePermissions());
+    const { result } = renderHook(() => usePermissions(), { wrapper: makeWrapper() });
 
     expect(result.current.role).toBe('sales_rep');
     expect(result.current.isAdmin).toBe(false);
     expect(result.current.isManager).toBe(false);
+    expect(rolesApi.getMyPermissions).not.toHaveBeenCalled();
   });
 
-  it('grants full permissions to admin role', () => {
+  it('uses role fallback while server permissions are loading', () => {
+    vi.mocked(rolesApi.getMyPermissions).mockReturnValue(new Promise(() => {}));
     __setUser({ ...BASE_USER, role: 'admin' });
 
-    const { result } = renderHook(() => usePermissions());
+    const { result } = renderHook(() => usePermissions(), { wrapper: makeWrapper() });
 
     expect(result.current.isAdmin).toBe(true);
     expect(result.current.canCreate('leads')).toBe(true);
     expect(result.current.canDelete('settings')).toBe(true);
     expect(result.current.canDelete('roles')).toBe(true);
+    expect(result.current.isUsingFallbackPermissions).toBe(true);
   });
 
-  it('denies delete on settings and roles for sales_rep', () => {
+  it('uses server effective permissions over the role fallback', async () => {
+    vi.mocked(rolesApi.getMyPermissions).mockResolvedValue({
+      role: 'custom_read_only',
+      permissions: { leads: ['read'], reports: ['read'] },
+    });
     __setUser({ ...BASE_USER, role: 'sales_rep' });
 
-    const { result } = renderHook(() => usePermissions());
+    const { result } = renderHook(() => usePermissions(), { wrapper: makeWrapper() });
 
-    expect(result.current.role).toBe('sales_rep');
-    expect(result.current.canDelete('settings')).toBe(false);
-    expect(result.current.canDelete('roles')).toBe(false);
+    await waitFor(() => expect(result.current.role).toBe('custom_read_only'));
+
     expect(result.current.canRead('leads')).toBe(true);
+    expect(result.current.canCreate('leads')).toBe(false);
+    expect(result.current.canRead('reports')).toBe(true);
+    expect(result.current.isUsingFallbackPermissions).toBe(false);
   });
 
   it('grants all permissions to superuser regardless of role', () => {
+    vi.mocked(rolesApi.getMyPermissions).mockReturnValue(new Promise(() => {}));
     __setUser({ ...BASE_USER, role: 'viewer', is_superuser: true });
 
-    const { result } = renderHook(() => usePermissions());
+    const { result } = renderHook(() => usePermissions(), { wrapper: makeWrapper() });
 
     expect(result.current.hasPermission('roles', 'delete')).toBe(true);
     expect(result.current.isAdmin).toBe(true);
   });
 
-  it('viewer can only read, not create', () => {
+  it('falls back to role defaults when server permissions fail', async () => {
+    vi.mocked(rolesApi.getMyPermissions).mockRejectedValue(new Error('offline'));
     __setUser({ ...BASE_USER, role: 'viewer' });
 
-    const { result } = renderHook(() => usePermissions());
+    const { result } = renderHook(() => usePermissions(), { wrapper: makeWrapper() });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
 
     expect(result.current.canRead('leads')).toBe(true);
     expect(result.current.canCreate('leads')).toBe(false);
+    expect(result.current.isUsingFallbackPermissions).toBe(true);
+  });
+
+  it('does not expose retired opportunities permissions in fallback UI gates', () => {
+    vi.mocked(rolesApi.getMyPermissions).mockReturnValue(new Promise(() => {}));
+    __setUser({ ...BASE_USER, role: 'admin' });
+
+    const { result } = renderHook(() => usePermissions(), { wrapper: makeWrapper() });
+
+    expect(result.current.permissions).not.toHaveProperty('opportunities');
+    expect(result.current.hasPermission('opportunities', 'read')).toBe(false);
   });
 });
 
 describe('useMyPermissions', () => {
   it('returns server-side permissions on success', async () => {
+    __setUser({ ...BASE_USER, role: 'admin' });
     vi.mocked(rolesApi.getMyPermissions).mockResolvedValue({
       role: 'admin',
-      permissions: { leads: ['create', 'read', 'update', 'delete'] },
+      permissions: {
+        leads: ['create', 'read', 'update', 'delete'],
+        opportunities: ['read'],
+      },
     });
 
     const { result } = renderHook(() => useMyPermissions(), { wrapper: makeWrapper() });
@@ -113,9 +162,11 @@ describe('useMyPermissions', () => {
 
     expect(result.current.data?.role).toBe('admin');
     expect(result.current.data?.permissions.leads).toContain('delete');
+    expect(result.current.data?.permissions).not.toHaveProperty('opportunities');
   });
 
   it('exposes loading state on initial fetch', () => {
+    __setUser({ ...BASE_USER, role: 'sales_rep' });
     // Never resolves — stays pending
     vi.mocked(rolesApi.getMyPermissions).mockReturnValue(new Promise(() => {}));
 
@@ -125,6 +176,7 @@ describe('useMyPermissions', () => {
   });
 
   it('exposes error state when the API fails', async () => {
+    __setUser({ ...BASE_USER, role: 'sales_rep' });
     vi.mocked(rolesApi.getMyPermissions).mockRejectedValue(new Error('Unauthorized'));
 
     const { result } = renderHook(() => useMyPermissions(), { wrapper: makeWrapper() });

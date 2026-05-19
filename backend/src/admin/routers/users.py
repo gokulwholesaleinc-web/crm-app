@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.admin._router_helpers import _require_admin
 from src.admin.schemas import (
@@ -19,9 +20,48 @@ from src.core.rate_limit import limiter
 from src.core.router_utils import CurrentUser, DBSession, raise_not_found
 from src.leads.models import Lead
 from src.opportunities.models import Opportunity
+from src.roles.models import RoleName
+from src.roles.service import LastAdminError, RoleService
 from src.whitelabel.models import Tenant, TenantUser
 
 router = APIRouter()
+
+
+def _validate_default_role_name(role_name: str) -> str:
+    valid_roles = {role.value for role in RoleName}
+    if role_name not in valid_roles:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail=f"Invalid role. Must be one of: {', '.join(sorted(valid_roles))}",
+        )
+    return role_name
+
+
+async def _assign_default_role(db: AsyncSession, user_id: int, role_name: str) -> None:
+    """Assign a built-in role through RoleService's source-of-truth path."""
+    validated_role_name = _validate_default_role_name(role_name)
+    service = RoleService(db)
+    role = await service.get_role_by_name(validated_role_name)
+    if role is None:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail=f"Role '{validated_role_name}' is not configured",
+        )
+
+    try:
+        await service.assign_role_to_user(user_id, role.id)
+    except LastAdminError as exc:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except ValueError as exc:
+        if str(exc) == "User not found":
+            raise_not_found("User", user_id)
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -99,8 +139,6 @@ async def update_admin_user(
     if not user:
         raise_not_found("User", user_id)
 
-    if data.role is not None:
-        user.role = data.role
     if data.is_active is not None:
         user.is_active = data.is_active
     if data.email is not None:
@@ -117,9 +155,13 @@ async def update_admin_user(
     if data.full_name is not None:
         user.full_name = data.full_name
 
+    if data.role is not None:
+        await _assign_default_role(db, user.id, data.role)
+
     await db.commit()
     await db.refresh(user)
-    invalidate_user_cache(user.id)
+    if data.role is None:
+        invalidate_user_cache(user.id)
 
     return AdminUserResponse(
         id=user.id,
@@ -214,22 +256,16 @@ async def assign_role(
     """Assign a role to a user."""
     _require_admin(current_user)
 
-    valid_roles = {"admin", "manager", "sales_rep", "viewer"}
-    if data.role not in valid_roles:
-        raise HTTPException(
-            status_code=HTTPStatus.BAD_REQUEST,
-            detail=f"Invalid role. Must be one of: {', '.join(sorted(valid_roles))}",
-        )
+    _validate_default_role_name(data.role)
 
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
         raise_not_found("User", user_id)
 
-    user.role = data.role
+    await _assign_default_role(db, user.id, data.role)
     await db.commit()
     await db.refresh(user)
-    invalidate_user_cache(user.id)
 
     return AdminUserResponse(
         id=user.id,
