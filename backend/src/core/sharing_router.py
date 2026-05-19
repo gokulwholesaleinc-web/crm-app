@@ -214,7 +214,7 @@ async def revoke_share(
     db: DBSession,
     data_scope: Annotated[DataScope, Depends(get_data_scope)],
 ):
-    """Revoke a share as the sharer, recipient, manager, or admin."""
+    """Revoke a share as the sharer, recipient, or admin."""
     result = await db.execute(
         select(EntityShare).where(EntityShare.id == share_id)
     )
@@ -227,7 +227,7 @@ async def revoke_share(
 
     if (
         not current_user.is_superuser
-        and data_scope.role_name not in ("admin", "manager")
+        and data_scope.role_name != "admin"
         and current_user.id not in (share.shared_by_user_id, share.shared_with_user_id)
     ):
         raise HTTPException(
@@ -260,7 +260,7 @@ async def revoke_share(
 
 
 # ---------------------------------------------------------------------------
-# Admin/manager listing endpoint
+# Admin listing endpoint
 # ---------------------------------------------------------------------------
 
 
@@ -298,11 +298,11 @@ async def admin_list_shares(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
 ):
-    """List all EntityShare rows for admins and managers."""
-    if not current_user.is_superuser and data_scope.role_name not in ("admin", "manager"):
+    """List all EntityShare rows for admins."""
+    if not current_user.is_superuser and data_scope.role_name != "admin":
         raise HTTPException(
             status_code=HTTPStatus.FORBIDDEN,
-            detail="Only admins and managers can access this endpoint",
+            detail="Only admins can access this endpoint",
         )
 
     SharedWith = aliased(User)
