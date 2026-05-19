@@ -1,5 +1,12 @@
 import { ReactNode, RefObject, useEffect, useState } from 'react';
 
+// Single source of truth for the CSS variable name. Layout sets it from
+// `sidebarCollapsed`; this file consumes it via the className below. A
+// typo in either spot would silently fall back to 16rem and misalign on
+// a collapsed sidebar — the `const` shared by writer + reader prevents
+// that drift.
+export const APP_SIDEBAR_W_VAR = '--app-sidebar-w';
+
 interface StickyActionBarProps {
   children: ReactNode;
   triggerRef?: RefObject<HTMLElement | null>;
@@ -29,9 +36,12 @@ export function StickyActionBar({ children, triggerRef }: StickyActionBarProps) 
 
   if (!show) return null;
 
+  // fixed (not sticky): mount/unmount on scroll added ~50px to main's
+  // flow and jolted scrollTop. Offsets clear 3px brand strip + Header
+  // (h-14/h-16); --app-sidebar-w from Layout aligns the left edge.
   return (
     <div
-      className="sticky top-0 z-30 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-2 bg-white/85 dark:bg-gray-900/85 backdrop-blur border-b border-gray-200 dark:border-gray-700"
+      className="fixed top-[calc(3.5rem+3px)] sm:top-[calc(4rem+3px)] left-0 right-0 lg:left-[var(--app-sidebar-w,16rem)] z-30 px-4 sm:px-6 lg:px-8 py-2 bg-white/85 dark:bg-gray-900/85 backdrop-blur border-b border-gray-200 dark:border-gray-700"
       role="toolbar"
       aria-label="Page actions"
     >

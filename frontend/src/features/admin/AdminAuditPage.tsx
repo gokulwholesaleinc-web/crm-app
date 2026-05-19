@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ArrowDownTrayIcon,
   ArrowPathIcon,
@@ -554,6 +554,47 @@ function EntityDetailDrawer({
   );
 }
 
+// The audit feed auto-refetches every 120s (lowered from 30s to cut Neon
+// cost; see useAudit.ts). Admins acting on stale data could revoke a
+// session that was already restored, so surface the staleness explicitly.
+// Amber kicks in past 60s — about the human threshold for "I should hit
+// Refresh before I act". `tick` is the parent's 10s heartbeat that ages
+// the label between refetches.
+function FeedStalenessBadge({
+  updatedAt,
+  isFetching,
+  tick: _tick,
+}: {
+  updatedAt: number;
+  isFetching: boolean;
+  tick: number;
+}) {
+  if (!updatedAt) return null;
+  const ageSec = Math.max(0, Math.floor((Date.now() - updatedAt) / 1000));
+  const label = isFetching
+    ? 'Refreshing…'
+    : ageSec < 5
+      ? 'Updated just now'
+      : ageSec < 60
+        ? `Updated ${ageSec}s ago`
+        : `Updated ${Math.floor(ageSec / 60)}m ago`;
+  const stale = !isFetching && ageSec >= 60;
+  return (
+    <span
+      role="status"
+      aria-live="polite"
+      className={
+        stale
+          ? 'inline-flex items-center self-center rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-200'
+          : 'inline-flex items-center self-center rounded-md border border-gray-200 bg-gray-50 px-2 py-1 text-xs text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300'
+      }
+      title={new Date(updatedAt).toLocaleString()}
+    >
+      {label}
+    </span>
+  );
+}
+
 export default function AdminAuditPage() {
   usePageTitle('Audit - Admin');
 
@@ -573,6 +614,13 @@ export default function AdminAuditPage() {
   const [selectedEntity, setSelectedEntity] = useState<AdminAuditEntitySummary | null>(null);
   const [exportingFull, setExportingFull] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  // 10s tick so the staleness badge ages between the 120s auto-refetches.
+  // Without this, the badge would only re-render when the query refires.
+  const [staleTick, setStaleTick] = useState(0);
+  useEffect(() => {
+    const id = window.setInterval(() => setStaleTick((n) => n + 1), 10_000);
+    return () => window.clearInterval(id);
+  }, []);
 
   const summaryFilters = useMemo(() => ({
     start_date: startDate || undefined,
@@ -601,8 +649,13 @@ export default function AdminAuditPage() {
 
   const { data: summary, isLoading: summaryLoading, refetch: refetchSummary } =
     useAdminAuditSummary(summaryFilters);
-  const { data: feed, isLoading: feedLoading, refetch: refetchFeed } =
-    useAdminAuditFeed(feedFilters);
+  const {
+    data: feed,
+    isLoading: feedLoading,
+    isFetching: feedFetching,
+    dataUpdatedAt: feedUpdatedAt,
+    refetch: refetchFeed,
+  } = useAdminAuditFeed(feedFilters);
   const { data: selectedUserDetail, isLoading: userDetailLoading } =
     useAdminAuditUserDetail(selectedUser?.user_id ?? 0, detailFilters);
   const { data: selectedEntityDetail, isLoading: entityDetailLoading } =
@@ -755,6 +808,11 @@ export default function AdminAuditPage() {
                 ? `Export filter (${feed.total.toLocaleString()})`
                 : 'Export filter'}
           </Button>
+          <FeedStalenessBadge
+            updatedAt={feedUpdatedAt}
+            isFetching={feedFetching}
+            tick={staleTick}
+          />
           <Button
             variant="secondary"
             leftIcon={<ArrowPathIcon className="h-4 w-4" />}

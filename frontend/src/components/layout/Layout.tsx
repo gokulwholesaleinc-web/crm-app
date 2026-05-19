@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import clsx from 'clsx';
 import { Sidebar, MobileSidebar } from './Sidebar';
 import { Header, User } from './Header';
+import { APP_SIDEBAR_W_VAR } from '../shared/StickyActionBar';
 import { useDensity } from '../../hooks/useDensity';
 
 export interface LayoutProps {
@@ -29,8 +30,15 @@ export function Layout({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   useDensity();
 
+  // Expose sidebar width to position:fixed descendants (StickyActionBar)
+  // so they align with main's left edge. Mobile uses left-0 directly;
+  // the var only matters at lg+ where the sidebar renders.
+  const sidebarStyle = {
+    [APP_SIDEBAR_W_VAR]: sidebarCollapsed ? '4rem' : '16rem',
+  } as React.CSSProperties;
+
   return (
-    <div className="flex flex-col h-screen bg-brand-page overflow-hidden">
+    <div className="flex flex-col h-screen bg-brand-page overflow-hidden" style={sidebarStyle}>
       {/* Skip Link */}
       <a href="#main-content" className="skip-link">Skip to main content</a>
 
