@@ -74,6 +74,7 @@ const OAuthCallbackPage = lazy(() => import('../features/settings/OAuthCallbackP
 
 // Admin
 const AdminDashboardPage = lazy(() => import('../features/admin/AdminDashboard'));
+const AdminAuditPage = lazy(() => import('../features/admin/AdminAuditPage'));
 const UserApprovalsPage = lazy(() => import('../features/admin/UserApprovalsPage'));
 const AdminSharingPage = lazy(() => import('../features/admin/AdminSharingPage'));
 const AdminDedupPage = lazy(() => import('../features/admin/AdminDedupPage'));
@@ -345,6 +346,16 @@ function AppRoutes() {
           <PrivateRoute allowedRoles={['admin']}>
             <ErrorBoundary>
               <UserApprovalsPage />
+            </ErrorBoundary>
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/admin/audit"
+        element={
+          <PrivateRoute allowedRoles={['admin']}>
+            <ErrorBoundary>
+              <AdminAuditPage />
             </ErrorBoundary>
           </PrivateRoute>
         }

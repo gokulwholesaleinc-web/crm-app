@@ -7,6 +7,7 @@ import { AttachmentList } from '../../components/shared/AttachmentList';
 import { usePayment } from '../../hooks/usePayments';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
+import { useWorkSessionHeartbeat } from '../../hooks/useWorkSessionHeartbeat';
 import { apiClient } from '../../api/client';
 import { showSuccess, showError } from '../../utils/toast';
 import { extractApiErrorDetail } from '../../utils/errors';
@@ -28,6 +29,7 @@ function PaymentDetailPage() {
   const { id } = useParams();
   const handleBack = useSmartBack('/payments');
   const paymentId = id ? parseInt(id, 10) : undefined;
+  useWorkSessionHeartbeat({ entityType: 'payments', entityId: paymentId });
 
   const { data: payment, isLoading, error } = usePayment(paymentId);
   usePageTitle(payment ? `Payment #${payment.id}` : 'Payment');

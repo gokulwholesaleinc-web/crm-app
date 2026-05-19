@@ -7,6 +7,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
 import { useContacts } from '../../hooks/useContacts';
 import { useLeads } from '../../hooks/useLeads';
+import { useWorkSessionHeartbeat } from '../../hooks/useWorkSessionHeartbeat';
 import {
   ArrowLeftIcon,
   ArrowPathIcon,
@@ -284,6 +285,7 @@ export function CampaignDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const campaignId = id ? parseInt(id, 10) : undefined;
+  useWorkSessionHeartbeat({ entityType: 'campaigns', entityId: campaignId });
   const { canUpdate, canDelete } = usePermissions();
   const canManageCampaign = canUpdate('campaigns');
   const canDeleteCampaign = canDelete('campaigns');
