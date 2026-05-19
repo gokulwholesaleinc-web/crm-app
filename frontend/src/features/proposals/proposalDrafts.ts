@@ -23,7 +23,6 @@ export interface ProposalFormDraftFields {
 export interface ProposalFormDraftValue {
   formData: ProposalFormDraftFields;
   billing: BillingTermsValue;
-  pendingSigningDocNames: string[];
 }
 
 export interface ProposalFormDraftRecord {
@@ -102,15 +101,7 @@ function sanitizeDraftValue(raw: unknown): ProposalFormDraftValue | null {
   const formData = sanitizeFormData(raw.formData);
   const billing = sanitizeBilling(raw.billing);
   if (!formData || !billing) return null;
-  return {
-    formData,
-    billing,
-    pendingSigningDocNames: Array.isArray(raw.pendingSigningDocNames)
-      ? raw.pendingSigningDocNames.filter(
-          (name): name is string => typeof name === 'string' && name.length > 0,
-        )
-      : [],
-  };
+  return { formData, billing };
 }
 
 function sanitizeRecord(raw: unknown): ProposalFormDraftRecord | null {
@@ -186,7 +177,6 @@ export function isProposalFormDraftEmpty(value: ProposalFormDraftValue): boolean
     textValues.every((entry) => String(entry ?? '').trim() === '') &&
     value.formData.contactId == null &&
     value.formData.companyId == null &&
-    value.pendingSigningDocNames.length === 0 &&
     value.billing.payment_type === 'one_time' &&
     value.billing.recurring_interval == null &&
     value.billing.recurring_interval_count == null &&

@@ -3,11 +3,10 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { PlusIcon, DocumentDuplicateIcon } from '@heroicons/react/24/outline';
 import { Button, EntityLink, Modal, ConfirmDialog, StatusBadge, PaginationBar } from '../../components/ui';
 import { SkeletonTable } from '../../components/ui/Skeleton';
-import { ProposalForm, type SigningUploadStatus } from './ProposalForm';
+import { ProposalForm } from './ProposalForm';
 import { TemplateGallery } from './TemplateGallery';
 import { SortableTh } from '../../components/shared/SortableTh';
 import { useProposals, useCreateProposal, useDeleteProposal, useDuplicateProposal } from '../../hooks/useProposals';
-import { uploadProposalSigningDocument } from '../../api/proposals';
 import {
   useListPageSizeState,
   useListSortPersistence,
@@ -52,10 +51,6 @@ function ProposalsPage() {
     isOpen: false,
     proposal: null,
   });
-  // Live progress for the post-create signing-doc upload loop. Drives the
-  // submit button label so the modal doesn't go silent for several seconds
-  // between "proposal row created" and "navigate to detail page".
-  const [signingUploadStatus, setSigningUploadStatus] = useState<SigningUploadStatus | null>(null);
   const { sortBy, sortDir, toggle: toggleSort } = useListSortPersistence('proposals');
   const [pageSize, setPageSize] = useListPageSizeState('proposals');
 
@@ -114,10 +109,7 @@ function ProposalsPage() {
     }
   };
 
-  const handleFormSubmit = async (
-    data: ProposalCreate,
-    pendingSigningDocs: File[] = [],
-  ) => {
+  const handleFormSubmit = async (data: ProposalCreate) => {
     let created;
     try {
       created = await createProposalMutation.mutateAsync(data);
@@ -125,65 +117,16 @@ function ProposalsPage() {
       showError(extractApiErrorDetail(err) ?? 'Failed to create proposal');
       throw err;
     }
-
-    // Upload signable PDFs after create so the endpoint has a proposal id.
-    // Placement still happens on the detail page; send is gated until every
-    // uploaded document has a signing area. Failures are tracked per-file so
-    // partial success doesn't disappear into a generic toast (a re-upload of
-    // the whole batch would otherwise dupe the files that already landed).
-    const failed: { fileName: string; detail: string }[] = [];
-    let succeededCount = 0;
-    let uploadIndex = 0;
-    for (const file of pendingSigningDocs) {
-      uploadIndex += 1;
-      setSigningUploadStatus({
-        current: uploadIndex,
-        total: pendingSigningDocs.length,
-        fileName: file.name,
-      });
-      try {
-        await uploadProposalSigningDocument(created.id, file);
-        succeededCount++;
-      } catch (err) {
-        failed.push({
-          fileName: file.name,
-          detail: extractApiErrorDetail(err) ?? 'Upload failed.',
-        });
-      }
-    }
-    setSigningUploadStatus(null);
     setShowForm(false);
-
-    if (pendingSigningDocs.length === 0) {
-      showSuccess('Proposal created');
-    } else if (failed.length === 0) {
-      showSuccess(
-        `Proposal created — ${succeededCount} signing document${succeededCount === 1 ? '' : 's'} uploaded`,
-      );
-    } else if (succeededCount === 0) {
-      showError(
-        `Proposal created but every signing document failed to upload. Retry from the proposal page.`,
-      );
-    } else {
-      showError(
-        `Proposal created — ${succeededCount} of ${pendingSigningDocs.length} signing documents uploaded; ${failed.length} failed.`,
-      );
-    }
-
-    const failureBanner =
-      failed.length > 0
-        ? failed
-            .map((f) => `${f.fileName}: ${f.detail}`)
-            .join(' · ')
-        : null;
+    showSuccess('Proposal created');
+    // Land on detail page with a hint so the Signing Documents card
+    // scrolls into view — that's where uploads happen now.
     navigate(`/proposals/${created.id}`, {
-      state: failureBanner ? { masterUploadFailed: failureBanner } : undefined,
+      state: { focusSigningDocuments: true },
     });
   };
 
   const handleFormCancel = () => {
-    // Don't let the modal close swallow an in-flight upload batch.
-    if (signingUploadStatus != null) return;
     setShowForm(false);
   };
 
@@ -576,7 +519,6 @@ function ProposalsPage() {
           onSubmit={handleFormSubmit}
           onCancel={handleFormCancel}
           isLoading={createProposalMutation.isPending}
-          signingUploadStatus={signingUploadStatus}
         />
       </Modal>
 

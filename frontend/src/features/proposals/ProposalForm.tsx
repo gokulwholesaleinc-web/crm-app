@@ -8,7 +8,6 @@ import { useContacts } from '../../hooks/useContacts';
 import { useCompanies } from '../../hooks/useCompanies';
 import { useFormSubmitShortcut } from '../../hooks/useSubmitShortcut';
 import { useUnsavedChangesWarning } from '../../hooks/useUnsavedChangesWarning';
-import { PendingMasterContractField } from './PendingMasterContractField';
 import { useAuthStore } from '../../store/authStore';
 import type { ProposalCreate } from '../../types';
 import {
@@ -23,30 +22,11 @@ import {
   type ProposalFormDraftValue,
 } from './proposalDrafts';
 
-/** Progress reported by the parent while signing PDFs upload after a
- *  successful create. Lets the submit button announce which file is
- *  currently uploading instead of going dark mid-loop. */
-export interface SigningUploadStatus {
-  current: number;
-  total: number;
-  fileName: string;
-}
-
 interface ProposalFormProps {
-  /** Called with form data plus pending signing PDFs (create flow only).
-   *  The parent uploads them after the proposal id exists; signature boxes
-   *  are placed from the proposal detail page before sending. */
-  onSubmit: (data: ProposalCreate, pendingSigningDocs?: File[]) => void | Promise<void>;
+  onSubmit: (data: ProposalCreate) => void | Promise<void>;
   onCancel: () => void;
   isLoading?: boolean;
-  /** Non-null while the parent is uploading the stashed signing PDFs.
-   *  Drives an in-progress label so the user can see N/M progress instead
-   *  of staring at a frozen modal between create-row and navigate. */
-  signingUploadStatus?: SigningUploadStatus | null;
   initialData?: Partial<ProposalCreate>;
-  /** Form mode discriminator. Edit mode no longer carries the
-   *  master-contract widget — that surface lives on the detail page
-   *  sidebar so it's discoverable without opening the modal. */
   proposalId?: number;
 }
 
@@ -54,7 +34,6 @@ export function ProposalForm({
   onSubmit,
   onCancel,
   isLoading,
-  signingUploadStatus = null,
   initialData,
   proposalId,
 }: ProposalFormProps) {
@@ -62,13 +41,10 @@ export function ProposalForm({
   const userId = useAuthStore((s) => s.user?.id);
   const draftMode = isCreating ? 'create' : 'edit';
   const draftKey = getProposalDraftKey(userId, draftMode, proposalId);
-  const [pendingSigningDocs, setPendingSigningDocs] = useState<File[]>([]);
-  const [restoredSigningDocNames, setRestoredSigningDocNames] = useState<string[]>([]);
   const [draftPrompt, setDraftPrompt] = useState<ProposalFormDraftRecord | null>(null);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [autosaveBlocked, setAutosaveBlocked] = useState(false);
   const [externalDraftUpdated, setExternalDraftUpdated] = useState(false);
-  const [reattachError, setReattachError] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const hasUserEditedRef = useRef(false);
   const submittingRef = useRef(false);
@@ -129,18 +105,14 @@ export function ProposalForm({
       clearProposalDraft(draftKey);
       setDraftPrompt(null);
       setLastSavedAt(null);
-      setRestoredSigningDocNames([]);
     }
     setTouched(true);
-    setReattachError(false);
   }, [draftKey, draftPrompt]);
 
   useEffect(() => {
     const saved = readProposalDraft(draftKey);
-    setRestoredSigningDocNames([]);
     setExternalDraftUpdated(false);
     setAutosaveBlocked(false);
-    setReattachError(false);
     submittedSuccessfullyRef.current = false;
     if (!saved || isProposalFormDraftEmpty(saved.value) || hasUserEditedRef.current) {
       setLastSavedAt(null);
@@ -158,7 +130,7 @@ export function ProposalForm({
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   }, []);
   const isEditing = !!initialData;
-  const formDisabled = !!isLoading || isSubmitting || signingUploadStatus != null;
+  const formDisabled = !!isLoading || isSubmitting;
 
   const formRef = useFormSubmitShortcut();
 
@@ -167,34 +139,9 @@ export function ProposalForm({
     markTouched({ discardPrompt: true });
   };
 
-  const selectedSigningDocNames = useMemo(
-    () => pendingSigningDocs.map((file) => file.name),
-    [pendingSigningDocs],
-  );
-
-  const missingRestoredSigningDocNames = useMemo(() => {
-    const selectedNameCounts = new Map<string, number>();
-    selectedSigningDocNames.forEach((name) => {
-      selectedNameCounts.set(name, (selectedNameCounts.get(name) ?? 0) + 1);
-    });
-    return restoredSigningDocNames.filter((name) => {
-      const count = selectedNameCounts.get(name) ?? 0;
-      if (count <= 0) return true;
-      selectedNameCounts.set(name, count - 1);
-      return false;
-    });
-  }, [restoredSigningDocNames, selectedSigningDocNames]);
-
   const currentDraftValue = useMemo<ProposalFormDraftValue>(
-    () => ({
-      formData,
-      billing,
-      pendingSigningDocNames: [
-        ...selectedSigningDocNames,
-        ...missingRestoredSigningDocNames,
-      ],
-    }),
-    [billing, formData, missingRestoredSigningDocNames, selectedSigningDocNames],
+    () => ({ formData, billing }),
+    [billing, formData],
   );
 
   useEffect(() => {
@@ -243,11 +190,8 @@ export function ProposalForm({
     if (!draftPrompt) return;
     setFormData(draftPrompt.value.formData);
     setBilling(draftPrompt.value.billing);
-    setPendingSigningDocs([]);
-    setRestoredSigningDocNames(draftPrompt.value.pendingSigningDocNames);
     setLastSavedAt(draftPrompt.updatedAt);
     setDraftPrompt(null);
-    setReattachError(false);
     markTouched();
   };
 
@@ -255,8 +199,6 @@ export function ProposalForm({
     clearProposalDraft(draftKey);
     setDraftPrompt(null);
     setLastSavedAt(null);
-    setRestoredSigningDocNames([]);
-    setReattachError(false);
   };
 
   // Fetch entity lists for dropdowns
@@ -275,16 +217,12 @@ export function ProposalForm({
     [companies]
   );
 
-  // The missing-relation confirm-dialog re-fires submit with the same
-  // ``ProposalCreate`` payload; ``pendingSigningDocs`` is a sibling on
-  // ProposalForm state, so capture the current value here so a deferred
-  // confirm still carries the user's chosen signable PDFs.
   const submitPayload = useCallback(
     async (data: ProposalCreate) => {
       submittingRef.current = true;
       setIsSubmitting(true);
       try {
-        await onSubmit(data, isCreating ? pendingSigningDocs : []);
+        await onSubmit(data);
         submittedSuccessfullyRef.current = true;
         submittingRef.current = false;
         setIsSubmitting(false);
@@ -292,8 +230,6 @@ export function ProposalForm({
         setLastSavedAt(null);
         setTouched(false);
         setAutosaveBlocked(false);
-        setRestoredSigningDocNames([]);
-        setReattachError(false);
       } catch (err) {
         submittingRef.current = false;
         submittedSuccessfullyRef.current = false;
@@ -302,7 +238,7 @@ export function ProposalForm({
         throw err;
       }
     },
-    [draftKey, isCreating, onSubmit, pendingSigningDocs],
+    [draftKey, onSubmit],
   );
 
   const missingRelation = useMissingRelationConfirm<ProposalCreate>((data) => {
@@ -314,10 +250,6 @@ export function ProposalForm({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (formDisabled) return;
-    if (missingRestoredSigningDocNames.length > 0) {
-      setReattachError(true);
-      return;
-    }
 
     const amountTrimmed = billing.amount.trim();
     const data: ProposalCreate = {
@@ -423,18 +355,10 @@ export function ProposalForm({
           Draft saved locally at {formatProposalDraftTime(lastSavedAt)}
         </p>
       )}
-      {missingRestoredSigningDocNames.length > 0 && (
-        <div
-          role={reattachError ? 'alert' : 'status'}
-          className={`rounded-lg border px-4 py-3 text-sm ${
-            reattachError
-              ? 'border-red-200 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-900/20 dark:text-red-100'
-              : 'border-blue-200 bg-blue-50 text-blue-900 dark:border-blue-800/70 dark:bg-blue-900/20 dark:text-blue-100'
-          }`}
-        >
-          Reattach signing document{missingRestoredSigningDocNames.length === 1 ? '' : 's'} before creating this proposal:{' '}
-          <span className="font-medium">{missingRestoredSigningDocNames.join(', ')}</span>
-        </div>
+      {isCreating && (
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          Add signing documents from the proposal page after it's created.
+        </p>
       )}
       <div className="space-y-4">
         <div>
@@ -610,17 +534,6 @@ export function ProposalForm({
           />
         </div>
 
-        {isCreating && (
-          <PendingMasterContractField
-            value={pendingSigningDocs}
-            disabled={formDisabled}
-            onChange={(files) => {
-              setPendingSigningDocs(files);
-              setReattachError(false);
-              markTouched({ discardPrompt: true });
-            }}
-          />
-        )}
       </div>
 
       {/* Related Records */}
@@ -653,15 +566,6 @@ export function ProposalForm({
 
       {/* Actions */}
       <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-        {signingUploadStatus && (
-          <p
-            aria-live="polite"
-            className="text-xs text-gray-600 dark:text-gray-300 sm:mr-auto"
-          >
-            Uploading signing document {signingUploadStatus.current} of{' '}
-            {signingUploadStatus.total}: <span className="font-medium">{signingUploadStatus.fileName}</span>
-          </p>
-        )}
         <Button
           type="button"
           variant="secondary"
@@ -675,11 +579,7 @@ export function ProposalForm({
           disabled={!formData.title.trim() || formDisabled}
           isLoading={formDisabled}
         >
-          {signingUploadStatus
-            ? `Uploading ${signingUploadStatus.current}/${signingUploadStatus.total}…`
-            : isEditing
-              ? 'Save'
-              : 'Create Proposal'}
+          {isEditing ? 'Save' : 'Create Proposal'}
         </Button>
       </div>
       <MissingRelationDialog
