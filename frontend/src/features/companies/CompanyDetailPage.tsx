@@ -60,6 +60,8 @@ export function CompanyDetailPage() {
     () => prefs.tabDefaults?.company ?? null,
   );
   const [showEditForm, setShowEditForm] = useState(false);
+  const [formDirty, setFormDirty] = useState(false);
+  const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const actionRowRef = useRef<HTMLDivElement>(null);
 
@@ -95,12 +97,26 @@ export function CompanyDetailPage() {
     if (!companyId) return;
     try {
       await updateCompany.mutateAsync({ id: companyId, data });
-      setShowEditForm(false);
+      closeEditForm();
       showSuccess('Company updated successfully');
     } catch (err) {
       const detail = (err as ApiError | null)?.detail;
       showError(detail || 'Failed to update company');
     }
+  };
+
+  const closeEditForm = () => {
+    setShowEditForm(false);
+    setFormDirty(false);
+    setDiscardConfirmOpen(false);
+  };
+
+  const requestEditClose = () => {
+    if (formDirty) {
+      setDiscardConfirmOpen(true);
+      return;
+    }
+    closeEditForm();
   };
 
   if (isLoadingCompany) {
@@ -281,14 +297,32 @@ export function CompanyDetailPage() {
       )}
 
       {/* Edit Form Modal */}
-      <Modal isOpen={showEditForm} onClose={() => setShowEditForm(false)} title="Edit Company" size="lg">
+      <Modal
+        isOpen={showEditForm}
+        onClose={closeEditForm}
+        title="Edit Company"
+        size="lg"
+        confirmClose={formDirty}
+      >
         <CompanyForm
           company={company}
           onSubmit={handleFormSubmit}
-          onCancel={() => setShowEditForm(false)}
+          onCancel={requestEditClose}
           isLoading={updateCompany.isPending}
+          onDirtyChange={setFormDirty}
         />
       </Modal>
+
+      <ConfirmDialog
+        isOpen={discardConfirmOpen}
+        onClose={() => setDiscardConfirmOpen(false)}
+        onConfirm={closeEditForm}
+        title="Discard unsaved changes?"
+        message="Your company changes have not been saved."
+        confirmLabel="Discard"
+        cancelLabel="Keep editing"
+        variant="warning"
+      />
 
       {/* Delete Confirmation Dialog */}
       <ConfirmDialog

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { Button, SearchableSelect } from '../../../components/ui';
 import { FormInput, FormTextarea } from '../../../components/forms';
@@ -14,6 +14,7 @@ export interface ContactFormProps {
   onCancel: () => void;
   isLoading?: boolean;
   submitLabel?: string;
+  onDirtyChange?: (isDirty: boolean) => void;
 }
 
 export function ContactForm({
@@ -22,6 +23,7 @@ export function ContactForm({
   onCancel,
   isLoading = false,
   submitLabel = 'Save Contact',
+  onDirtyChange,
 }: ContactFormProps) {
   const {
     register,
@@ -48,7 +50,12 @@ export function ContactForm({
 
   const [companyId, setCompanyId] = useState<number | null>(initialData?.company_id ?? null);
   const companyChanged = companyId !== (initialData?.company_id ?? null);
-  useUnsavedChangesWarning(isDirty || companyChanged);
+  const hasUnsavedChanges = isDirty || companyChanged;
+  useUnsavedChangesWarning(hasUnsavedChanges);
+
+  useEffect(() => {
+    onDirtyChange?.(hasUnsavedChanges);
+  }, [hasUnsavedChanges, onDirtyChange]);
 
   const { data: companiesData } = useCompanies({ page_size: 100 });
 

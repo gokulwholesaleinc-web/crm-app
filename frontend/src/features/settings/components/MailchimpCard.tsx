@@ -292,6 +292,7 @@ export function MailchimpCard({
   const { data: status, isLoading, refetch } = useQuery<MailchimpStatus>({
     queryKey: ['integrations', 'mailchimp', 'status'],
     queryFn: getMailchimpStatus,
+    enabled: isAdmin,
   });
 
   if (isLoading) {

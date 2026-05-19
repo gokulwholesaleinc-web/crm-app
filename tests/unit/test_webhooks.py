@@ -39,12 +39,12 @@ class TestWebhookCRUD:
 
     @pytest.mark.asyncio
     async def test_create_webhook(
-        self, client: AsyncClient, db_session: AsyncSession, auth_headers: dict
+        self, client: AsyncClient, db_session: AsyncSession, manager_auth_headers: dict
     ):
         """Test creating a new webhook."""
         response = await client.post(
             "/api/webhooks",
-            headers=auth_headers,
+            headers=manager_auth_headers,
             json={
                 "name": "My Webhook",
                 "url": "https://example.com/hook",
@@ -65,12 +65,12 @@ class TestWebhookCRUD:
 
     @pytest.mark.asyncio
     async def test_create_webhook_minimal(
-        self, client: AsyncClient, db_session: AsyncSession, auth_headers: dict
+        self, client: AsyncClient, db_session: AsyncSession, manager_auth_headers: dict
     ):
         """Test creating webhook with minimal fields."""
         response = await client.post(
             "/api/webhooks",
-            headers=auth_headers,
+            headers=manager_auth_headers,
             json={
                 "name": "Simple Webhook",
                 "url": "https://example.com/simple",
@@ -88,13 +88,13 @@ class TestWebhookCRUD:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        manager_auth_headers: dict,
         test_webhook: Webhook,
     ):
         """Test listing webhooks."""
         response = await client.get(
             "/api/webhooks",
-            headers=auth_headers,
+            headers=manager_auth_headers,
         )
 
         assert response.status_code == 200
@@ -107,13 +107,13 @@ class TestWebhookCRUD:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        manager_auth_headers: dict,
         test_webhook: Webhook,
     ):
         """Test filtering webhooks by active status."""
         response = await client.get(
             "/api/webhooks",
-            headers=auth_headers,
+            headers=manager_auth_headers,
             params={"is_active": True},
         )
 
@@ -126,13 +126,13 @@ class TestWebhookCRUD:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        manager_auth_headers: dict,
         test_webhook: Webhook,
     ):
         """Test getting a webhook by ID."""
         response = await client.get(
             f"/api/webhooks/{test_webhook.id}",
-            headers=auth_headers,
+            headers=manager_auth_headers,
         )
 
         assert response.status_code == 200
@@ -142,12 +142,12 @@ class TestWebhookCRUD:
 
     @pytest.mark.asyncio
     async def test_get_webhook_not_found(
-        self, client: AsyncClient, db_session: AsyncSession, auth_headers: dict
+        self, client: AsyncClient, db_session: AsyncSession, manager_auth_headers: dict
     ):
         """Test getting non-existent webhook returns 404."""
         response = await client.get(
             "/api/webhooks/99999",
-            headers=auth_headers,
+            headers=manager_auth_headers,
         )
         assert response.status_code == 404
 
@@ -156,13 +156,13 @@ class TestWebhookCRUD:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        manager_auth_headers: dict,
         test_webhook: Webhook,
     ):
         """Test updating a webhook."""
         response = await client.put(
             f"/api/webhooks/{test_webhook.id}",
-            headers=auth_headers,
+            headers=manager_auth_headers,
             json={
                 "name": "Updated Webhook",
                 "is_active": False,
@@ -181,7 +181,7 @@ class TestWebhookCRUD:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        manager_auth_headers: dict,
         test_webhook: Webhook,
     ):
         """PATCHing a webhook URL to a private IP must be rejected.
@@ -192,7 +192,7 @@ class TestWebhookCRUD:
         """
         response = await client.put(
             f"/api/webhooks/{test_webhook.id}",
-            headers=auth_headers,
+            headers=manager_auth_headers,
             json={"url": "http://127.0.0.1/evil"},
         )
 
@@ -212,7 +212,7 @@ class TestWebhookCRUD:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        manager_auth_headers: dict,
         test_user: User,
     ):
         """Test deleting a webhook."""
@@ -229,7 +229,7 @@ class TestWebhookCRUD:
 
         response = await client.delete(
             f"/api/webhooks/{webhook_id}",
-            headers=auth_headers,
+            headers=manager_auth_headers,
         )
         assert response.status_code == 204
 
@@ -247,13 +247,13 @@ class TestWebhookDeliveries:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        manager_auth_headers: dict,
         test_webhook: Webhook,
     ):
         """Test getting deliveries when none exist."""
         response = await client.get(
             f"/api/webhooks/{test_webhook.id}/deliveries",
-            headers=auth_headers,
+            headers=manager_auth_headers,
         )
 
         assert response.status_code == 200
@@ -265,7 +265,7 @@ class TestWebhookDeliveries:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        manager_auth_headers: dict,
         test_webhook: Webhook,
     ):
         """Test getting deliveries with data."""
@@ -281,7 +281,7 @@ class TestWebhookDeliveries:
 
         response = await client.get(
             f"/api/webhooks/{test_webhook.id}/deliveries",
-            headers=auth_headers,
+            headers=manager_auth_headers,
         )
 
         assert response.status_code == 200
@@ -290,6 +290,60 @@ class TestWebhookDeliveries:
         assert data[0]["status"] == "success"
         assert data[0]["event_type"] == "lead.created"
         assert data[0]["response_code"] == 200
+
+
+class TestWebhookAuthorization:
+    """Role gates for webhook management endpoints."""
+
+    @pytest.mark.asyncio
+    async def test_sales_rep_cannot_list_webhooks(
+        self, client: AsyncClient, sales_rep_auth_headers: dict
+    ):
+        response = await client.get("/api/webhooks", headers=sales_rep_auth_headers)
+
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_sales_rep_cannot_create_webhook(
+        self, client: AsyncClient, sales_rep_auth_headers: dict
+    ):
+        response = await client.post(
+            "/api/webhooks",
+            headers=sales_rep_auth_headers,
+            json={
+                "name": "Blocked Webhook",
+                "url": "https://example.com/blocked",
+                "events": ["lead.created"],
+            },
+        )
+
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_sales_rep_cannot_read_deliveries(
+        self,
+        client: AsyncClient,
+        sales_rep_auth_headers: dict,
+        test_webhook: Webhook,
+    ):
+        response = await client.get(
+            f"/api/webhooks/{test_webhook.id}/deliveries",
+            headers=sales_rep_auth_headers,
+        )
+
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_admin_can_list_webhooks(
+        self,
+        client: AsyncClient,
+        admin_auth_headers: dict,
+        test_webhook: Webhook,
+    ):
+        response = await client.get("/api/webhooks", headers=admin_auth_headers)
+
+        assert response.status_code == 200
+        assert any(w["id"] == test_webhook.id for w in response.json())
 
 
 class TestWebhookSignature:

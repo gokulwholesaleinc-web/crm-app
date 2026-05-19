@@ -212,9 +212,10 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
   const user = useAuthStore((s) => s.user);
   const { prefs, setPref } = useUserPreferences();
   const isAdminUser = user?.is_superuser || user?.role === 'admin';
-  const filteredSecondaryNav = isAdminUser
-    ? secondaryNav
-    : secondaryNav.filter(item => !ADMIN_ONLY_IDS.has(item.id));
+  const filteredSecondaryNav = secondaryNav.filter((item) => {
+    if (ADMIN_ONLY_IDS.has(item.id)) return isAdminUser;
+    return true;
+  });
 
   const hidden = new Set(prefs.hiddenNavIds ?? []);
   const visibleMainNav = mainNav.filter(i => !hidden.has(i.id));

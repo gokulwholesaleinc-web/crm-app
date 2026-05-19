@@ -16,10 +16,11 @@ export const webhookKeys = {
   deliveries: (id: number) => ['webhooks', 'deliveries', id] as const,
 };
 
-export function useWebhooks(params?: { is_active?: boolean }) {
+export function useWebhooks(params?: { is_active?: boolean }, options?: { enabled?: boolean }) {
   return useAuthQuery({
     queryKey: webhookKeys.list(params),
     queryFn: () => webhooksApi.list(params),
+    enabled: options?.enabled,
   });
 }
 
@@ -31,11 +32,11 @@ export function useWebhook(id: number | undefined) {
   });
 }
 
-export function useWebhookDeliveries(id: number | undefined) {
+export function useWebhookDeliveries(id: number | undefined, options?: { enabled?: boolean }) {
   return useAuthQuery({
     queryKey: webhookKeys.deliveries(id!),
     queryFn: () => webhooksApi.getDeliveries(id!),
-    enabled: !!id,
+    enabled: !!id && (options?.enabled ?? true),
   });
 }
 

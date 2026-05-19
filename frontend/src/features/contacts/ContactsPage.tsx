@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { PlusIcon, FunnelIcon, BookmarkIcon, XMarkIcon } from '@heroicons/react/24/outline';
-import { Button, Modal, PaginationBar } from '../../components/ui';
+import { Button, ConfirmDialog, Modal, PaginationBar } from '../../components/ui';
 import { SkeletonTable } from '../../components/ui/Skeleton';
 import { DuplicateWarningModal } from '../../components/shared/DuplicateWarningModal';
 import { SortableTh } from '../../components/shared/SortableTh';
@@ -36,6 +36,8 @@ function ContactsPage() {
   const { sortBy, sortDir, toggle } = useListSortPersistence('contacts');
   const [currentPage, setCurrentPage] = useState(1);
   const [showForm, setShowForm] = useState(false);
+  const [formDirty, setFormDirty] = useState(false);
+  const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [showSmartListBuilder, setShowSmartListBuilder] = useState(false);
   const [activeFilters, setActiveFilters] = useState<FilterGroup | null>(null);
@@ -54,6 +56,8 @@ function ContactsPage() {
     const action = searchParams.get('action');
 
     if (action === 'new') {
+      setEditingContact(null);
+      setFormDirty(false);
       setShowForm(true);
       // Clear the action from URL to prevent re-opening on refresh
       const newParams = new URLSearchParams(searchParams);
@@ -90,15 +94,28 @@ function ContactsPage() {
   const total = contactsData?.total ?? 0;
 
   const handleEdit = (contact: Contact) => {
+    setFormDirty(false);
     setEditingContact(contact);
     setShowForm(true);
+  };
+
+  const openCreateForm = () => {
+    setFormDirty(false);
+    setEditingContact(null);
+    setShowForm(true);
+  };
+
+  const closeForm = () => {
+    setShowForm(false);
+    setEditingContact(null);
+    setFormDirty(false);
+    setDiscardConfirmOpen(false);
   };
 
   const doCreateContact = async (data: ContactFormData) => {
     await createContactMutation.mutateAsync(contactFormDataToCreate(data));
     showSuccess('Contact created successfully');
-    setShowForm(false);
-    setEditingContact(null);
+    closeForm();
     setPendingFormData(null);
   };
 
@@ -110,8 +127,7 @@ function ContactsPage() {
           data: contactFormDataToUpdate(data),
         });
         showSuccess('Contact updated successfully');
-        setShowForm(false);
-        setEditingContact(null);
+        closeForm();
       } else {
         // Check for duplicates before creating
         const result = await checkDuplicatesMutation.mutateAsync({
@@ -152,13 +168,21 @@ function ContactsPage() {
   };
 
   const handleFormCancel = () => {
-    setShowForm(false);
-    setEditingContact(null);
+    if (formDirty) {
+      setDiscardConfirmOpen(true);
+      return;
+    }
+    closeForm();
   };
 
   const getInitialFormData = (): Partial<ContactFormData> | undefined => {
-    if (!editingContact) return undefined;
-    return contactToFormData(editingContact);
+    if (editingContact) return contactToFormData(editingContact);
+    const rawCompanyId = searchParams.get('company_id');
+    if (!rawCompanyId) return undefined;
+    const companyId = Number(rawCompanyId);
+    return Number.isInteger(companyId) && companyId > 0
+      ? { company_id: companyId }
+      : undefined;
   };
 
   const handleApplySmartListFilters = (filters: FilterGroup) => {
@@ -204,7 +228,7 @@ function ContactsPage() {
           </Button>
           <Button
             leftIcon={<PlusIcon className="h-5 w-5" />}
-            onClick={() => setShowForm(true)}
+            onClick={openCreateForm}
             className="w-full sm:w-auto"
           >
             Add Contact
@@ -369,7 +393,7 @@ function ContactsPage() {
                   Clear Filters
                 </Button>
               )}
-              <Button onClick={() => setShowForm(true)}>Add Contact</Button>
+              <Button onClick={openCreateForm}>Add Contact</Button>
             </div>
           </div>
         ) : (
@@ -551,9 +575,10 @@ function ContactsPage() {
       {/* Form Modal */}
       <Modal
         isOpen={showForm}
-        onClose={handleFormCancel}
+        onClose={closeForm}
         title={editingContact ? 'Edit Contact' : 'Add Contact'}
         size="lg"
+        confirmClose={formDirty}
       >
         <ContactForm
           initialData={getInitialFormData()}
@@ -563,8 +588,20 @@ function ContactsPage() {
             createContactMutation.isPending || updateContactMutation.isPending || checkDuplicatesMutation.isPending
           }
           submitLabel={editingContact ? 'Update Contact' : 'Create Contact'}
+          onDirtyChange={setFormDirty}
         />
       </Modal>
+
+      <ConfirmDialog
+        isOpen={discardConfirmOpen}
+        onClose={() => setDiscardConfirmOpen(false)}
+        onConfirm={closeForm}
+        title="Discard unsaved changes?"
+        message="Your contact changes have not been saved."
+        confirmLabel="Discard"
+        cancelLabel="Keep editing"
+        variant="warning"
+      />
 
       {/* Duplicate Warning Modal */}
       <DuplicateWarningModal

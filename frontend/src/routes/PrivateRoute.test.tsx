@@ -72,10 +72,13 @@ beforeEach(() => {
   });
 });
 
-function renderPrivateRoute(child = <div data-testid="sentinel-child">protected content</div>) {
+function renderPrivateRoute(
+  child = <div data-testid="sentinel-child">protected content</div>,
+  routeProps: Partial<React.ComponentProps<typeof PrivateRoute>> = {},
+) {
   return renderWithProviders(
     <Routes>
-      <Route path="/" element={<PrivateRoute>{child}</PrivateRoute>} />
+      <Route path="/" element={<PrivateRoute {...routeProps}>{child}</PrivateRoute>} />
       <Route path="/login" element={<div data-testid="login-page">Login Page</div>} />
     </Routes>,
     { initialRoute: '/' }
@@ -112,6 +115,48 @@ describe('PrivateRoute', () => {
     expect(screen.getByTestId('layout')).toBeInTheDocument();
     expect(screen.getByTestId('sentinel-child')).toBeInTheDocument();
     expect(screen.queryByTestId('login-page')).not.toBeInTheDocument();
+  });
+
+  it('allows users with an allowed role', () => {
+    __setAuthState({
+      isAuthenticated: true,
+      isLoading: false,
+      user: { ...BASE_USER, role: 'manager' },
+      logout: mockLogout,
+    });
+
+    renderPrivateRoute(undefined, { allowedRoles: ['admin', 'manager'] });
+
+    expect(screen.getByTestId('sentinel-child')).toBeInTheDocument();
+    expect(screen.queryByText('Access Denied')).not.toBeInTheDocument();
+  });
+
+  it('allows superusers through role-gated routes', () => {
+    __setAuthState({
+      isAuthenticated: true,
+      isLoading: false,
+      user: { ...BASE_USER, is_superuser: true, role: 'sales_rep' },
+      logout: mockLogout,
+    });
+
+    renderPrivateRoute(undefined, { allowedRoles: ['admin'] });
+
+    expect(screen.getByTestId('sentinel-child')).toBeInTheDocument();
+  });
+
+  it('renders access denied for authenticated users without an allowed role', () => {
+    __setAuthState({
+      isAuthenticated: true,
+      isLoading: false,
+      user: { ...BASE_USER, role: 'sales_rep' },
+      logout: mockLogout,
+    });
+
+    renderPrivateRoute(undefined, { allowedRoles: ['admin', 'manager'] });
+
+    expect(screen.getByTestId('layout')).toBeInTheDocument();
+    expect(screen.getByText('Access Denied')).toBeInTheDocument();
+    expect(screen.queryByTestId('sentinel-child')).not.toBeInTheDocument();
   });
 
   it('passes current location in Navigate state when redirecting', async () => {

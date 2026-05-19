@@ -32,9 +32,10 @@ export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
   }, [tenant?.logo_url_dark]);
 
   const isMobileAdmin = mobileUser?.is_superuser || mobileUser?.role === 'admin';
-  const mobileSecondaryNav = isMobileAdmin
-    ? DEFAULT_SECONDARY_NAVIGATION
-    : DEFAULT_SECONDARY_NAVIGATION.filter(item => !ADMIN_ONLY_IDS.has(item.id));
+  const mobileSecondaryNav = DEFAULT_SECONDARY_NAVIGATION.filter((item) => {
+    if (ADMIN_ONLY_IDS.has(item.id)) return isMobileAdmin;
+    return true;
+  });
 
   const { prefs } = useUserPreferences();
   const hidden = new Set(prefs.hiddenNavIds ?? []);

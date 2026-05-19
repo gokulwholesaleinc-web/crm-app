@@ -518,7 +518,7 @@ export const GUIDE_REGISTRY: readonly Guide[] = [
     steps: [
       {
         title: 'Settings sections',
-        body: 'The section nav jumps between profile, notifications, preferences, and any admin-only setup areas your role can access.',
+        body: 'The section nav jumps between profile, notifications, preferences, and the setup areas your role can access.',
         action: 'choose a section from the settings navigation to jump directly to it.',
         selector: target('settings-nav'),
       },

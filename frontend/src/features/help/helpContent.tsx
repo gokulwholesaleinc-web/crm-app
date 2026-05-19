@@ -117,8 +117,8 @@ export const SECTIONS: Section[] = [
               Leads, and Proposals. You can also toggle dark mode and start a guide from the header.
             </Bullet>
             <Bullet>
-              Admin, User Approvals, Sharing, and Duplicate Cleanup are admin-only in the sidebar.
-              Sharing and Duplicate Cleanup pages also enforce role checks in-page.
+              Admin, User Approvals, Sharing, and Duplicate Cleanup are admin-only in the sidebar,
+              and those pages also enforce role checks before loading protected data.
             </Bullet>
           </ul>
         </div>
@@ -910,8 +910,9 @@ export const SECTIONS: Section[] = [
     body: (
       <div className="space-y-3">
         <p className="text-sm text-gray-700 dark:text-gray-300">
-          <strong>Admin → Duplicate Cleanup</strong> finds and merges records that already slipped
-          into the CRM. The old <code>/duplicates</code> bookmark redirects here.
+          <strong>Admin → Duplicate Cleanup</strong> is admin-only. It finds
+          and merges records that already slipped into the CRM. The old <code>/duplicates</code>{' '}
+          bookmark redirects here.
         </p>
         <ol className="space-y-3">
           <Step n={1}>
@@ -1171,8 +1172,8 @@ export const SECTIONS: Section[] = [
     body: (
       <div className="space-y-3">
         <p className="text-sm text-gray-700 dark:text-gray-300">
-          <strong>Admin → Sharing</strong> is the tenant-wide audit surface for record-level shares.
-          Use it when you need to inspect or revoke access without opening every record.
+          <strong>Admin → Sharing</strong> is the admin audit surface for record-level
+          shares. Use it when you need to inspect or revoke access without opening every record.
         </p>
         <ul className="space-y-1.5">
           <Bullet>
@@ -1277,7 +1278,7 @@ export const SECTIONS: Section[] = [
               They do not need an explicit share to access anything.
             </Bullet>
             <Bullet>
-              Admins can audit every share in the system from{' '}
+              Admins and managers can audit every share in the system from{' '}
               <a href="/admin/sharing" className="text-primary-600 hover:underline dark:text-primary-400">Admin → Sharing</a>:
               filter by entity type, by who shared, by who received, or by permission level, and
               revoke any share with one click.
