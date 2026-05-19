@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useSmartBack } from '../../hooks/useSmartBack';
 import { useUrlTabState } from '../../hooks/useUrlTabState';
 import { useUserPreferences } from '../../hooks/useUserPreferences';
+import { useWorkSessionHeartbeat } from '../../hooks/useWorkSessionHeartbeat';
 import clsx from 'clsx';
 import { BuildingOffice2Icon, ArrowLeftIcon } from '@heroicons/react/24/outline';
 import { Button } from '../../components/ui/Button';
@@ -51,6 +52,7 @@ export function CompanyDetailPage() {
   const navigate = useNavigate();
   const handleBack = useSmartBack('/companies');
   const companyId = id ? parseInt(id, 10) : undefined;
+  useWorkSessionHeartbeat({ entityType: 'companies', entityId: companyId });
 
   const { prefs } = useUserPreferences();
   const [activeTab, handleTabChange] = useUrlTabState<TabType>(

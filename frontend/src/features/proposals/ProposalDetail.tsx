@@ -64,6 +64,7 @@ import {
 } from '../../api/proposals';
 import { formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
+import { useWorkSessionHeartbeat } from '../../hooks/useWorkSessionHeartbeat';
 import { showSuccess, showError } from '../../utils/toast';
 import { extractApiErrorDetail } from '../../utils/errors';
 import type {
@@ -80,6 +81,7 @@ function ProposalDetailPage() {
   const location = useLocation();
   const handleBack = useSmartBack('/proposals');
   const proposalId = id ? parseInt(id, 10) : undefined;
+  useWorkSessionHeartbeat({ entityType: 'proposals', entityId: proposalId });
   const locationState = location.state as
     | { masterUploadFailed?: string | null; focusSigningDocuments?: boolean }
     | null;

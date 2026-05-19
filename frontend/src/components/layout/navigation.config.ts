@@ -15,6 +15,7 @@ import {
   ViewColumnsIcon,
   DocumentMagnifyingGlassIcon,
   ShieldCheckIcon,
+  ClipboardDocumentListIcon,
   QuestionMarkCircleIcon,
   UserPlusIcon,
   ShareIcon,
@@ -53,6 +54,7 @@ export const DEFAULT_SECONDARY_NAVIGATION: NavItem[] = [
   { id: 'settings', name: 'Settings', href: '/settings', icon: Cog6ToothIcon },
   { id: 'help', name: 'Help', href: '/help', icon: QuestionMarkCircleIcon },
   { id: 'admin', name: 'Admin', href: '/admin', icon: ShieldCheckIcon },
+  { id: 'admin-audit', name: 'Audit', href: '/admin/audit', icon: ClipboardDocumentListIcon },
   { id: 'approvals', name: 'User Approvals', href: '/admin/user-approvals', icon: UserPlusIcon },
   { id: 'admin-sharing', name: 'Sharing', href: '/admin/sharing', icon: ShareIcon },
   { id: 'admin-dedup', name: 'Duplicate Cleanup', href: '/admin/dedup', icon: DocumentMagnifyingGlassIcon },
@@ -61,7 +63,7 @@ export const DEFAULT_SECONDARY_NAVIGATION: NavItem[] = [
 export const STORAGE_KEY_MAIN = 'crm-sidebar-order:v1';
 export const STORAGE_KEY_SECONDARY = 'crm-sidebar-secondary-order:v1';
 
-export const ADMIN_ONLY_IDS = new Set(['admin', 'approvals', 'admin-sharing', 'admin-dedup']);
+export const ADMIN_ONLY_IDS = new Set(['admin', 'admin-audit', 'approvals', 'admin-sharing', 'admin-dedup']);
 
 export function readStoredOrder(key: string): string[] | null {
   const parsed = safeStorage.getJson<unknown>(key);

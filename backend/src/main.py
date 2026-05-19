@@ -21,6 +21,7 @@ from src.admin.router import router as admin_router
 from src.assignment.router import router as assignment_router
 from src.attachments.router import router as attachments_router
 from src.audit.router import router as audit_router
+from src.audit.work_sessions_router import router as work_sessions_router
 from src.auth.router import router as auth_router
 from src.campaigns.router import router as campaigns_router
 from src.comments.router import router as comments_router
@@ -186,6 +187,7 @@ app.include_router(account_router)
 app.include_router(filters_router)
 app.include_router(reports_router)
 app.include_router(audit_router)
+app.include_router(work_sessions_router)
 app.include_router(comments_router)
 app.include_router(roles_router)
 app.include_router(webhooks_router)
