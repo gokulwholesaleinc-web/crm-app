@@ -329,9 +329,11 @@ export function MailchimpCard({
           <StatusPill connected={connected} />
         </div>
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-          {connected
-            ? `${status?.account_email ?? 'connected'} · server ${status?.server_prefix ?? ''} · campaigns send through your audiences`
-            : 'Connect a Mailchimp account to send marketing campaigns through an existing audience.'}
+          {connected === null
+            ? 'Mailchimp campaigns can be sent through a connected audience. Ask an admin if you need access.'
+            : connected
+              ? `${status?.account_email ?? 'connected'} · server ${status?.server_prefix ?? ''} · campaigns send through your audiences`
+              : 'Connect a Mailchimp account to send marketing campaigns through an existing audience.'}
         </p>
         {connected && status && (
           <>
@@ -344,18 +346,13 @@ export function MailchimpCard({
             )}
           </>
         )}
-        {!connected && isAdmin && (
+        {connected === false && isAdmin && (
           <ConnectForm
             onConnected={() => {
               queryClient.invalidateQueries({ queryKey: ['integrations', 'mailchimp'] });
               void refetch();
             }}
           />
-        )}
-        {!connected && !isAdmin && (
-          <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
-            Ask an admin to connect Mailchimp from Settings → Integrations.
-          </p>
         )}
       </div>
       <div className="flex items-center gap-2 flex-shrink-0">

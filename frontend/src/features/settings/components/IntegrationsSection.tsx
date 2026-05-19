@@ -189,9 +189,11 @@ function MetaCard({ onRequestDisconnect }: { onRequestDisconnect: () => void }) 
           <ConnectionBadge connected={connected} />
         </div>
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-          {connected
-            ? `${pages.length} page${pages.length !== 1 ? 's' : ''} linked · Lead capture & social sync`
-            : 'Connect Facebook pages, Instagram, and Lead Ads'}
+          {connected === null
+            ? 'Facebook pages, Instagram, and Lead Ads. Ask an admin if you need access.'
+            : connected
+              ? `${pages.length} page${pages.length !== 1 ? 's' : ''} linked · Lead capture & social sync`
+              : 'Connect Facebook pages, Instagram, and Lead Ads'}
         </p>
         {connected && status?.token_expiry && (
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
