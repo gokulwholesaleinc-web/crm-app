@@ -10,6 +10,7 @@ import {
   XMarkIcon,
 } from '@heroicons/react/24/outline';
 
+import { auditApi } from '../../api/audit';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
@@ -211,6 +212,29 @@ function downloadVisibleFeedCsv(
   anchor.download = `crm-audit-feed-${new Date().toISOString().slice(0, 10)}.csv`;
   anchor.click();
   URL.revokeObjectURL(url);
+}
+
+async function exportFullFilter(
+  filters: Record<string, string | number | undefined>,
+  setBusy: (busy: boolean) => void,
+  setError: (msg: string | null) => void,
+) {
+  setBusy(true);
+  setError(null);
+  try {
+    const blob = await auditApi.exportAdminAuditCsv(filters);
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `crm-audit-${new Date().toISOString().slice(0, 10)}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    console.error('[audit] full export failed', err);
+    setError('Export failed — narrow the filter and retry, or check server logs.');
+  } finally {
+    setBusy(false);
+  }
 }
 
 function MetricCard({
@@ -547,6 +571,8 @@ export default function AdminAuditPage() {
   const [selectedEvent, setSelectedEvent] = useState<AdminAuditFeedItem | null>(null);
   const [selectedUser, setSelectedUser] = useState<AdminAuditUserSummary | null>(null);
   const [selectedEntity, setSelectedEntity] = useState<AdminAuditEntitySummary | null>(null);
+  const [exportingFull, setExportingFull] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const summaryFilters = useMemo(() => ({
     start_date: startDate || undefined,
@@ -716,6 +742,21 @@ export default function AdminAuditPage() {
           </Button>
           <Button
             variant="secondary"
+            leftIcon={<ArrowDownTrayIcon className="h-4 w-4" />}
+            onClick={() =>
+              exportFullFilter(summaryFilters, setExportingFull, setExportError)
+            }
+            disabled={exportingFull || !feed?.total}
+            title="Streams every audit row matching the current filter — for compliance pulls"
+          >
+            {exportingFull
+              ? 'Exporting...'
+              : feed?.total != null
+                ? `Export filter (${feed.total.toLocaleString()})`
+                : 'Export filter'}
+          </Button>
+          <Button
+            variant="secondary"
             leftIcon={<ArrowPathIcon className="h-4 w-4" />}
             onClick={() => {
               refetchSummary();
@@ -726,6 +767,23 @@ export default function AdminAuditPage() {
           </Button>
         </div>
       </div>
+
+      {exportError && (
+        <div
+          role="alert"
+          aria-live="polite"
+          className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300"
+        >
+          {exportError}
+          <button
+            type="button"
+            className="ml-3 text-xs underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+            onClick={() => setExportError(null)}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <MetricCard

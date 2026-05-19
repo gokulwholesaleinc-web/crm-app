@@ -23,6 +23,15 @@ from src.auth.models import User
 from src.auth.security import create_access_token
 from src.config import settings
 from src.payments.models import Payment, StripeCustomer, Subscription
+from src.payments.service import clear_capability_cache
+
+
+@pytest.fixture(autouse=True)
+def _reset_stripe_capability_cache():
+    """The capability cache is module-level — reset between tests for isolation."""
+    clear_capability_cache()
+    yield
+    clear_capability_cache()
 from src.payments.service import PaymentService, SubscriptionService
 
 
@@ -1365,3 +1374,138 @@ class TestAmountsThreeDecimalCurrency:
         from src.payments.amounts import to_stripe_minor_units
 
         assert to_stripe_minor_units(Decimal("12.34"), "USD") == 1234
+
+
+class TestCheckoutCapabilityCheck:
+    """Checkout only adds ACH payment options when the account has the capability.
+
+    Without the gate, every Checkout creation hits Stripe with an
+    `us_bank_account` block — accounts without ACH enabled get a 400 back
+    from Stripe and the customer sees a generic "Checkout failed" message.
+    """
+
+    def _fake_stripe(self, *, capabilities: dict[str, str] | None, calls_holder: dict | None = None):
+        session_calls: list[dict] = []
+        account_retrieve_calls = {"count": 0}
+
+        class _Session:
+            @staticmethod
+            def create(**kwargs):
+                session_calls.append(kwargs)
+                return SimpleNamespace(id=f"cs_{len(session_calls)}", url="https://checkout.example")
+
+        class _Account:
+            @staticmethod
+            def retrieve():
+                account_retrieve_calls["count"] += 1
+                if capabilities is None:
+                    raise RuntimeError("simulated Stripe API failure")
+                return {"capabilities": capabilities}
+
+        fake = SimpleNamespace(
+            api_key="sk_test_capabilities",
+            checkout=SimpleNamespace(Session=_Session),
+            Account=_Account,
+        )
+        if calls_holder is not None:
+            calls_holder["sessions"] = session_calls
+            calls_holder["account_retrieves"] = account_retrieve_calls
+        return fake, session_calls, account_retrieve_calls
+
+    @pytest.mark.asyncio
+    async def test_includes_us_bank_account_when_capability_active(
+        self, db_session, test_user, monkeypatch,
+    ):
+        import src.payments.service as svc
+
+        fake_stripe, calls, _ = self._fake_stripe(
+            capabilities={"us_bank_account_ach_payments": "active"},
+        )
+        monkeypatch.setattr(svc, "_get_stripe", lambda: fake_stripe)
+
+        service = svc.PaymentService(db_session)
+        await service.create_checkout_session(
+            amount=Decimal("12.34"),
+            currency="USD",
+            success_url="https://example.com/success",
+            cancel_url="https://example.com/cancel",
+            user_id=test_user.id,
+        )
+
+        assert calls
+        params = calls[0]
+        assert "us_bank_account" in params.get("payment_method_options", {})
+
+    @pytest.mark.asyncio
+    async def test_omits_us_bank_account_and_warns_when_capability_inactive(
+        self, db_session, test_user, monkeypatch, caplog,
+    ):
+        import src.payments.service as svc
+
+        fake_stripe, calls, _ = self._fake_stripe(
+            capabilities={"us_bank_account_ach_payments": "inactive"},
+        )
+        monkeypatch.setattr(svc, "_get_stripe", lambda: fake_stripe)
+
+        service = svc.PaymentService(db_session)
+        with caplog.at_level("WARNING", logger="src.payments.service"):
+            await service.create_checkout_session(
+                amount=Decimal("12.34"),
+                currency="USD",
+                success_url="https://example.com/success",
+                cancel_url="https://example.com/cancel",
+                user_id=test_user.id,
+            )
+
+        assert calls
+        params = calls[0]
+        assert "payment_method_options" not in params
+        assert any(
+            "us_bank_account_ach_payments" in rec.message for rec in caplog.records
+        )
+
+    @pytest.mark.asyncio
+    async def test_capability_lookup_is_cached_across_checkouts(
+        self, db_session, test_user, monkeypatch,
+    ):
+        """Stripe Account.retrieve must not fire on every checkout creation."""
+        import src.payments.service as svc
+
+        fake_stripe, _, account_calls = self._fake_stripe(
+            capabilities={"us_bank_account_ach_payments": "active"},
+        )
+        monkeypatch.setattr(svc, "_get_stripe", lambda: fake_stripe)
+
+        service = svc.PaymentService(db_session)
+        for _ in range(3):
+            await service.create_checkout_session(
+                amount=Decimal("12.34"),
+                currency="USD",
+                success_url="https://example.com/success",
+                cancel_url="https://example.com/cancel",
+                user_id=test_user.id,
+            )
+
+        assert account_calls["count"] == 1
+
+    @pytest.mark.asyncio
+    async def test_account_retrieve_failure_falls_back_to_card_only(
+        self, db_session, test_user, monkeypatch,
+    ):
+        """If Stripe.Account.retrieve itself fails, downgrade gracefully instead of throwing."""
+        import src.payments.service as svc
+
+        fake_stripe, calls, _ = self._fake_stripe(capabilities=None)
+        monkeypatch.setattr(svc, "_get_stripe", lambda: fake_stripe)
+
+        service = svc.PaymentService(db_session)
+        await service.create_checkout_session(
+            amount=Decimal("12.34"),
+            currency="USD",
+            success_url="https://example.com/success",
+            cancel_url="https://example.com/cancel",
+            user_id=test_user.id,
+        )
+
+        assert calls
+        assert "payment_method_options" not in calls[0]

@@ -2,6 +2,7 @@
 
 import hashlib
 import logging
+import time
 import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -82,6 +83,60 @@ def _get_stripe():
     except ImportError:
         logger.warning("stripe package not installed")
         return None
+
+
+# Capability cache: capabilities only change when an admin flips them in the
+# Stripe dashboard. 60s TTL keeps the dashboard-to-checkout feedback loop
+# tight (an operator who just enabled ACH sees it offered within a minute)
+# while still saving a per-request Account.retrieve on the hot path.
+_CAPABILITY_TTL_SECONDS = 60.0
+_capability_cache: dict[str, tuple[float, dict[str, str]]] = {}
+
+
+def _get_account_capabilities(stripe) -> dict[str, str]:
+    """Return the connected Stripe account's capabilities dict ({name: status})."""
+    key = getattr(stripe, "api_key", "") or ""
+    cached = _capability_cache.get(key)
+    if cached and cached[0] > time.monotonic():
+        return cached[1]
+    account_cls = getattr(stripe, "Account", None)
+    if account_cls is None:
+        capabilities: dict[str, str] = {}
+    else:
+        try:
+            account = account_cls.retrieve()
+            capabilities = dict(account.get("capabilities") or {})
+        except Exception as exc:  # pragma: no cover - depends on Stripe failure mode
+            logger.warning("Failed to retrieve Stripe account capabilities: %s", exc)
+            capabilities = {}
+    _capability_cache[key] = (time.monotonic() + _CAPABILITY_TTL_SECONDS, capabilities)
+    return capabilities
+
+
+def clear_capability_cache() -> None:
+    """Test hook — drop the cached account capabilities."""
+    _capability_cache.clear()
+
+
+def _checkout_supports_us_bank_account(stripe) -> bool:
+    """Whether the connected account has the ACH capability turned on.
+
+    When this returns False we omit the `us_bank_account` payment-method-options
+    block from Checkout instead of letting Stripe reject the session creation
+    with an "invalid payment_method_options" error.
+    """
+    capabilities = _get_account_capabilities(stripe)
+    status = capabilities.get("us_bank_account_ach_payments")
+    supported = status == "active"
+    if not supported:
+        logger.warning(
+            "Stripe account is missing ACH capability "
+            "(us_bank_account_ach_payments=%r); checkout will be card-only. "
+            "Enable us_bank_account_ach_payments in the Stripe dashboard to "
+            "offer ACH on Checkout.",
+            status,
+        )
+    return supported
 
 
 class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
@@ -288,18 +343,19 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
             "unit_amount": stripe_amount,
         }
 
-        session_params = {
+        session_params: dict = {
             "line_items": [{"price_data": price_data, "quantity": 1}],
             "mode": "payment",
             "success_url": success_url,
             "cancel_url": cancel_url,
-            "payment_method_options": {
+            "payment_intent_data": {"setup_future_usage": "off_session"},
+        }
+        if _checkout_supports_us_bank_account(stripe):
+            session_params["payment_method_options"] = {
                 "us_bank_account": {
                     "financial_connections": {"permissions": ["payment_method"]},
                 },
-            },
-            "payment_intent_data": {"setup_future_usage": "off_session"},
-        }
+            }
         if stripe_customer_id:
             session_params["customer"] = stripe_customer_id
 

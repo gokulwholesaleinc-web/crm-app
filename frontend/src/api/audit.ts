@@ -65,6 +65,16 @@ export const getAdminAuditUserDetail = async (
   return response.data;
 };
 
+export const exportAdminAuditCsv = async (
+  filters: Omit<AdminAuditFeedFilters, 'page' | 'page_size'> = {}
+): Promise<Blob> => {
+  const response = await apiClient.get(
+    `${ADMIN_AUDIT_BASE}/export.csv`,
+    { params: filters, responseType: 'blob' }
+  );
+  return response.data;
+};
+
 export const getAdminAuditEntityDetail = async (
   entityType: string,
   entityId: number,
@@ -93,5 +103,6 @@ export const auditApi = {
   getAdminAuditSummary,
   getAdminAuditUserDetail,
   getAdminAuditEntityDetail,
+  exportAdminAuditCsv,
   sendWorkSessionHeartbeat,
 };
