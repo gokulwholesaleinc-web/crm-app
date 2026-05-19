@@ -105,5 +105,15 @@ async def cancel_subscription(
             detail="Subscription not found",
         )
     check_ownership(subscription, current_user, "subscription")
-    subscription = await service.cancel(subscription)
+    try:
+        subscription = await service.cancel(subscription)
+    except ValueError as exc:
+        # SubscriptionService.cancel re-raises Stripe failures as
+        # ValueError so the local row stays uncanceled. Surface the
+        # Stripe-reported reason as 400 instead of letting FastAPI
+        # promote it to an opaque 500.
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
     return SubscriptionResponse.model_validate(subscription)

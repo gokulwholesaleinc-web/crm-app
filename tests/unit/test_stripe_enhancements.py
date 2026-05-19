@@ -1175,3 +1175,193 @@ class TestSubscriptionCancellationStripeFailure:
 
         assert subscription.status == "active"
         assert subscription.cancel_at_period_end is False
+
+
+class TestIdempotencyKeyHardening:
+    """Trio follow-ups to PR #366: keys must not collapse legitimate repeats."""
+
+    @pytest.mark.asyncio
+    async def test_manual_invoice_day_bucket_separates_next_day_repeat(
+        self, db_session, test_user, stripe_customer, monkeypatch,
+    ):
+        """Same input on different UTC days produces distinct keys.
+
+        Without a day-bucket salt, Lorenzo's weekly $100 "Consulting"
+        invoice for the same customer collapses into the prior week's
+        cached Stripe Invoice (24h idempotency window).
+        """
+        import src.payments.service as svc
+
+        invoice_calls = []
+
+        class _Invoice:
+            @staticmethod
+            def create(**kwargs):
+                invoice_calls.append(kwargs)
+                return SimpleNamespace(id=f"in_{len(invoice_calls)}")
+
+            @staticmethod
+            def finalize_invoice(invoice_id):
+                return SimpleNamespace(id=invoice_id)
+
+            @staticmethod
+            def send_invoice(invoice_id):
+                return SimpleNamespace(id=invoice_id, hosted_invoice_url="https://invoice.example")
+
+            @staticmethod
+            def void_invoice(invoice_id):
+                raise AssertionError(f"unexpected void for {invoice_id}")
+
+        class _InvoiceItem:
+            @staticmethod
+            def create(**kwargs):
+                return SimpleNamespace(id="ii_1")
+
+        monkeypatch.setattr(
+            svc,
+            "_get_stripe",
+            lambda: SimpleNamespace(Invoice=_Invoice, InvoiceItem=_InvoiceItem),
+        )
+
+        service = PaymentService(db_session)
+
+        monkeypatch.setattr(svc, "_today_utc_iso", lambda: "2026-05-18")
+        await service.create_and_send_invoice(
+            customer_id=stripe_customer.id,
+            amount=Decimal("100.00"),
+            description="Consulting",
+            user_id=test_user.id,
+            currency="USD",
+            due_days=30,
+        )
+
+        monkeypatch.setattr(svc, "_today_utc_iso", lambda: "2026-05-25")
+        await service.create_and_send_invoice(
+            customer_id=stripe_customer.id,
+            amount=Decimal("100.00"),
+            description="Consulting",
+            user_id=test_user.id,
+            currency="USD",
+            due_days=30,
+        )
+
+        assert invoice_calls[0]["idempotency_key"] != invoice_calls[1]["idempotency_key"]
+
+    @pytest.mark.asyncio
+    async def test_proposal_subscription_key_changes_when_amount_changes(
+        self, db_session, test_user, stripe_customer, test_contact, monkeypatch,
+    ):
+        """Editing a proposal's price must spawn a fresh Stripe Session.
+
+        The bare ``proposal_sub_{id}_v1`` key would return the cached
+        Session for the OLD amount and silently charge the wrong price
+        within Stripe's 24h idempotency window.
+        """
+        import src.payments.service as svc
+
+        session_calls = []
+
+        class _Session:
+            @staticmethod
+            def create(**kwargs):
+                session_calls.append(kwargs)
+                return SimpleNamespace(
+                    id=f"cs_sub_{len(session_calls)}",
+                    url="https://checkout.example",
+                )
+
+        # Pre-existing StripeCustomer means sync_customer returns it
+        # without hitting Stripe Customer.create.
+        monkeypatch.setattr(
+            svc,
+            "_get_stripe",
+            lambda: SimpleNamespace(
+                checkout=SimpleNamespace(Session=_Session),
+                Customer=SimpleNamespace(create=lambda **kw: SimpleNamespace(id="cus_x")),
+            ),
+        )
+
+        service = PaymentService(db_session)
+        for amount in (Decimal("100.00"), Decimal("250.00")):
+            await service.create_subscription_checkout_for_proposal(
+                proposal_id=42,
+                contact_id=test_contact.id,
+                company_id=None,
+                amount=amount,
+                currency="USD",
+                description="Monthly retainer",
+                interval="month",
+                interval_count=1,
+                success_url="https://example.com/success",
+                cancel_url="https://example.com/cancel",
+            )
+
+        assert session_calls[0]["idempotency_key"] != session_calls[1]["idempotency_key"]
+
+
+class TestSubscriptionCancelRoute:
+    """Stripe cancel failure must surface as 400, not 500."""
+
+    @pytest.mark.asyncio
+    async def test_cancel_route_returns_400_on_stripe_failure(
+        self, client: AsyncClient, db_session, test_user, stripe_customer, monkeypatch,
+    ):
+        """Router wraps service.cancel ValueError into HTTPException(400)."""
+        import src.payments.service as svc
+
+        subscription = Subscription(
+            stripe_subscription_id="sub_live_cancel_route_failure",
+            customer_id=stripe_customer.id,
+            status="active",
+            cancel_at_period_end=False,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(subscription)
+        await db_session.commit()
+        await db_session.refresh(subscription)
+
+        class _Subscription:
+            @staticmethod
+            def modify(*args, **kwargs):
+                raise RuntimeError("stripe rejected: subscription already canceled")
+
+        monkeypatch.setattr(
+            svc,
+            "_get_stripe",
+            lambda: SimpleNamespace(Subscription=_Subscription),
+        )
+
+        response = await client.post(
+            f"/api/payments/subscriptions/{subscription.id}/cancel",
+            headers=_token(test_user),
+        )
+        assert response.status_code == 400
+        assert "Failed to cancel subscription on Stripe" in response.json()["detail"]
+
+        await db_session.refresh(subscription)
+        assert subscription.status == "active"
+
+
+class TestAmountsThreeDecimalCurrency:
+    """BHD/JOD/KWD/OMR/TND need exponent 3, not 2."""
+
+    def test_bhd_uses_thousandths(self):
+        from src.payments.amounts import (
+            from_stripe_minor_units,
+            to_stripe_minor_units,
+        )
+
+        # 1.234 BHD → 1234 fils
+        assert to_stripe_minor_units(Decimal("1.234"), "BHD") == 1234
+        assert from_stripe_minor_units(1234, "BHD") == Decimal("1.234")
+
+    def test_jpy_unchanged(self):
+        from src.payments.amounts import to_stripe_minor_units
+
+        assert to_stripe_minor_units(Decimal("5000"), "JPY") == 5000
+
+    def test_usd_unchanged(self):
+        from src.payments.amounts import to_stripe_minor_units
+
+        assert to_stripe_minor_units(Decimal("12.34"), "USD") == 1234
