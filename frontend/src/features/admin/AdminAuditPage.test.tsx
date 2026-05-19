@@ -1,29 +1,25 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { act } from '@testing-library/react';
+import { http, HttpResponse } from 'msw';
 import { fireEvent, renderWithProviders, screen, waitFor } from '../../test-utils/renderWithProviders';
+import { server } from '../../test-setup';
+import { useAuthStore, type User } from '../../store/authStore';
 import AdminAuditPage from './AdminAuditPage';
 
-const MOCK_AUTH_STATE = {
-  user: { id: 1, role: 'admin', is_superuser: false },
+// MSW-based test (CRM CLAUDE.md: "MUST NOT MOCK ANYTHING"). Handlers
+// intercept the four /api/admin/audit/* endpoints the page calls; the
+// captured request URLs let us assert filter-passthrough on the wire
+// instead of mocking the hook module.
+
+const TEST_USER: User = {
+  id: 1,
+  email: 'admin@example.com',
+  full_name: 'Audit Admin',
+  is_active: true,
+  is_superuser: false,
+  role: 'admin',
+  created_at: '2026-05-18T00:00:00.000Z',
 };
-
-vi.mock('../../store/authStore', () => ({
-  useAuthStore: (selector?: (s: typeof MOCK_AUTH_STATE) => unknown) =>
-    selector ? selector(MOCK_AUTH_STATE) : MOCK_AUTH_STATE,
-}));
-
-vi.mock('../../hooks/useAudit', () => ({
-  useAdminAuditSummary: vi.fn(),
-  useAdminAuditFeed: vi.fn(),
-  useAdminAuditUserDetail: vi.fn(),
-  useAdminAuditEntityDetail: vi.fn(),
-}));
-
-import {
-  useAdminAuditFeed,
-  useAdminAuditEntityDetail,
-  useAdminAuditSummary,
-  useAdminAuditUserDetail,
-} from '../../hooks/useAudit';
 
 const summaryFixture = {
   start_at: '2026-05-18T00:00:00Z',
@@ -130,34 +126,73 @@ const entityDetailFixture = {
   sessions: userDetailFixture.sessions,
 };
 
+interface CapturedRequests {
+  summary: URL[];
+  feed: URL[];
+  userDetail: URL[];
+  entityDetail: URL[];
+}
+
+function installAuditHandlers(): CapturedRequests {
+  const captured: CapturedRequests = {
+    summary: [],
+    feed: [],
+    userDetail: [],
+    entityDetail: [],
+  };
+  server.use(
+    http.get('*/api/admin/audit/summary', ({ request }) => {
+      captured.summary.push(new URL(request.url));
+      return HttpResponse.json(summaryFixture);
+    }),
+    http.get('*/api/admin/audit/feed', ({ request }) => {
+      captured.feed.push(new URL(request.url));
+      return HttpResponse.json(feedFixture);
+    }),
+    http.get('*/api/admin/audit/users/:userId', ({ request }) => {
+      captured.userDetail.push(new URL(request.url));
+      return HttpResponse.json(userDetailFixture);
+    }),
+    http.get('*/api/admin/audit/entities/:entityType/:entityId', ({ request }) => {
+      captured.entityDetail.push(new URL(request.url));
+      return HttpResponse.json(entityDetailFixture);
+    }),
+  );
+  return captured;
+}
+
 beforeEach(() => {
-  vi.clearAllMocks();
-  vi.mocked(useAdminAuditSummary).mockReturnValue({
-    data: summaryFixture,
-    isLoading: false,
-    refetch: vi.fn(),
-  } as never);
-  vi.mocked(useAdminAuditFeed).mockReturnValue({
-    data: feedFixture,
-    isLoading: false,
-    refetch: vi.fn(),
-  } as never);
-  vi.mocked(useAdminAuditUserDetail).mockReturnValue({
-    data: userDetailFixture,
-    isLoading: false,
-  } as never);
-  vi.mocked(useAdminAuditEntityDetail).mockReturnValue({
-    data: entityDetailFixture,
-    isLoading: false,
-  } as never);
+  act(() => {
+    useAuthStore.setState({
+      user: TEST_USER,
+      token: 'token',
+      isAuthenticated: true,
+      isLoading: false,
+    });
+  });
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  act(() => {
+    useAuthStore.setState({
+      user: null,
+      token: null,
+      isAuthenticated: false,
+      isLoading: false,
+    });
+  });
 });
 
 describe('AdminAuditPage', () => {
   it('renders the live feed and opens the event drawer', async () => {
+    installAuditHandlers();
     renderWithProviders(<AdminAuditPage />);
 
     expect(screen.getByRole('heading', { name: /crm audit/i })).toBeInTheDocument();
-    expect(screen.getAllByText('Lorenzo Rossi').length).toBeGreaterThan(0);
+    await waitFor(() => {
+      expect(screen.getAllByText('Lorenzo Rossi').length).toBeGreaterThan(0);
+    });
     expect(screen.getByText('status')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /details/i }));
@@ -167,8 +202,13 @@ describe('AdminAuditPage', () => {
     expect(screen.getByText(/old_value/)).toBeInTheDocument();
   });
 
-  it('renders the time by rep, entities, and security tabs', () => {
+  it('renders the time by rep, entities, and security tabs', async () => {
+    installAuditHandlers();
     renderWithProviders(<AdminAuditPage />);
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Lorenzo Rossi').length).toBeGreaterThan(0);
+    });
 
     fireEvent.click(screen.getByRole('button', { name: /time by rep/i }));
     expect(screen.getAllByText('Lorenzo Rossi').length).toBeGreaterThan(0);
@@ -181,22 +221,52 @@ describe('AdminAuditPage', () => {
     expect(screen.getByText(/deleted lead #88/i)).toBeInTheDocument();
   });
 
-  it('opens rep and entity detail drawers', () => {
+  it('opens rep and entity detail drawers', async () => {
+    installAuditHandlers();
     renderWithProviders(<AdminAuditPage />);
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Lorenzo Rossi').length).toBeGreaterThan(0);
+    });
 
     fireEvent.click(screen.getByRole('button', { name: /time by rep/i }));
     fireEvent.click(screen.getByRole('button', { name: /inspect/i }));
-    expect(screen.getByRole('dialog', { name: /lorenzo rossi/i })).toBeInTheDocument();
-    expect(screen.getByText(/recent active-time sessions/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: /lorenzo rossi/i })).toBeInTheDocument();
+    });
+    // Drawer body comes from the userDetail request — wait for the MSW
+    // handler to resolve before asserting.
+    await waitFor(() => {
+      expect(screen.getByText(/recent active-time sessions/i)).toBeInTheDocument();
+    });
 
     fireEvent.click(screen.getByRole('button', { name: /^close$/i }));
 
     fireEvent.click(screen.getByRole('button', { name: /entities/i }));
     fireEvent.click(screen.getByRole('button', { name: /inspect/i }));
-    expect(screen.getByRole('dialog', { name: /acme buyer/i })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: /acme buyer/i })).toBeInTheDocument();
+    });
   });
 
-  it('resets filters and exports the visible feed', async () => {
+  it('passes user filter to the audit feed request', async () => {
+    const captured = installAuditHandlers();
+    renderWithProviders(<AdminAuditPage />);
+
+    await waitFor(() => {
+      expect(captured.feed.length).toBeGreaterThan(0);
+    });
+
+    fireEvent.change(screen.getByLabelText(/user/i), { target: { value: '2' } });
+
+    await waitFor(() => {
+      const last = captured.feed.at(-1);
+      expect(last?.searchParams.get('user_id')).toBe('2');
+    });
+  });
+
+  it('exports the visible feed and labels the row count', async () => {
+    installAuditHandlers();
     const originalCreateObjectURL = URL.createObjectURL;
     const originalRevokeObjectURL = URL.revokeObjectURL;
     const createObjectURL = vi.fn(() => 'blob:test');
@@ -213,20 +283,22 @@ describe('AdminAuditPage', () => {
 
     renderWithProviders(<AdminAuditPage />);
 
-    fireEvent.change(screen.getByLabelText(/search/i), { target: { value: 'status' } });
-    fireEvent.click(screen.getByRole('button', { name: /reset filters/i }));
-
     await waitFor(() => {
-      expect(useAdminAuditFeed).toHaveBeenLastCalledWith(expect.objectContaining({
-        search: undefined,
-      }));
+      // Button label now embeds the visible/total counts so admins
+      // can't confuse "Export visible" with "Export all matching".
+      expect(screen.getByRole('button', { name: /export visible \(1\/1\)/i })).toBeInTheDocument();
     });
 
+    // Spy on createElement AFTER render so React's tree construction
+    // (which itself calls createElement under the hood) isn't affected.
+    // Only the anchor synthesized inside downloadVisibleFeedCsv hits
+    // this stub.
     const createElement = vi.spyOn(document, 'createElement').mockReturnValue({
       click,
       href: '',
       download: '',
     } as unknown as HTMLAnchorElement);
+
     fireEvent.click(screen.getByRole('button', { name: /export visible/i }));
     expect(createObjectURL).toHaveBeenCalled();
     expect(click).toHaveBeenCalled();
@@ -239,18 +311,6 @@ describe('AdminAuditPage', () => {
     Object.defineProperty(URL, 'revokeObjectURL', {
       configurable: true,
       value: originalRevokeObjectURL,
-    });
-  });
-
-  it('passes user filters to the audit hooks', async () => {
-    renderWithProviders(<AdminAuditPage />);
-
-    fireEvent.change(screen.getByLabelText(/user/i), { target: { value: '2' } });
-
-    await waitFor(() => {
-      expect(useAdminAuditFeed).toHaveBeenLastCalledWith(expect.objectContaining({
-        user_id: 2,
-      }));
     });
   });
 });

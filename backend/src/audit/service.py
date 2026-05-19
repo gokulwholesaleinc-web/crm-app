@@ -1,10 +1,11 @@
 """Audit services for recording entity changes and active CRM work time."""
 
 from collections import defaultdict
-from datetime import UTC, date, datetime, time
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
 from sqlalchemy import String, cast, func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.activities.models import Activity
@@ -166,7 +167,16 @@ class AuditService:
         search: str | None = None,
         entity_limit: int = 100,
     ) -> dict:
-        """Build dashboard aggregates from audit logs, activities, and sessions."""
+        """Build dashboard aggregates from audit logs, activities, and sessions.
+
+        Defaults ``start_date`` to ``today - 30d`` when omitted so an admin
+        opening ``/admin/audit`` with no filter doesn't trigger a full
+        audit_logs scan. The dashboard exposes a "All time" preset that
+        passes an explicit very-old start_date when the user wants
+        unfiltered history; the slow query is then opt-in.
+        """
+        if start_date is None and end_date is None:
+            start_date = (datetime.now(UTC) - timedelta(days=30)).date()
         start_at, end_at = _date_range_to_datetimes(start_date, end_date)
 
         users = await self._load_users()
@@ -758,7 +768,35 @@ class WorkSessionService:
             metadata_=metadata,
         )
         self.db.add(new_session)
-        await self.db.flush()
+        try:
+            await self.db.flush()
+        except IntegrityError:
+            # The partial unique index in migration 044 prevents two open
+            # rows per (user, entity, source). If a concurrent heartbeat
+            # won the race and inserted first, roll back this INSERT and
+            # update its row instead so we converge on one open session.
+            await self.db.rollback()
+            retry = await self.db.execute(
+                select(WorkSession)
+                .where(
+                    WorkSession.user_id == user_id,
+                    WorkSession.entity_type == normalized_entity_type,
+                    WorkSession.entity_id == entity_id,
+                    WorkSession.source == (source or "detail_page"),
+                    WorkSession.ended_at.is_(None),
+                )
+                .limit(1)
+            )
+            existing = retry.scalar_one_or_none()
+            if existing is None:
+                raise
+            existing.last_seen_at = seen_at
+            existing.duration_seconds = _duration_seconds(existing.started_at, seen_at)
+            if metadata is not None:
+                existing.metadata_ = metadata
+            await self.db.flush()
+            await self.db.refresh(existing)
+            return existing
         await self.db.refresh(new_session)
         return new_session
 
