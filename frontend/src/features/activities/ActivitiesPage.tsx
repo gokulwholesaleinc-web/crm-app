@@ -98,7 +98,6 @@ export function ActivitiesPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [formDirty, setFormDirty] = useState(false);
-  const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
   const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; activity: Activity | null }>(INITIAL_DELETE_CONFIRM);
   const [pushAfterCreate, setPushAfterCreate] = useState(false);
@@ -241,15 +240,6 @@ export function ActivitiesPage() {
     setEditingActivity(null);
     setPushAfterCreate(false);
     setFormDirty(false);
-    setDiscardConfirmOpen(false);
-  };
-
-  const handleFormCancel = () => {
-    if (formDirty) {
-      setDiscardConfirmOpen(true);
-      return;
-    }
-    closeForm();
   };
 
   const isLoading = viewMode === 'list' ? isLoadingList : viewMode === 'timeline' ? isLoadingTimeline : false;
@@ -617,31 +607,22 @@ export function ActivitiesPage() {
         fullScreenOnMobile
         confirmClose={formDirty}
       >
-        <ActivityForm
-          activity={editingActivity || undefined}
-          onSubmit={handleFormSubmit}
-          onCancel={handleFormCancel}
-          isLoading={createActivity.isPending || updateActivity.isPending}
-          pushToCalendar={pushAfterCreate}
-          onPushToCalendarChange={(checked) => {
-            setPushAfterCreate(checked);
-            setFormDirty(true);
-          }}
-          calendarConnected={connected}
-          onDirtyChange={setFormDirty}
-        />
+        {({ requestClose }) => (
+          <ActivityForm
+            activity={editingActivity || undefined}
+            onSubmit={handleFormSubmit}
+            onCancel={requestClose}
+            isLoading={createActivity.isPending || updateActivity.isPending}
+            pushToCalendar={pushAfterCreate}
+            onPushToCalendarChange={(checked) => {
+              setPushAfterCreate(checked);
+              setFormDirty(true);
+            }}
+            calendarConnected={connected}
+            onDirtyChange={setFormDirty}
+          />
+        )}
       </Modal>
-
-      <ConfirmDialog
-        isOpen={discardConfirmOpen}
-        onClose={() => setDiscardConfirmOpen(false)}
-        onConfirm={closeForm}
-        title="Discard unsaved changes?"
-        message="Your activity changes have not been saved."
-        confirmLabel="Discard"
-        cancelLabel="Keep editing"
-        variant="warning"
-      />
 
       {/* Delete Confirmation Dialog */}
       <ConfirmDialog

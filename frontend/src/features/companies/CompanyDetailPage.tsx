@@ -61,7 +61,6 @@ export function CompanyDetailPage() {
   );
   const [showEditForm, setShowEditForm] = useState(false);
   const [formDirty, setFormDirty] = useState(false);
-  const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const actionRowRef = useRef<HTMLDivElement>(null);
 
@@ -108,15 +107,6 @@ export function CompanyDetailPage() {
   const closeEditForm = () => {
     setShowEditForm(false);
     setFormDirty(false);
-    setDiscardConfirmOpen(false);
-  };
-
-  const requestEditClose = () => {
-    if (formDirty) {
-      setDiscardConfirmOpen(true);
-      return;
-    }
-    closeEditForm();
   };
 
   if (isLoadingCompany) {
@@ -304,25 +294,16 @@ export function CompanyDetailPage() {
         size="lg"
         confirmClose={formDirty}
       >
-        <CompanyForm
-          company={company}
-          onSubmit={handleFormSubmit}
-          onCancel={requestEditClose}
-          isLoading={updateCompany.isPending}
-          onDirtyChange={setFormDirty}
-        />
+        {({ requestClose }) => (
+          <CompanyForm
+            company={company}
+            onSubmit={handleFormSubmit}
+            onCancel={requestClose}
+            isLoading={updateCompany.isPending}
+            onDirtyChange={setFormDirty}
+          />
+        )}
       </Modal>
-
-      <ConfirmDialog
-        isOpen={discardConfirmOpen}
-        onClose={() => setDiscardConfirmOpen(false)}
-        onConfirm={closeEditForm}
-        title="Discard unsaved changes?"
-        message="Your company changes have not been saved."
-        confirmLabel="Discard"
-        cancelLabel="Keep editing"
-        variant="warning"
-      />
 
       {/* Delete Confirmation Dialog */}
       <ConfirmDialog

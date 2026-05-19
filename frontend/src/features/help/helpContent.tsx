@@ -1278,7 +1278,7 @@ export const SECTIONS: Section[] = [
               They do not need an explicit share to access anything.
             </Bullet>
             <Bullet>
-              Admins and managers can audit every share in the system from{' '}
+              Admins can audit every share in the system from{' '}
               <a href="/admin/sharing" className="text-primary-600 hover:underline dark:text-primary-400">Admin → Sharing</a>:
               filter by entity type, by who shared, by who received, or by permission level, and
               revoke any share with one click.

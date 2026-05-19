@@ -16,11 +16,18 @@ export const webhookKeys = {
   deliveries: (id: number) => ['webhooks', 'deliveries', id] as const,
 };
 
-export function useWebhooks(params?: { is_active?: boolean }, options?: { enabled?: boolean }) {
+// ``enabled`` is intentionally required: webhooks are manager-or-above
+// only, so a caller that forgets to thread the role gate would otherwise
+// 403-pollute Sentry for sales reps. Forcing an explicit boolean keeps
+// the access check at the call site instead of relying on a default.
+export function useWebhooks(
+  params: { is_active?: boolean } | undefined,
+  options: { enabled: boolean },
+) {
   return useAuthQuery({
     queryKey: webhookKeys.list(params),
     queryFn: () => webhooksApi.list(params),
-    enabled: options?.enabled,
+    enabled: options.enabled,
   });
 }
 

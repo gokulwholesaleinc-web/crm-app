@@ -32,7 +32,16 @@ import {
 import { usePermissions } from '../../../hooks/usePermissions';
 import { MailchimpAudienceViewer } from './MailchimpAudienceViewer';
 
-function StatusPill({ connected }: { connected: boolean }) {
+function StatusPill({ connected }: { connected: boolean | null }) {
+  if (connected === null) {
+    // Non-admins can't query Mailchimp status — show an honest "unknown"
+    // pill instead of lying with "Not connected" when we have no data.
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 dark:bg-gray-700 px-2.5 py-0.5 text-xs font-medium text-gray-600 dark:text-gray-400">
+        Admin only
+      </span>
+    );
+  }
   return connected ? (
     <span className="inline-flex items-center gap-1 rounded-full bg-green-100 dark:bg-green-900/30 px-2.5 py-0.5 text-xs font-medium text-green-700 dark:text-green-400">
       <CheckCircleIcon className="h-3.5 w-3.5" aria-hidden="true" />
@@ -299,7 +308,10 @@ export function MailchimpCard({
     return <Spinner size="sm" />;
   }
 
-  const connected = status?.connected ?? false;
+  // For non-admins the status query is disabled (enabled: isAdmin), so
+  // `status` is always undefined and we'd otherwise render a red "Not
+  // connected" pill regardless of reality. Use `null` to signal "unknown".
+  const connected: boolean | null = isAdmin ? status?.connected ?? false : null;
 
   return (
     <div className="flex items-start gap-4 py-4 first:pt-0 last:pb-0">
