@@ -11,6 +11,11 @@ from src.roles.schemas import RoleCreate, RoleUpdate
 
 logger = logging.getLogger(__name__)
 
+# Namespace key for pg_advisory_xact_lock so concurrent admin
+# demotions serialize across requests. Single-tenant CRM, so one
+# namespace covers it; switch to (ns, tenant_id) if multi-tenant lands.
+_ADMIN_ROLE_CHANGE_LOCK_NS = 200_001
+
 
 class LastAdminError(Exception):
     """Raised when an assignment would leave the tenant with no active admins."""
@@ -73,6 +78,20 @@ class RoleService:
         new_role_is_admin = bool(new_role and new_role.name == RoleName.ADMIN.value)
 
         if not new_role_is_admin:
+            # Serialize concurrent admin demotions through a Postgres
+            # transaction-scoped advisory lock so two simultaneous
+            # demotions can't both pass the "another admin still
+            # exists" check and end the tenant with zero admins. The
+            # lock auto-releases on COMMIT/ROLLBACK; SQLite (tests)
+            # short-circuits via a try/except on the unsupported call.
+            from sqlalchemy import text
+            try:
+                await self.db.execute(
+                    text("SELECT pg_advisory_xact_lock(:ns)"),
+                    {"ns": _ADMIN_ROLE_CHANGE_LOCK_NS},
+                )
+            except Exception:  # noqa: BLE001 - SQLite lacks pg_advisory_*; tests don't race
+                logger.debug("Advisory lock unavailable; proceeding without serialization")
             await self._guard_last_active_admin(user_id)
 
         from src.auth.dependencies import invalidate_user_cache

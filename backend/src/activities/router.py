@@ -83,8 +83,17 @@ async def get_calendar_activities(
 
     if activity_type:
         filters.append(ActivityModel.activity_type == activity_type)
-    effective_owner_id = owner_id if data_scope.can_see_all() else current_user.id
-    filters.append(ActivityModel.owner_id == effective_owner_id)
+    # Calendar filter rules:
+    #   - Scoped role (sales_rep/viewer): always restricted to self.
+    #   - Admin/manager with explicit owner_id: filter to that user.
+    #   - Admin/manager with NO owner_id: default to self (their own
+    #     calendar page). The prior `owner_id == effective_owner_id`
+    #     chain compiled `None` to `owner_id IS NULL` and silently
+    #     returned an empty calendar — regression vs. pre-PR behavior.
+    if owner_id is not None and data_scope.can_see_all():
+        filters.append(ActivityModel.owner_id == owner_id)
+    else:
+        filters.append(ActivityModel.owner_id == current_user.id)
     # Personal calendar mirrors (entity_type='users') are private to that
     # user — admin/manager scope does NOT override. Same invariant
     # enforced on the list endpoint.

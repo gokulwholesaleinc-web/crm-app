@@ -81,16 +81,21 @@ describe('usePermissions', () => {
     expect(rolesApi.getMyPermissions).not.toHaveBeenCalled();
   });
 
-  it('uses role fallback while server permissions are loading', () => {
+  it('denies non-superuser permissions while the server query is still loading', () => {
     vi.mocked(rolesApi.getMyPermissions).mockReturnValue(new Promise(() => {}));
     __setUser({ ...BASE_USER, role: 'admin' });
 
     const { result } = renderHook(() => usePermissions(), { wrapper: makeWrapper() });
 
+    // Role labels still come from the auth store (so the sidebar can show
+    // "Admin" while loading), but the permission checks themselves
+    // deny-by-default until /api/roles/me/permissions resolves. Without
+    // this gate an auth-store role of "admin" would briefly grant full
+    // CRUD on a stale browser tab before the real payload lands.
     expect(result.current.isAdmin).toBe(true);
-    expect(result.current.canCreate('leads')).toBe(true);
-    expect(result.current.canDelete('settings')).toBe(true);
-    expect(result.current.canDelete('roles')).toBe(true);
+    expect(result.current.canCreate('leads')).toBe(false);
+    expect(result.current.canDelete('settings')).toBe(false);
+    expect(result.current.canDelete('roles')).toBe(false);
     expect(result.current.isUsingFallbackPermissions).toBe(true);
   });
 
@@ -121,7 +126,7 @@ describe('usePermissions', () => {
     expect(result.current.isAdmin).toBe(true);
   });
 
-  it('falls back to role defaults when server permissions fail', async () => {
+  it('denies non-superuser permissions when the server query errors', async () => {
     vi.mocked(rolesApi.getMyPermissions).mockRejectedValue(new Error('offline'));
     __setUser({ ...BASE_USER, role: 'viewer' });
 
@@ -129,9 +134,15 @@ describe('usePermissions', () => {
 
     await waitFor(() => expect(result.current.isError).toBe(true));
 
-    expect(result.current.canRead('leads')).toBe(true);
+    // Even READ is denied when the server gate is unresolved — a 500 on
+    // /api/roles/me/permissions during deploy lag would otherwise let an
+    // auth-store role of "viewer" expose READ-only screens while the
+    // actual permission set is unknown. Better to show empty/error than
+    // to lie.
+    expect(result.current.canRead('leads')).toBe(false);
     expect(result.current.canCreate('leads')).toBe(false);
     expect(result.current.isUsingFallbackPermissions).toBe(true);
+    expect(result.current.isError).toBe(true);
   });
 
   it('does not expose retired opportunities permissions in fallback UI gates', () => {

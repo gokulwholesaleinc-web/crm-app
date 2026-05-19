@@ -145,7 +145,7 @@ export function usePermissions() {
   const permissionsQuery = useMyPermissions();
 
   const fallbackRole: RoleName = (user?.role as RoleName) || 'sales_rep';
-  const fallbackPermissions = DEFAULT_PERMISSIONS[fallbackRole] || DEFAULT_PERMISSIONS.sales_rep;
+  const fallbackPermissions = DEFAULT_PERMISSIONS[fallbackRole];
   const serverPermissions = permissionsQuery.data?.permissions;
   const permissions = serverPermissions || fallbackPermissions;
   const role = permissionsQuery.data?.role || fallbackRole;
@@ -155,8 +155,21 @@ export function usePermissions() {
   const isManager = role === 'manager';
   const isManagerOrAbove = isAdmin || isManager;
 
+  // Deny-by-default while the permissions endpoint is loading OR errored.
+  // Without this, the auth-store's `user.role` immediately grants the full
+  // DEFAULT_PERMISSIONS map client-side — meaning an admin-flagged user
+  // who lost their permission row (or hits a 500 / network blip while
+  // /api/roles/me/permissions is in flight) gets full CRUD UI for a few
+  // hundred ms. Superusers bypass since their flag IS the source of
+  // truth and is set at auth time, not via the permissions query.
+  const serverGateUnresolved =
+    !user?.is_superuser &&
+    (permissionsQuery.isLoading || permissionsQuery.isError) &&
+    !serverPermissions;
+
   function hasPermission(entity: string, action: string): boolean {
     if (user?.is_superuser) return true;
+    if (serverGateUnresolved) return false;
     const entityPerms = permissions[entity];
     if (!entityPerms) return false;
     return entityPerms.includes(action);

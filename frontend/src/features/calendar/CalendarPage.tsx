@@ -37,7 +37,7 @@ function CalendarPage() {
             </Button>
           ) : (
             <Link
-              to="/settings#integrations"
+              to={needsReconnect ? '/settings#integrations-google-calendar' : '/settings#integrations'}
               className={
                 needsReconnect
                   ? 'text-sm font-medium text-amber-700 dark:text-amber-300 hover:text-amber-800 dark:hover:text-amber-200'

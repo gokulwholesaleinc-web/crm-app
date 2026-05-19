@@ -109,21 +109,40 @@ function SettingsPage() {
   useEffect(() => {
     if (isLoading || !hash) return;
     const id = hash.slice(1);
-    if (!visibleSectionIds.has(id)) {
-      const label = NAV_ITEMS.find((item) => item.id === id)?.label ?? id;
-      showError(`${label} settings aren't available for your role.`);
-      setActiveSection(firstSectionId);
-      navigate({ pathname, search }, { replace: true });
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // Two flavors of deep-link:
+    //   1. Section-level (#integrations) — gated by visibleSectionIds so
+    //      we don't silently redirect a sales rep landing on #webhooks.
+    //   2. Child-element (#integrations-google-calendar) — used by
+    //      reconnect CTAs from /calendar so the user lands directly on
+    //      the card, not on Lead Sources at the top of the section. We
+    //      still gate by the prefix matching a visible section to keep
+    //      role-restricted children unreachable via the URL bar.
+    if (visibleSectionIds.has(id)) {
+      const target = document.getElementById(id);
+      if (!target) return;
+      target.scrollIntoView({
+        behavior: prefersReducedMotion ? 'auto' : 'smooth',
+        block: 'start',
+      });
+      setActiveSection(id);
       return;
     }
-    const target = document.getElementById(id);
-    if (!target) return;
-    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    target.scrollIntoView({
-      behavior: prefersReducedMotion ? 'auto' : 'smooth',
-      block: 'start',
-    });
-    setActiveSection(id);
+    const parentSectionId = [...visibleSectionIds].find((sectionId) => id.startsWith(`${sectionId}-`));
+    if (parentSectionId) {
+      const target = document.getElementById(id);
+      if (!target) return;
+      target.scrollIntoView({
+        behavior: prefersReducedMotion ? 'auto' : 'smooth',
+        block: 'start',
+      });
+      setActiveSection(parentSectionId);
+      return;
+    }
+    const label = NAV_ITEMS.find((item) => item.id === id)?.label ?? id;
+    showError(`${label} settings aren't available for your role.`);
+    setActiveSection(firstSectionId);
+    navigate({ pathname, search }, { replace: true });
   }, [firstSectionId, hash, isLoading, navigate, pathname, search, visibleSectionIds]);
 
   // Track which section the reader is on. We pick the *last* section

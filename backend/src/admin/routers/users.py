@@ -1,8 +1,13 @@
 """Admin user CRUD, role assignment, and tenant linking endpoints."""
 
+import logging
+
 from fastapi import APIRouter, HTTPException, Query, Request
 from sqlalchemy import func, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 from src.admin._router_helpers import _require_admin
 from src.admin.schemas import (
@@ -61,6 +66,20 @@ async def _assign_default_role(db: AsyncSession, user_id: int, role_name: str) -
         raise HTTPException(
             status_code=HTTPStatus.BAD_REQUEST,
             detail=str(exc),
+        ) from exc
+    except SQLAlchemyError as exc:
+        # IntegrityError (duplicate user_roles row, FK violation),
+        # OperationalError (DB blip during the cache-invalidation
+        # round-trip) etc. should NOT 500 silently — log with both IDs
+        # so the failure is debuggable from the operator side.
+        logger.exception(
+            "Role assignment failed user_id=%s role=%s",
+            user_id,
+            validated_role_name,
+        )
+        raise HTTPException(
+            status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+            detail="Role assignment failed — see server logs",
         ) from exc
 
 
