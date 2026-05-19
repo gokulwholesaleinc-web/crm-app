@@ -518,7 +518,7 @@ export const GUIDE_REGISTRY: readonly Guide[] = [
     steps: [
       {
         title: 'Settings sections',
-        body: 'The section nav jumps between profile, notifications, preferences, and any admin-only setup areas your role can access.',
+        body: 'The section nav jumps between profile, notifications, preferences, and the setup areas your role can access.',
         action: 'choose a section from the settings navigation to jump directly to it.',
         selector: target('settings-nav'),
       },
@@ -606,12 +606,12 @@ export const GUIDE_REGISTRY: readonly Guide[] = [
     id: 'admin-sharing-tour',
     title: 'Admin sharing',
     description: 'Audit record-level shares and revoke stale access.',
-    roles: adminRoles,
+    roles: managerRoles,
     path: '/admin/sharing',
     steps: [
       {
         title: 'Tenant-wide sharing audit',
-        body: 'Admins can filter every record share by entity type, sender, recipient, and permission.',
+        body: 'Managers and admins can filter every record share by entity type, sender, recipient, and permission.',
         selector: target('admin-sharing-filters'),
       },
       {
@@ -625,7 +625,7 @@ export const GUIDE_REGISTRY: readonly Guide[] = [
     id: 'duplicate-cleanup-tour',
     title: 'Duplicate cleanup',
     description: 'Find duplicate clusters and merge redundant records into the best winner.',
-    roles: adminRoles,
+    roles: managerRoles,
     path: '/admin/dedup',
     steps: [
       {

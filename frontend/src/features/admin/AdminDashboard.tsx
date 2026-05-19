@@ -149,10 +149,9 @@ export default function AdminDashboard() {
   // click something and hit a 403. See `settings-admin.md` audit P0 #1.
   const isAdmin = user?.role === 'admin' || user?.is_superuser === true;
 
-  // Hooks must run unconditionally — call them before the early return so
-  // React's hook order stays stable. The backend enforces real
-  // authorization; the queries will 403 for non-admins and show an empty
-  // state below the access-denied banner.
+  // Hooks must run unconditionally so React's hook order stays stable.
+  // The hooks themselves suppress admin queries for non-admin users; the
+  // route gate normally prevents this page from mounting for them at all.
   const { data: stats, isLoading: statsLoading } = useSystemStats();
   const { data: team, isLoading: teamLoading } = useTeamOverview();
   const { data: feed, isLoading: feedLoading } = useActivityFeed(30);

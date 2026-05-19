@@ -7,6 +7,7 @@ import {
 } from 'react-hook-form';
 import { Modal, ModalFooter, ModalSize } from '../ui/Modal';
 import { Button } from '../ui/Button';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 
 export interface FormModalProps<T extends FieldValues> {
   isOpen: boolean;
@@ -36,6 +37,7 @@ export function FormModal<T extends FieldValues>({
   children,
 }: FormModalProps<T>) {
   const [success, setSuccess] = useState(false);
+  const [confirmingClose, setConfirmingClose] = useState(false);
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevIsOpenRef = useRef(false);
 
@@ -51,6 +53,7 @@ export function FormModal<T extends FieldValues>({
       form.reset(defaultValues);
       setSuccess(false);
     } else if (!isOpen) {
+      setConfirmingClose(false);
       // Parent closed the modal before the 800 ms auto-close timer fired.
       // Cancel it so it doesn't fire onClose on the next open cycle.
       if (closeTimerRef.current !== null) {
@@ -81,42 +84,58 @@ export function FormModal<T extends FieldValues>({
   };
 
   const requestClose = () => {
-    if (isDirty && !window.confirm('Discard unsaved changes?')) {
+    if (isDirty) {
+      setConfirmingClose(true);
       return;
     }
     onClose();
   };
 
   return (
-    <Modal
-      isOpen={isOpen}
-      onClose={requestClose}
-      title={title}
-      size={size}
-    >
-      <form onSubmit={form.handleSubmit(handleFormSubmit)} className="space-y-4">
-        {isError && (
-          <div className="rounded-md bg-red-50 dark:bg-red-900/20 p-3">
-            <p className="text-sm text-red-800 dark:text-red-300">{errorMessage}</p>
-          </div>
-        )}
-        {success && (
-          <div className="rounded-md bg-green-50 dark:bg-green-900/20 p-3">
-            <p className="text-sm text-green-800 dark:text-green-300">Saved successfully!</p>
-          </div>
-        )}
+    <>
+      <Modal
+        isOpen={isOpen}
+        onClose={requestClose}
+        title={title}
+        size={size}
+      >
+        <form onSubmit={form.handleSubmit(handleFormSubmit)} className="space-y-4">
+          {isError && (
+            <div className="rounded-md bg-red-50 dark:bg-red-900/20 p-3">
+              <p className="text-sm text-red-800 dark:text-red-300">{errorMessage}</p>
+            </div>
+          )}
+          {success && (
+            <div className="rounded-md bg-green-50 dark:bg-green-900/20 p-3">
+              <p className="text-sm text-green-800 dark:text-green-300">Saved successfully!</p>
+            </div>
+          )}
 
-        {children(form)}
+          {children(form)}
 
-        <ModalFooter>
-          <Button type="button" variant="secondary" onClick={requestClose} disabled={isPending}>
-            Cancel
-          </Button>
-          <Button type="submit" isLoading={isPending} disabled={success}>
-            {submitLabel}
-          </Button>
-        </ModalFooter>
-      </form>
-    </Modal>
+          <ModalFooter>
+            <Button type="button" variant="secondary" onClick={requestClose} disabled={isPending}>
+              Cancel
+            </Button>
+            <Button type="submit" isLoading={isPending} disabled={success}>
+              {submitLabel}
+            </Button>
+          </ModalFooter>
+        </form>
+      </Modal>
+      <ConfirmDialog
+        isOpen={confirmingClose}
+        onClose={() => setConfirmingClose(false)}
+        onConfirm={() => {
+          setConfirmingClose(false);
+          onClose();
+        }}
+        title="Discard unsaved changes?"
+        message="Your changes have not been saved. You can keep editing or discard them."
+        confirmLabel="Discard"
+        cancelLabel="Keep editing"
+        variant="warning"
+      />
+    </>
   );
 }

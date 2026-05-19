@@ -1,10 +1,14 @@
 """Webhook API routes."""
 
 
-from fastapi import APIRouter, HTTPException, Query
+from typing import Annotated
 
+from fastapi import APIRouter, Depends, HTTPException, Query
+
+from src.auth.models import User
 from src.core.constants import HTTPStatus
-from src.core.router_utils import CurrentUser, DBSession, raise_not_found
+from src.core.permissions import require_manager_or_above
+from src.core.router_utils import DBSession, raise_not_found
 from src.webhooks.schemas import (
     WebhookCreate,
     WebhookDeliveryResponse,
@@ -14,15 +18,16 @@ from src.webhooks.schemas import (
 from src.webhooks.service import WebhookService
 
 router = APIRouter(prefix="/api/webhooks", tags=["webhooks"])
+ManagerOrAbove = Annotated[User, Depends(require_manager_or_above)]
 
 
 @router.post("", response_model=WebhookResponse, status_code=HTTPStatus.CREATED)
 async def create_webhook(
     data: WebhookCreate,
-    current_user: CurrentUser,
+    current_user: ManagerOrAbove,
     db: DBSession,
 ):
-    """Create a new webhook."""
+    """Create a new webhook. Manager+ only."""
     service = WebhookService(db)
     try:
         webhook = await service.create_webhook(data, current_user.id)
@@ -33,13 +38,13 @@ async def create_webhook(
 
 @router.get("", response_model=list[WebhookResponse])
 async def list_webhooks(
-    current_user: CurrentUser,
+    current_user: ManagerOrAbove,
     db: DBSession,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     is_active: bool | None = None,
 ):
-    """List webhooks."""
+    """List webhooks. Manager+ only."""
     service = WebhookService(db)
     webhooks, _ = await service.get_list(
         page=page, page_size=page_size, is_active=is_active,
@@ -50,10 +55,10 @@ async def list_webhooks(
 @router.get("/{webhook_id}", response_model=WebhookResponse)
 async def get_webhook(
     webhook_id: int,
-    current_user: CurrentUser,
+    current_user: ManagerOrAbove,
     db: DBSession,
 ):
-    """Get a webhook by ID."""
+    """Get a webhook by ID. Manager+ only."""
     service = WebhookService(db)
     webhook = await service.get_by_id(webhook_id)
     if not webhook:
@@ -65,10 +70,10 @@ async def get_webhook(
 async def update_webhook(
     webhook_id: int,
     data: WebhookUpdate,
-    current_user: CurrentUser,
+    current_user: ManagerOrAbove,
     db: DBSession,
 ):
-    """Update a webhook."""
+    """Update a webhook. Manager+ only."""
     service = WebhookService(db)
     webhook = await service.get_by_id(webhook_id)
     if not webhook:
@@ -83,10 +88,10 @@ async def update_webhook(
 @router.delete("/{webhook_id}", status_code=HTTPStatus.NO_CONTENT)
 async def delete_webhook(
     webhook_id: int,
-    current_user: CurrentUser,
+    current_user: ManagerOrAbove,
     db: DBSession,
 ):
-    """Delete a webhook."""
+    """Delete a webhook. Manager+ only."""
     service = WebhookService(db)
     webhook = await service.get_by_id(webhook_id)
     if not webhook:
@@ -97,12 +102,12 @@ async def delete_webhook(
 @router.get("/{webhook_id}/deliveries", response_model=list[WebhookDeliveryResponse])
 async def get_deliveries(
     webhook_id: int,
-    current_user: CurrentUser,
+    current_user: ManagerOrAbove,
     db: DBSession,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
 ):
-    """Get delivery log for a webhook."""
+    """Get delivery log for a webhook. Manager+ only."""
     service = WebhookService(db)
     webhook = await service.get_by_id(webhook_id)
     if not webhook:
@@ -114,10 +119,10 @@ async def get_deliveries(
 @router.post("/{webhook_id}/test")
 async def test_webhook(
     webhook_id: int,
-    current_user: CurrentUser,
+    current_user: ManagerOrAbove,
     db: DBSession,
 ):
-    """Send a test event to a webhook."""
+    """Send a test event to a webhook. Manager+ only."""
     service = WebhookService(db)
     webhook = await service.get_by_id(webhook_id)
     if not webhook:

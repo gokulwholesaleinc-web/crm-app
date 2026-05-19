@@ -254,6 +254,7 @@ export function CompaniesPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [formDirty, setFormDirty] = useState(false);
+  const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
   const [editingCompany, setEditingCompany] = useState<Company | null>(null);
   const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
   const debouncedSearch = useDebouncedValue(searchQuery, 300);
@@ -396,10 +397,12 @@ export function CompaniesPage() {
     setShowForm(false);
     setEditingCompany(null);
     setFormDirty(false);
+    setDiscardConfirmOpen(false);
   };
 
   const handleFormCancel = () => {
-    if (formDirty && !window.confirm('Discard unsaved changes?')) {
+    if (formDirty) {
+      setDiscardConfirmOpen(true);
       return;
     }
     closeForm();
@@ -578,6 +581,17 @@ export function CompaniesPage() {
           onDirtyChange={setFormDirty}
         />
       </Modal>
+
+      <ConfirmDialog
+        isOpen={discardConfirmOpen}
+        onClose={() => setDiscardConfirmOpen(false)}
+        onConfirm={closeForm}
+        title="Discard unsaved changes?"
+        message="Your company changes have not been saved."
+        confirmLabel="Discard"
+        cancelLabel="Keep editing"
+        variant="warning"
+      />
 
       {/* Delete Confirmation Dialog */}
       <ConfirmDialog

@@ -37,12 +37,15 @@ describe('guide registry filtering', () => {
     ]);
   });
 
-  it('keeps admin-only guides out of non-admin roles', () => {
+  it('keeps admin-only guides out of managers while showing manager audit tools', () => {
     expect(getGuidesForPath('/admin/user-approvals', 'manager')).toHaveLength(0);
-    expect(getGuidesForPath('/admin/sharing', 'manager')).toHaveLength(0);
+    expect(getGuidesForPath('/admin/sharing', 'manager').map((guide) => guide.id))
+      .toContain('admin-sharing-tour');
+    expect(getGuidesForPath('/admin/dedup', 'manager').map((guide) => guide.id))
+      .toContain('duplicate-cleanup-tour');
     expect(guideIdsForPath('/settings', 'manager')).not.toContain('settings-admin-tour');
-    expect(getGuidesForRole('manager').filter((guide) => guide.path.startsWith('/admin')))
-      .toHaveLength(0);
+    expect(getGuidesForRole('manager').filter((guide) => guide.path.startsWith('/admin')).map((guide) => guide.id))
+      .toEqual(['admin-sharing-tour', 'duplicate-cleanup-tour']);
     expect(getGuidesForPath('/admin/user-approvals', 'admin').map((guide) => guide.id))
       .toContain('user-approvals-tour');
     expect(guideIdsForPath('/settings', 'admin')).toContain('settings-admin-tour');
@@ -113,20 +116,21 @@ describe('guide registry filtering', () => {
     expect(adminSettings).toContain('settings-admin-tour');
   });
 
-  it('keeps every admin guide admin-only', () => {
+  it('keeps admin pages admin-only and audit tools manager-accessible', () => {
     const adminGuideIds = new Set([
       'settings-admin-tour',
       'admin-dashboard-tour',
       'user-approvals-tour',
-      'admin-sharing-tour',
-      'duplicate-cleanup-tour',
     ]);
 
     for (const guide of GUIDE_REGISTRY.filter((entry) => (
-      entry.path.startsWith('/admin') || adminGuideIds.has(entry.id)
+      adminGuideIds.has(entry.id)
     ))) {
       expect(guide.roles).toEqual(['admin']);
     }
+
+    expect(guideById('admin-sharing-tour').roles).toEqual(['admin', 'manager']);
+    expect(guideById('duplicate-cleanup-tour').roles).toEqual(['admin', 'manager']);
   });
 
   it('limits viewer guides to read-oriented tours', () => {

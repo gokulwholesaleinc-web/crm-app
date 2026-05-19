@@ -75,7 +75,6 @@ describe('FormModal', () => {
   it('keeps a dirty modal open when close confirmation is canceled', async () => {
     vi.useRealTimers();
     const onClose = vi.fn();
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
     renderWithProviders(<TestFormModal onClose={onClose} />);
 
     fireEvent.change(screen.getByTestId('name-input'), { target: { value: 'Draft' } });
@@ -87,15 +86,16 @@ describe('FormModal', () => {
       fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
     });
 
-    expect(confirmSpy).toHaveBeenCalledWith('Discard unsaved changes?');
+    expect(await screen.findByText('Discard unsaved changes?')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /keep editing/i }));
+
     expect(onClose).not.toHaveBeenCalled();
-    confirmSpy.mockRestore();
+    expect(screen.getByTestId('name-input')).toBeTruthy();
   });
 
   it('closes a dirty modal when close confirmation is accepted', async () => {
     vi.useRealTimers();
     const onClose = vi.fn();
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     renderWithProviders(<TestFormModal onClose={onClose} />);
 
     fireEvent.change(screen.getByTestId('name-input'), { target: { value: 'Draft' } });
@@ -107,8 +107,10 @@ describe('FormModal', () => {
       fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
     });
 
+    expect(await screen.findByText('Discard unsaved changes?')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /discard/i }));
+
     expect(onClose).toHaveBeenCalledTimes(1);
-    confirmSpy.mockRestore();
   });
 
   it('calls onSubmit with form data on submit', async () => {

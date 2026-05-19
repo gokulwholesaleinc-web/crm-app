@@ -1,7 +1,5 @@
 import { ReactNode } from 'react';
-import { ExclamationTriangleIcon } from '@heroicons/react/24/outline';
-import { Modal } from './Modal';
-import { Button } from './Button';
+import { ConfirmDialogBase } from './ConfirmDialogBase';
 
 export interface ConfirmDialogProps {
   isOpen: boolean;
@@ -15,24 +13,6 @@ export interface ConfirmDialogProps {
   isLoading?: boolean;
 }
 
-const variantStyles = {
-  danger: {
-    icon: 'bg-red-100 dark:bg-red-900/30',
-    iconColor: 'text-red-600 dark:text-red-400',
-    button: 'danger' as const,
-  },
-  warning: {
-    icon: 'bg-yellow-100 dark:bg-yellow-900/30',
-    iconColor: 'text-yellow-600 dark:text-yellow-400',
-    button: 'primary' as const,
-  },
-  info: {
-    icon: 'bg-blue-100 dark:bg-blue-900/30',
-    iconColor: 'text-blue-600 dark:text-blue-400',
-    button: 'primary' as const,
-  },
-};
-
 export function ConfirmDialog({
   isOpen,
   onClose,
@@ -44,57 +24,17 @@ export function ConfirmDialog({
   variant = 'danger',
   isLoading = false,
 }: ConfirmDialogProps) {
-  const styles = variantStyles[variant];
-
   return (
-    <Modal
+    <ConfirmDialogBase
       isOpen={isOpen}
       onClose={onClose}
+      onConfirm={onConfirm}
       title={title}
-      size="sm"
-      showCloseButton={false}
-      closeOnOverlayClick={!isLoading}
-    >
-      <div className="sm:flex sm:items-start">
-        <div
-          className={`mx-auto flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full ${styles.icon} sm:mx-0 sm:h-10 sm:w-10`}
-        >
-          <ExclamationTriangleIcon
-            className={`h-6 w-6 ${styles.iconColor}`}
-            aria-hidden="true"
-          />
-        </div>
-        {/* `message` is typed as ReactNode so callers can pass rich content
-            (fragments, block-level spans, warnings, lists). Use a div so
-            block children are valid — a `<p>` wrapper would trigger
-            React's validateDOMNesting warning and silently break layout
-            when callers pass anything other than inline text. */}
-        <div className="mt-3 text-center sm:ml-4 sm:mt-0 sm:text-left">
-          <div className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-            {message}
-          </div>
-        </div>
-      </div>
-      <div className="mt-5 sm:mt-4 flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3">
-        <Button
-          variant="secondary"
-          onClick={onClose}
-          disabled={isLoading}
-          autoFocus
-          className="w-full sm:w-auto min-h-[44px] sm:min-h-0"
-        >
-          {cancelLabel}
-        </Button>
-        <Button
-          variant={styles.button}
-          onClick={onConfirm}
-          isLoading={isLoading}
-          disabled={isLoading}
-          className="w-full sm:w-auto min-h-[44px] sm:min-h-0"
-        >
-          {confirmLabel}
-        </Button>
-      </div>
-    </Modal>
+      message={message}
+      confirmLabel={confirmLabel}
+      cancelLabel={cancelLabel}
+      variant={variant}
+      isLoading={isLoading}
+    />
   );
 }

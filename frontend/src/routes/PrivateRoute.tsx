@@ -7,14 +7,23 @@
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 
 import { useAuthStore } from '../store/authStore';
+import type { RoleName } from '../store/authStore';
 import { Spinner } from '../components/ui/Spinner';
 import { Layout } from '../components/layout/Layout';
+import { EmptyState } from '../components/ui/EmptyState';
+import { LockClosedIcon } from '@heroicons/react/24/outline';
 
 interface PrivateRouteProps {
   children: React.ReactNode;
+  allowedRoles?: RoleName[];
+  allowSuperuser?: boolean;
 }
 
-export function PrivateRoute({ children }: PrivateRouteProps) {
+export function PrivateRoute({
+  children,
+  allowedRoles,
+  allowSuperuser = true,
+}: PrivateRouteProps) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const isLoading = useAuthStore((s) => s.isLoading);
   const user = useAuthStore((s) => s.user);
@@ -53,9 +62,25 @@ export function PrivateRoute({ children }: PrivateRouteProps) {
       }
     : undefined;
 
+  const role = user?.role as RoleName | undefined;
+  const isAllowed =
+    !allowedRoles ||
+    (allowSuperuser && user?.is_superuser === true) ||
+    (role ? allowedRoles.includes(role) : false);
+
   return (
     <Layout user={layoutUser} onLogout={handleLogout}>
-      {children}
+      {isAllowed ? (
+        children
+      ) : (
+        <EmptyState
+          variant="error"
+          icon={<LockClosedIcon className="h-12 w-12" />}
+          title="Access Denied"
+          description="You do not have permission to view this page. If you believe this is a mistake, contact your workspace administrator."
+          secondaryAction={{ label: 'Go to Dashboard', onClick: () => navigate('/') }}
+        />
+      )}
     </Layout>
   );
 }

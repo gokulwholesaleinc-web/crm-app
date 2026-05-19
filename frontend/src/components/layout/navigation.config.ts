@@ -61,7 +61,8 @@ export const DEFAULT_SECONDARY_NAVIGATION: NavItem[] = [
 export const STORAGE_KEY_MAIN = 'crm-sidebar-order:v1';
 export const STORAGE_KEY_SECONDARY = 'crm-sidebar-secondary-order:v1';
 
-export const ADMIN_ONLY_IDS = new Set(['admin', 'approvals', 'admin-sharing', 'admin-dedup']);
+export const ADMIN_ONLY_IDS = new Set(['admin', 'approvals']);
+export const MANAGER_OR_ADMIN_IDS = new Set(['admin-sharing', 'admin-dedup']);
 
 export function readStoredOrder(key: string): string[] | null {
   const parsed = safeStorage.getJson<unknown>(key);

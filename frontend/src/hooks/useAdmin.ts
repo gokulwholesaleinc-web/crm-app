@@ -19,44 +19,52 @@ export const adminKeys = {
 export function useAdminUsers() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const authLoading = useAuthStore((s) => s.isLoading);
+  const user = useAuthStore((s) => s.user);
+  const isAdmin = user?.is_superuser === true || user?.role === 'admin';
   return useQuery({
     queryKey: adminKeys.users(),
     queryFn: () => adminApi.getAdminUsers(),
     ...CACHE_TIMES.DASHBOARD,
-    enabled: isAuthenticated && !authLoading,
+    enabled: isAuthenticated && !authLoading && isAdmin,
   });
 }
 
 export function useSystemStats() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const authLoading = useAuthStore((s) => s.isLoading);
+  const user = useAuthStore((s) => s.user);
+  const isAdmin = user?.is_superuser === true || user?.role === 'admin';
   return useQuery({
     queryKey: adminKeys.stats(),
     queryFn: () => adminApi.getSystemStats(),
     ...CACHE_TIMES.DASHBOARD,
-    enabled: isAuthenticated && !authLoading,
+    enabled: isAuthenticated && !authLoading && isAdmin,
   });
 }
 
 export function useTeamOverview() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const authLoading = useAuthStore((s) => s.isLoading);
+  const user = useAuthStore((s) => s.user);
+  const isAdmin = user?.is_superuser === true || user?.role === 'admin';
   return useQuery({
     queryKey: adminKeys.teamOverview(),
     queryFn: () => adminApi.getTeamOverview(),
     ...CACHE_TIMES.DASHBOARD,
-    enabled: isAuthenticated && !authLoading,
+    enabled: isAuthenticated && !authLoading && isAdmin,
   });
 }
 
 export function useActivityFeed(limit = 50) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const authLoading = useAuthStore((s) => s.isLoading);
+  const user = useAuthStore((s) => s.user);
+  const isAdmin = user?.is_superuser === true || user?.role === 'admin';
   return useQuery({
     queryKey: adminKeys.activityFeed(limit),
     queryFn: () => adminApi.getActivityFeed(limit),
     ...CACHE_TIMES.DASHBOARD,
-    enabled: isAuthenticated && !authLoading,
+    enabled: isAuthenticated && !authLoading && isAdmin,
   });
 }
 
@@ -95,4 +103,3 @@ export function useAssignUserRole() {
     },
   });
 }
-

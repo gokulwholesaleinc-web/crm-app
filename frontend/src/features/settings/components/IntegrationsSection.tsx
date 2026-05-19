@@ -139,6 +139,7 @@ function MetaCard({ onRequestDisconnect }: { onRequestDisconnect: () => void }) 
   const { data: status, isLoading } = useQuery<MetaConnectionStatus>({
     queryKey: ['integrations', 'meta', 'status'],
     queryFn: getMetaStatus,
+    enabled: isAdmin,
   });
 
   const connectMutation = useMutation({
