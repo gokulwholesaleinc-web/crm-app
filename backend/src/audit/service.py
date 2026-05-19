@@ -1,5 +1,6 @@
 """Audit services for recording entity changes and active CRM work time."""
 
+import logging
 from collections import defaultdict
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
@@ -7,6 +8,8 @@ from typing import Any
 from sqlalchemy import String, cast, func, or_, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 from src.activities.models import Activity
 from src.audit.models import AuditLog, WorkSession
@@ -182,18 +185,27 @@ class AuditService:
             action=action,
             search=search,
         )
-        # Bound the cursor at 5 minutes on Postgres. Without this, a
-        # wide-date pull with `search` (which casts the JSON `changes`
-        # column and forces a full scan) can pin a Neon pooler slot
-        # indefinitely while the export stalls. SET LOCAL scopes to this
-        # transaction only — no global session change to worry about. The
-        # cursor's existing exception handler in the router converts the
-        # QueryCanceledError into the "EXPORT TRUNCATED" trailer, so the
-        # user sees the truncation rather than getting a half-complete CSV
-        # that looks done. Skipped on SQLite (test harness) since the
-        # dialect doesn't recognize the statement.
-        if self.db.get_bind().dialect.name == "postgresql":
+        # Cap cursor at 5min on Postgres. Wide-date + JSON `search`
+        # casts `changes` to text and forces a full scan that can pin a
+        # Neon pooler slot. SET LOCAL no-ops silently outside a txn, so
+        # we verify via SHOW after — the router's broad except already
+        # converts a real timeout into the CSV "EXPORT TRUNCATED"
+        # trailer, but we don't want a *silent* drop to look like
+        # success. get_bind() in try/except keeps a detached-session
+        # bug from being laundered into the same "TRUNCATED" message.
+        dialect_name: str | None = None
+        try:
+            dialect_name = self.db.get_bind().dialect.name
+        except Exception:  # noqa: BLE001 - any bind failure → skip timeout, don't crash export
+            logger.warning("audit CSV: could not resolve dialect", exc_info=True)
+        if dialect_name == "postgresql":
             await self.db.execute(text("SET LOCAL statement_timeout = '300s'"))
+            current = (await self.db.execute(text("SHOW statement_timeout"))).scalar()
+            if current == "0":
+                logger.warning(
+                    "audit CSV: SET LOCAL statement_timeout did not apply "
+                    "(SHOW returned '0'); cursor is unbounded"
+                )
         query = (
             select(
                 AuditLog,
