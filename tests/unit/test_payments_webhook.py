@@ -224,6 +224,53 @@ class TestProcessWebhookIdempotency:
             await payment_service.process_webhook(payload, bad_sig)
 
 
+class TestOfficialWebhookConstructEvent:
+    """When Stripe SDK is configured, use its official verifier."""
+
+    @pytest.mark.asyncio
+    async def test_process_webhook_uses_stripe_construct_event(
+        self,
+        payment_service: PaymentService,
+        monkeypatch,
+    ):
+        import src.payments.service as svc
+
+        calls = []
+        expected_event = _make_event(
+            "unknown.event",
+            {"id": "obj_official"},
+            event_id="evt_official_construct",
+        )
+
+        class _Webhook:
+            @staticmethod
+            def construct_event(payload, sig_header, secret, tolerance):
+                calls.append((payload, sig_header, secret, tolerance))
+                return expected_event
+
+        monkeypatch.setattr(svc.settings, "STRIPE_WEBHOOK_SECRET", WEBHOOK_SECRET)
+        monkeypatch.setattr(svc.settings, "STRIPE_SECRET_KEY", "sk_test_present")
+        monkeypatch.setattr(svc, "_get_stripe", lambda: type("Stripe", (), {"Webhook": _Webhook}))
+        monkeypatch.setattr(
+            svc.PaymentService,
+            "_verify_webhook_signature",
+            staticmethod(lambda *args, **kwargs: pytest.fail("fallback verifier should not run")),
+        )
+
+        result = await payment_service.process_webhook(b"payload", "stripe_signature")
+
+        assert result["status"] == "processed"
+        assert result["event_id"] == "evt_official_construct"
+        assert calls == [
+            (
+                b"payload",
+                "stripe_signature",
+                WEBHOOK_SECRET,
+                300,
+            )
+        ]
+
+
 # ---------------------------------------------------------------------------
 # Target 3: _handle_invoice_paid
 # ---------------------------------------------------------------------------

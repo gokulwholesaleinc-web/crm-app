@@ -7,8 +7,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-# Stripe Customer Schemas
 
+# Stripe Customer Schemas
 class StripeCustomerCreate(BaseModel):
     contact_id: int | None = None
     company_id: int | None = None
@@ -43,7 +43,6 @@ class SyncCustomerRequest(BaseModel):
 
 
 # Product Schemas
-
 class ProductCreate(BaseModel):
     name: str
     description: str | None = None
@@ -95,7 +94,6 @@ class ProductListResponse(BaseModel):
 
 
 # Price Schemas
-
 class PriceCreate(BaseModel):
     product_id: int
     amount: Decimal
@@ -106,7 +104,6 @@ class PriceCreate(BaseModel):
 
 
 # Payment Schemas
-
 class PaymentBase(BaseModel):
     amount: Decimal
     currency: str = "USD"
@@ -196,7 +193,6 @@ class PaymentListResponse(BaseModel):
 
 
 # Subscription Schemas
-
 class SubscriptionResponse(BaseModel):
     id: int
     stripe_subscription_id: str
@@ -224,7 +220,6 @@ class SubscriptionListResponse(BaseModel):
 
 
 # Checkout / PaymentIntent Schemas
-
 def _validate_url(v: str) -> str:
     """Validate that a URL has a proper http/https scheme."""
     parsed = urllib.parse.urlparse(v)
@@ -278,7 +273,6 @@ class CreateAndSendInvoiceRequest(BaseModel):
     currency: str = "USD"
     description: str = "Invoice"
     due_days: int = Field(default=30, ge=1, le=365)
-    payment_method_types: list[Literal["card", "us_bank_account"]] | None = None
 
 
 class CreateAndSendInvoiceResponse(BaseModel):

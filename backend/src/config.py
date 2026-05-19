@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     STRIPE_SECRET_KEY: str = ""
     STRIPE_PUBLISHABLE_KEY: str = ""
     STRIPE_WEBHOOK_SECRET: str = ""
+    STRIPE_API_VERSION: str = "2026-04-22.dahlia"
 
     # Public-facing frontend origin used throughout the backend for deep-link
     # generation (Stripe Checkout, e-sign, quotes, contracts, notifications,

@@ -72,8 +72,6 @@ export function SendInvoiceModal({
   const [description, setDescription] = useState('');
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | ''>('');
   const [dueDays, setDueDays] = useState(30);
-  const [paymentMethodCard, setPaymentMethodCard] = useState(true);
-  const [paymentMethodAch, setPaymentMethodAch] = useState(false);
   const [intervalPreset, setIntervalPreset] = useState<number>(0);
 
   const { data: customersData, isLoading: loadingCustomers } = useStripeCustomers({ page_size: 100 });
@@ -102,8 +100,6 @@ export function SendInvoiceModal({
     setDescription('');
     setDueDays(30);
     setSelectedCustomerId('');
-    setPaymentMethodCard(true);
-    setPaymentMethodAch(false);
     setPaymentType('one_time');
     setIntervalPreset(0);
   };
@@ -130,22 +126,12 @@ export function SendInvoiceModal({
       customers.find((c: StripeCustomer) => c.id === customerId)?.email ?? contactEmail ?? 'customer';
 
     if (paymentType === 'one_time') {
-      const paymentMethodTypes: string[] = [];
-      if (paymentMethodCard) paymentMethodTypes.push('card');
-      if (paymentMethodAch) paymentMethodTypes.push('us_bank_account');
-
-      if (paymentMethodTypes.length === 0) {
-        showError('Select at least one payment method');
-        return;
-      }
-
       try {
         const result = await invoiceMutation.mutateAsync({
           customer_id: customerId as number,
           amount: parseFloat(amount),
           description,
           due_days: dueDays,
-          payment_method_types: paymentMethodTypes,
         });
         await copyToClipboardWithFeedback(result.invoice_url ?? '', recipientEmail, 'Invoice');
         resetForm();
@@ -193,6 +179,18 @@ export function SendInvoiceModal({
               Invoices cannot be sent until an admin sets the
               {' '}<code className="font-mono">STRIPE_SECRET_KEY</code>{' '}
               environment variable.
+            </p>
+          </div>
+        )}
+        {stripeMode === 'test' && (
+          <div
+            role="alert"
+            aria-live="polite"
+            className="rounded-md border border-sky-300 bg-sky-50 p-3 text-sm text-sky-900 dark:border-sky-700 dark:bg-sky-900/20 dark:text-sky-200"
+          >
+            <p className="font-medium">Stripe is in test mode.</p>
+            <p className="mt-1 text-xs">
+              This invoice will be created with Stripe test keys and will not collect real funds.
             </p>
           </div>
         )}
@@ -292,10 +290,6 @@ export function SendInvoiceModal({
           <OneTimeInvoiceForm
             dueDays={dueDays}
             setDueDays={setDueDays}
-            paymentMethodCard={paymentMethodCard}
-            setPaymentMethodCard={setPaymentMethodCard}
-            paymentMethodAch={paymentMethodAch}
-            setPaymentMethodAch={setPaymentMethodAch}
           />
         ) : (
           <SubscriptionForm

@@ -22,7 +22,7 @@ pydantic-settings==2.1.0
 email-validator==2.1.0
 
 # Stripe payments
-stripe==8.0.0
+stripe==15.1.0
 
 # PDF rendering (signed proposal / quote copies)
 # Requires libpango + libharfbuzz + libpangoft2 system packages

@@ -5,6 +5,7 @@ import { SendInvoiceModal } from './SendInvoiceModal';
 const invoiceMutateAsync = vi.fn();
 const syncMutateAsync = vi.fn();
 const subscriptionMutateAsync = vi.fn();
+const stripeModeState = vi.hoisted(() => ({ mode: 'live' as 'live' | 'test' | 'unconfigured' }));
 
 vi.mock('../../../hooks/usePayments', () => ({
   useStripeCustomers: () => ({
@@ -30,6 +31,10 @@ vi.mock('../../../hooks/usePayments', () => ({
   }),
 }));
 
+vi.mock('../../../hooks/useStripeMode', () => ({
+  useStripeMode: () => ({ mode: stripeModeState.mode, isLoading: false, isError: false }),
+}));
+
 // Stub navigator.clipboard for the copy-to-clipboard feedback path.
 Object.assign(navigator, {
   clipboard: { writeText: vi.fn(() => Promise.resolve()) },
@@ -53,6 +58,7 @@ function renderModal(props: Partial<typeof BASE_PROPS & { contactId?: number; co
 
 beforeEach(() => {
   vi.clearAllMocks();
+  stripeModeState.mode = 'live';
 });
 
 describe('SendInvoiceModal', () => {
@@ -97,29 +103,16 @@ describe('SendInvoiceModal', () => {
         amount: 99.99,
         description: 'Services rendered',
         due_days: 30,
-        payment_method_types: ['card'],
       });
       expect(onClose).toHaveBeenCalledOnce();
     });
   });
 
-  it('shows error and does not submit when no payment method is selected', async () => {
+  it('does not render explicit payment method choices for one-time invoices', () => {
     renderModal();
 
-    fireEvent.change(screen.getByLabelText('Customer'), { target: { value: '1' } });
-    fireEvent.change(screen.getByLabelText('Amount ($)'), { target: { value: '50' } });
-    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Test' } });
-
-    // Uncheck card (it's checked by default), ACH remains unchecked
-    const cardCheckbox = screen.getByRole('checkbox', { name: /card/i });
-    fireEvent.click(cardCheckbox);
-
-    fireEvent.submit(screen.getByLabelText('Amount ($)').closest('form')!);
-
-    await waitFor(() => {
-      expect(showError).toHaveBeenCalledWith('Select at least one payment method');
-    });
-    expect(invoiceMutateAsync).not.toHaveBeenCalled();
+    expect(screen.queryByRole('checkbox', { name: /card/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: /ach/i })).not.toBeInTheDocument();
   });
 
   it('copies invoice_url to clipboard on successful one-time submit', async () => {
@@ -226,26 +219,13 @@ describe('SendInvoiceModal', () => {
     expect(customerSelect.value).toBe('2');
   });
 
-  it('ACH-only submission sends payment_method_types: [us_bank_account]', async () => {
-    invoiceMutateAsync.mockResolvedValueOnce({ invoice_url: null });
+  it('shows a test-mode warning when opened from a contact', () => {
+    stripeModeState.mode = 'test';
 
-    renderModal();
+    renderModal({ contactId: 42 });
 
-    fireEvent.change(screen.getByLabelText('Customer'), { target: { value: '1' } });
-    fireEvent.change(screen.getByLabelText('Amount ($)'), { target: { value: '200' } });
-    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'ACH payment' } });
-
-    // Uncheck card, check ACH
-    fireEvent.click(screen.getByRole('checkbox', { name: /card/i }));
-    fireEvent.click(screen.getByRole('checkbox', { name: /ach/i }));
-
-    fireEvent.submit(screen.getByLabelText('Amount ($)').closest('form')!);
-
-    await waitFor(() => {
-      expect(invoiceMutateAsync).toHaveBeenCalledWith(
-        expect.objectContaining({ payment_method_types: ['us_bank_account'] })
-      );
-    });
+    expect(screen.getByRole('alert')).toHaveTextContent(/stripe is in test mode/i);
+    expect(screen.getByText(/will not collect real funds/i)).toBeInTheDocument();
   });
 
   it('defaultAmount prop prefills the amount input', () => {
