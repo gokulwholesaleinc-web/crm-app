@@ -17,6 +17,9 @@ import {
   CheckIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  CursorArrowRaysIcon,
+  ExclamationTriangleIcon,
+  MapPinIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
@@ -29,6 +32,7 @@ import {
   normalizeRole,
   type Guide,
   type GuideRole,
+  type GuideStep,
 } from './guideContent';
 import {
   disableGuides,
@@ -365,10 +369,78 @@ function prefersReducedMotion(): boolean {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
+type GuideStepTone = 'action' | 'target' | 'context' | 'missing';
+
+const STEP_TONE_STYLES = {
+  action: {
+    label: 'Action step',
+    Icon: CursorArrowRaysIcon,
+    iconClass: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/25 dark:text-emerald-200',
+    panelClass: 'border-emerald-200/80 dark:border-emerald-800/70',
+    accentClass: 'bg-emerald-500',
+    progressClass: 'bg-emerald-500',
+    chipClass: 'bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-900/25 dark:text-emerald-200 dark:ring-emerald-800/70',
+    actionClass: 'border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-800/70 dark:bg-emerald-900/20 dark:text-emerald-100',
+  },
+  target: {
+    label: 'Focus step',
+    Icon: MapPinIcon,
+    iconClass: 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-200',
+    panelClass: 'border-primary-200/80 dark:border-primary-800/70',
+    accentClass: 'bg-primary-500',
+    progressClass: 'bg-primary-500',
+    chipClass: 'bg-primary-50 text-primary-700 ring-primary-200 dark:bg-primary-900/30 dark:text-primary-200 dark:ring-primary-800/70',
+    actionClass: 'border-primary-100 bg-primary-50 text-primary-800 dark:border-primary-900/40 dark:bg-primary-900/20 dark:text-primary-200',
+  },
+  context: {
+    label: 'Context step',
+    Icon: AcademicCapIcon,
+    iconClass: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200',
+    panelClass: 'border-gray-200 dark:border-gray-700',
+    accentClass: 'bg-gray-500',
+    progressClass: 'bg-gray-500',
+    chipClass: 'bg-gray-100 text-gray-700 ring-gray-200 dark:bg-gray-800 dark:text-gray-200 dark:ring-gray-700',
+    actionClass: 'border-gray-200 bg-gray-50 text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200',
+  },
+  missing: {
+    label: 'Target not visible',
+    Icon: ExclamationTriangleIcon,
+    iconClass: 'bg-amber-50 text-amber-700 dark:bg-amber-900/25 dark:text-amber-200',
+    panelClass: 'border-amber-200/90 dark:border-amber-800/70',
+    accentClass: 'bg-amber-500',
+    progressClass: 'bg-amber-500',
+    chipClass: 'bg-amber-50 text-amber-800 ring-amber-200 dark:bg-amber-900/25 dark:text-amber-200 dark:ring-amber-800/70',
+    actionClass: 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800/70 dark:bg-amber-900/20 dark:text-amber-100',
+  },
+} as const;
+
+function getGuideStepTone(step: GuideStep, targetMissing: boolean): GuideStepTone {
+  if (targetMissing) return 'missing';
+  if (step.action) return 'action';
+  if (step.selector) return 'target';
+  return 'context';
+}
+
+function getTargetHighlightStyle(rect: DOMRect): CSSProperties {
+  const PAD = 6;
+  const EDGE_PAD = 8;
+  const top = Math.max(EDGE_PAD, rect.top - PAD);
+  const left = Math.max(EDGE_PAD, rect.left - PAD);
+  const right = Math.min(window.innerWidth - EDGE_PAD, rect.right + PAD);
+  const bottom = Math.min(window.innerHeight - EDGE_PAD, rect.bottom + PAD);
+
+  return {
+    top,
+    left,
+    width: Math.max(0, right - left),
+    height: Math.max(0, bottom - top),
+  };
+}
+
 function getPanelStyle(rect: DOMRect | null): CSSProperties | undefined {
   if (!rect) return undefined;
-  const PANEL_WIDTH_MAX = 320;
-  const PANEL_HEIGHT = 200;
+  const PANEL_WIDTH_MAX = 360;
+  const PANEL_HEIGHT = 260;
   const GAP = 12;
   const EDGE_PAD = 16;
   const panelWidth = Math.min(PANEL_WIDTH_MAX, window.innerWidth - 32);
@@ -542,20 +614,24 @@ export function GuideTourOverlay({
   };
 
   const panelStyle = getPanelStyle(targetRect);
+  const stepTone = getGuideStepTone(currentStep, targetMissing);
+  const stepVisual = STEP_TONE_STYLES[stepTone];
+  const StepIcon = stepVisual.Icon;
+  const progressPercent = totalSteps > 0 ? ((stepIndex + 1) / totalSteps) * 100 : 0;
 
   return (
     <div className="fixed inset-0 z-[70] pointer-events-none" aria-live="polite">
       {targetRect && (
         <div
-          className="fixed rounded-lg border-2 border-primary-500 shadow-[0_0_0_9999px_rgba(15,23,42,0.16),0_0_22px_rgba(59,130,246,0.65)] transition-[top,left,width,height] motion-reduce:transition-none motion-safe:animate-pulse"
-          style={{
-            top: Math.max(8, targetRect.top - 6),
-            left: Math.max(8, targetRect.left - 6),
-            width: targetRect.width + 12,
-            height: targetRect.height + 12,
-          }}
+          className="fixed rounded-xl border-2 border-primary-500/90 bg-primary-500/5 shadow-[0_0_0_9999px_rgba(15,23,42,0.18),0_10px_26px_rgba(37,99,235,0.24)] ring-4 ring-primary-500/15 transition-[top,left,width,height] motion-reduce:transition-none dark:bg-primary-500/10"
+          style={getTargetHighlightStyle(targetRect)}
           aria-hidden="true"
-        />
+        >
+          <span className="absolute -left-1 -top-1 h-4 w-4 rounded-tl-lg border-l-2 border-t-2 border-primary-300 bg-white dark:bg-gray-950" />
+          <span className="absolute -right-1 -top-1 h-4 w-4 rounded-tr-lg border-r-2 border-t-2 border-primary-300 bg-white dark:bg-gray-950" />
+          <span className="absolute -bottom-1 -left-1 h-4 w-4 rounded-bl-lg border-b-2 border-l-2 border-primary-300 bg-white dark:bg-gray-950" />
+          <span className="absolute -bottom-1 -right-1 h-4 w-4 rounded-br-lg border-b-2 border-r-2 border-primary-300 bg-white dark:bg-gray-950" />
+        </div>
       )}
       <div
         ref={panelRef}
@@ -569,25 +645,42 @@ export function GuideTourOverlay({
           // Slight transparency + backdrop-blur lets users still see the
           // highlighted target peek through, without losing contrast on
           // the panel body text.
-          'pointer-events-auto fixed max-h-[calc(100vh-2rem)] overflow-y-auto rounded-lg border border-gray-200 bg-white/95 backdrop-blur-sm p-3 shadow-xl outline-none dark:border-gray-700 dark:bg-gray-900/95',
+          'pointer-events-auto fixed max-h-[calc(100vh-2rem)] overflow-y-auto rounded-lg border bg-white/95 p-3.5 shadow-xl outline-none backdrop-blur-sm dark:bg-gray-900/95',
           'focus-visible:ring-2 focus-visible:ring-primary-500',
+          stepVisual.panelClass,
           // ``right-4 bottom-4`` is the no-target fallback only. When an
           // inline ``left+top`` style is set, those Tailwind classes would
           // stretch the panel to fill the full viewport height (browser
           // satisfies BOTH left/right and top/bottom). Keep them off when
           // panelStyle is positioning the panel explicitly.
-          panelStyle ? 'w-[320px]' : 'right-4 bottom-4 left-4 sm:left-auto sm:w-[320px]',
+          panelStyle ? 'w-[360px]' : 'right-4 bottom-4 left-4 sm:left-auto sm:w-[360px]',
         )}
         style={panelStyle}
       >
+        <span className={clsx('absolute inset-x-0 top-0 h-1 rounded-t-lg', stepVisual.accentClass)} />
         <div className="flex items-start gap-2.5">
-          <span className="mt-0.5 inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-primary-50 text-primary-600 dark:bg-primary-900/30 dark:text-primary-300">
-            <AcademicCapIcon className="h-4 w-4" aria-hidden="true" />
+          <span
+            className={clsx(
+              'mt-0.5 inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg',
+              stepVisual.iconClass,
+            )}
+          >
+            <StepIcon className="h-4 w-4" aria-hidden="true" />
           </span>
           <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
-              {guide.title} · Step {stepIndex + 1} of {totalSteps}
-            </p>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span
+                className={clsx(
+                  'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ring-1',
+                  stepVisual.chipClass,
+                )}
+              >
+                {stepVisual.label}
+              </span>
+              <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">
+                {guide.title}
+              </span>
+            </div>
             <h2 id={titleId} className="mt-0.5 text-sm font-semibold text-gray-900 dark:text-gray-100">
               {currentStep.title}
             </h2>
@@ -602,18 +695,48 @@ export function GuideTourOverlay({
           </button>
         </div>
 
+        <div className="mt-3" aria-label={`${guide.title} step progress`}>
+          <div className="flex items-center justify-between text-[11px] font-medium text-gray-500 dark:text-gray-400">
+            <span>Step {stepIndex + 1} of {totalSteps}</span>
+            <span>{Math.round(progressPercent)}%</span>
+          </div>
+          <div
+            className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800"
+            role="progressbar"
+            aria-label={`${guide.title} progress`}
+            aria-valuemin={1}
+            aria-valuemax={totalSteps}
+            aria-valuenow={stepIndex + 1}
+          >
+            <div
+              className={clsx(
+                'h-full rounded-full transition-[width] duration-200 motion-reduce:transition-none',
+                stepVisual.progressClass,
+              )}
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+        </div>
+
         <p id={bodyId} className="mt-2 text-sm leading-snug text-gray-700 dark:text-gray-300">
           {currentStep.body}
         </p>
         {currentStep.action && (
-          <div className="mt-2 rounded-md border border-primary-100 bg-primary-50 px-2.5 py-1.5 text-xs leading-snug text-primary-800 dark:border-primary-900/40 dark:bg-primary-900/20 dark:text-primary-200">
+          <div
+            className={clsx(
+              'mt-2 rounded-md border px-2.5 py-2 text-xs leading-snug',
+              stepVisual.actionClass,
+            )}
+          >
             <span className="font-semibold">Try this:</span> {currentStep.action}
           </div>
         )}
         {targetMissing && (
-          <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
-            This step doesn&rsquo;t have a visible page target right now.
-          </p>
+          <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs leading-snug text-amber-900 dark:border-amber-800/70 dark:bg-amber-900/20 dark:text-amber-100">
+            <span className="font-semibold">Target not visible.</span> You can keep going; this
+            step may appear after the page finishes loading, a filter changes, or your role exposes
+            the control.
+          </div>
         )}
 
         <div className="mt-3 flex items-center justify-between gap-2">

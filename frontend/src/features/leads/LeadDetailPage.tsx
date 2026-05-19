@@ -187,7 +187,7 @@ function LeadDetailPage() {
       currentUser.role === 'manager');
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-guide="lead-detail-page">
       <StickyActionBar triggerRef={actionRowRef}>
         <Button
           variant="primary"
@@ -207,7 +207,7 @@ function LeadDetailPage() {
         </Button>
       </StickyActionBar>
       {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between" data-guide="lead-detail-header">
         <div className="flex items-center space-x-3 sm:space-x-4">
           <button type="button" onClick={handleBack} className="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300 p-1 -ml-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded" aria-label="Go back">
             <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
@@ -231,7 +231,7 @@ function LeadDetailPage() {
             )}
           </div>
         </div>
-        <div ref={actionRowRef} className="flex items-center gap-2 sm:gap-3">
+        <div ref={actionRowRef} className="flex items-center gap-2 sm:gap-3" data-guide="lead-detail-actions">
           <Button
             variant="primary"
             onClick={() => setShowEmailCompose(true)}
@@ -268,6 +268,7 @@ function LeadDetailPage() {
 
       {isOrphanConverted && (
         <div
+          data-guide="lead-detail-conversion-alert"
           role="alert"
           aria-live="polite"
           className="rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/30 px-4 py-3 text-sm text-amber-900 dark:text-amber-100"
@@ -281,7 +282,7 @@ function LeadDetailPage() {
       )}
 
       {/* Lead Score Card */}
-      <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-4 sm:p-6">
+      <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-4 sm:p-6" data-guide="lead-detail-score">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Lead Score</h3>
@@ -319,11 +320,13 @@ function LeadDetailPage() {
       </div>
 
       {/* Tabs */}
-      <TabBar tabs={TABS} activeTab={activeTab} onTabChange={handleTabChange} />
+      <div data-guide="lead-detail-tabs">
+        <TabBar tabs={TABS} activeTab={activeTab} onTabChange={handleTabChange} />
+      </div>
 
       {/* Tab Content */}
       {activeTab === 'details' && (
-        <div className="bg-white dark:bg-gray-800 shadow rounded-lg">
+        <div className="bg-white dark:bg-gray-800 shadow rounded-lg" data-guide="lead-detail-details">
           <div className="px-4 py-5 sm:p-6">
             <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Lead Details</h3>
             <dl className="grid grid-cols-1 gap-4 sm:gap-x-4 sm:gap-y-6 sm:grid-cols-2">
@@ -408,11 +411,13 @@ function LeadDetailPage() {
       )}
 
       {activeTab === 'activities' && leadId && (
-        <ActivitiesTab entityType="lead" entityId={leadId} />
+        <div data-guide="lead-detail-activities">
+          <ActivitiesTab entityType="lead" entityId={leadId} />
+        </div>
       )}
 
       {activeTab === 'emails' && leadId && (
-        <div className="bg-white dark:bg-gray-800 shadow rounded-lg">
+        <div className="bg-white dark:bg-gray-800 shadow rounded-lg" data-guide="lead-detail-emails">
           <div className="px-4 py-5 sm:p-6">
             <EmailHistory entityType="leads" entityId={leadId} />
           </div>
@@ -429,9 +434,11 @@ function LeadDetailPage() {
             canManage={canManageSharing}
           />
           {activeTab === 'comments' && (
-            <Suspense fallback={<SuspenseFallback />}>
-              <CommentSection entityType="leads" entityId={leadId} />
-            </Suspense>
+            <div data-guide="lead-detail-comments">
+              <Suspense fallback={<SuspenseFallback />}>
+                <CommentSection entityType="leads" entityId={leadId} />
+              </Suspense>
+            </div>
           )}
         </>
       )}

@@ -15,7 +15,9 @@ export interface Guide {
   description: string;
   roles: readonly GuideRole[];
   path: string;
+  matchPath?: string;
   match?: 'exact' | 'prefix';
+  discoverable?: boolean;
   steps: readonly GuideStep[];
   completion?: {
     message: string;
@@ -108,6 +110,85 @@ export const GUIDE_REGISTRY: readonly Guide[] = [
     ],
   },
   {
+    id: 'contact-detail-tour',
+    title: 'Contact detail',
+    description: 'Review one person\'s relationship history, communication, payments, and sharing.',
+    roles: allRoles,
+    path: '/contacts',
+    matchPath: '/contacts/:id',
+    discoverable: false,
+    steps: [
+      {
+        title: 'Person context',
+        body: 'The contact header anchors the record with name, company, subscription state, and the copied ID teammates may ask for.',
+        selector: target('contact-detail-header'),
+      },
+      {
+        title: 'Act from the header',
+        body: 'Role-allowed actions live together here: email, invoice, proposal creation, edits, and delete confirmation.',
+        selector: target('contact-detail-actions'),
+      },
+      {
+        title: 'Use the tabs for history',
+        body: 'Details, activities, email, proposals, payments, documents, notes, attachments, history, and sharing keep the full relationship in one place.',
+        action: 'switch tabs when you need the next slice of the contact history.',
+        selector: target('contact-detail-tabs'),
+      },
+    ],
+  },
+  {
+    id: 'companies-tour',
+    title: 'Companies',
+    description: 'Manage account records, segment by status or industry, and open account history.',
+    roles: allRoles,
+    path: '/companies',
+    steps: [
+      {
+        title: 'Account records',
+        body: 'Companies represent customer and prospect accounts. Open a card when you need contacts, proposals, payments, activity, or account metadata.',
+        selector: target('companies-page'),
+      },
+      {
+        title: 'Create or update accounts',
+        body: 'Add Company starts a duplicate-aware create flow. Existing company cards can be edited or deleted from the card controls.',
+        action: 'use Add Company when you need a new account record.',
+        selector: target('companies-header'),
+      },
+      {
+        title: 'Find the right account',
+        body: 'Search, status, and industry filters are URL-backed so a narrowed company list can be shared or revisited.',
+        selector: target('companies-search'),
+      },
+    ],
+  },
+  {
+    id: 'company-detail-tour',
+    title: 'Company detail',
+    description: 'Review account contacts, proposals, payments, activity, Meta data, and sharing.',
+    roles: allRoles,
+    path: '/companies',
+    matchPath: '/companies/:id',
+    discoverable: false,
+    steps: [
+      {
+        title: 'Account context',
+        body: 'The company header shows identity, status, industry, and the copied ID used for cross-team handoffs.',
+        selector: target('company-detail-header'),
+      },
+      {
+        title: 'Create follow-up work',
+        body: 'Use the action row for role-allowed proposal creation, edits, and delete confirmation.',
+        selector: target('company-detail-actions'),
+      },
+      {
+        title: 'Work across account tabs',
+        body: 'Tabs keep overview, contacts, proposals, payments, activities, Meta sync, expenses, notes, attachments, history, and sharing tied to the account.',
+        action: 'open a tab to inspect the account history without leaving the company record.',
+        selector: target('company-detail-tabs'),
+      },
+    ],
+  },
+  {
     id: 'leads-tour',
     title: 'Leads',
     description: 'Qualify prospects, assign ownership, promote stages, and convert good fits.',
@@ -129,6 +210,33 @@ export const GUIDE_REGISTRY: readonly Guide[] = [
         title: 'Filter down fast',
         body: 'Search and status filters are URL-backed, so a filtered lead list can be shared with a teammate.',
         selector: target('leads-filters'),
+      },
+    ],
+  },
+  {
+    id: 'lead-detail-tour',
+    title: 'Lead detail',
+    description: 'Score, qualify, communicate with, and convert a single lead.',
+    roles: staffRoles,
+    path: '/leads',
+    matchPath: '/leads/:id',
+    discoverable: false,
+    steps: [
+      {
+        title: 'Lead context',
+        body: 'The header keeps the lead name, company context, and ID visible while you decide the next step.',
+        selector: target('lead-detail-header'),
+      },
+      {
+        title: 'Use the qualification signal',
+        body: 'The score card summarizes fit and engagement. Use it with status, source, owner, and stage before converting.',
+        selector: target('lead-detail-score'),
+      },
+      {
+        title: 'Continue from tabs',
+        body: 'Details, activities, email, notes, attachments, history, sharing, and comments keep qualification work attached to the lead.',
+        action: 'switch to Activities or Emails when you need the recent conversation before changing status.',
+        selector: target('lead-detail-tabs'),
       },
     ],
   },
@@ -185,6 +293,33 @@ export const GUIDE_REGISTRY: readonly Guide[] = [
     ],
   },
   {
+    id: 'proposal-detail-tour',
+    title: 'Proposal detail',
+    description: 'Edit proposal sections, send safely, place signing documents, and audit acceptance.',
+    roles: staffRoles,
+    path: '/proposals',
+    matchPath: '/proposals/:id',
+    discoverable: false,
+    steps: [
+      {
+        title: 'Proposal state',
+        body: 'The header shows the proposal number and current status so sent, accepted, rejected, and billing-ready work is easy to distinguish.',
+        selector: target('proposal-detail-header'),
+      },
+      {
+        title: 'Send only when ready',
+        body: 'The action row and checklist protect sending: missing content, signing documents, or required setup appears before the proposal goes out.',
+        action: 'review the send checklist before clicking Send or Copy Link.',
+        selector: target('proposal-detail-actions'),
+      },
+      {
+        title: 'Signing and audit trail',
+        body: 'Signing documents, public-link views, acceptance data, related records, and sharing live beside the editable proposal sections.',
+        selector: target('proposal-detail-signing-documents'),
+      },
+    ],
+  },
+  {
     id: 'payments-tour',
     title: 'Payments basics',
     description: 'Send manual Stripe invoices and monitor one-time payments and subscriptions.',
@@ -206,6 +341,32 @@ export const GUIDE_REGISTRY: readonly Guide[] = [
         title: 'Switch payment views',
         body: 'All Payments shows one-time invoices and charges. Subscriptions shows recurring billing state.',
         selector: target('payments-tabs'),
+      },
+    ],
+  },
+  {
+    id: 'payment-detail-tour',
+    title: 'Payment detail',
+    description: 'Review invoice status, Stripe links, attachments, and related CRM records.',
+    roles: staffRoles,
+    path: '/payments',
+    matchPath: '/payments/:id',
+    discoverable: false,
+    steps: [
+      {
+        title: 'Invoice state',
+        body: 'The header shows payment status, Stripe identifiers, and invoice actions for download, resend, and receipt follow-up.',
+        selector: target('payment-detail-header'),
+      },
+      {
+        title: 'Amount and payment facts',
+        body: 'The main cards show amount, currency, method, receipt, checkout session, and invoice attachments.',
+        selector: target('payment-detail-main'),
+      },
+      {
+        title: 'Connect it back to CRM',
+        body: 'The sidebar links the payment to its customer and proposal so billing questions can move back to the source record.',
+        selector: target('payment-detail-related'),
       },
     ],
   },
@@ -318,6 +479,33 @@ export const GUIDE_REGISTRY: readonly Guide[] = [
         title: 'Create and track',
         body: 'Create campaigns from here, then use each detail page to add members and build email steps.',
         selector: target('campaigns-actions'),
+      },
+    ],
+  },
+  {
+    id: 'campaign-detail-tour',
+    title: 'Campaign detail',
+    description: 'Manage campaign setup, members, sequence steps, and email analytics.',
+    roles: managerRoles,
+    path: '/campaigns',
+    matchPath: '/campaigns/:id',
+    discoverable: false,
+    steps: [
+      {
+        title: 'Campaign command row',
+        body: 'Managers and admins can send, edit, or delete from the header when campaign status and permissions allow it.',
+        selector: target('campaign-detail-header'),
+      },
+      {
+        title: 'Track performance',
+        body: 'Stats, funnel counts, Mailchimp sync, and analytics summarize how the campaign is moving members forward.',
+        selector: target('campaign-detail-stats'),
+      },
+      {
+        title: 'Build sequence and audience',
+        body: 'Email steps and members stay on the detail page so managers can adjust outreach and recipient lists together.',
+        action: 'review members before sending or changing an active email campaign.',
+        selector: target('campaign-detail-members'),
       },
     ],
   },
@@ -477,6 +665,7 @@ export const ROLE_RECOMMENDATIONS: Record<GuideRole, readonly string[]> = {
   sales_rep: [
     'dashboard-tour',
     'contacts-tour',
+    'companies-tour',
     'leads-tour',
     'pipeline-tour',
     'proposals-tour',
@@ -502,6 +691,7 @@ export const ROLE_RECOMMENDATIONS: Record<GuideRole, readonly string[]> = {
   viewer: [
     'navigation-basics',
     'contacts-tour',
+    'companies-tour',
     'reports-tour',
   ],
 };
@@ -518,20 +708,49 @@ export function guideAllowsRole(guide: Guide, role: GuideRole): boolean {
   return guide.roles.includes(role);
 }
 
-export function guideMatchesPath(guide: Guide, pathname: string): boolean {
-  if (guide.path === '/') return pathname === '/';
-  if (guide.match === 'prefix') {
-    return pathname === guide.path || pathname.startsWith(`${guide.path}/`);
+function normalizePathname(pathname: string): string {
+  const pathOnly = pathname.split(/[?#]/)[0] || '/';
+  const withLeadingSlash = pathOnly.startsWith('/') ? pathOnly : `/${pathOnly}`;
+  return withLeadingSlash.replace(/\/+$/, '') || '/';
+}
+
+function pathSegments(pathname: string): string[] {
+  return normalizePathname(pathname).split('/').filter(Boolean);
+}
+
+function pathPatternMatches(pattern: string, pathname: string): boolean {
+  const patternSegments = pathSegments(pattern);
+  const currentSegments = pathSegments(pathname);
+
+  if (patternSegments.length !== currentSegments.length) {
+    return false;
   }
-  return pathname === guide.path;
+
+  return patternSegments.every((segment, index) => {
+    const currentSegment = currentSegments[index];
+    if (!currentSegment) return false;
+    return segment.startsWith(':') ? currentSegment.length > 0 : segment === currentSegment;
+  });
+}
+
+export function guideMatchesPath(guide: Guide, pathname: string): boolean {
+  const guidePath = guide.matchPath ?? guide.path;
+  const normalizedGuidePath = normalizePathname(guidePath);
+  const normalizedPathname = normalizePathname(pathname);
+
+  if (normalizedGuidePath === '/') return normalizedPathname === '/';
+  if (guide.match === 'prefix') {
+    return normalizedPathname === normalizedGuidePath || normalizedPathname.startsWith(`${normalizedGuidePath}/`);
+  }
+  return pathPatternMatches(guidePath, pathname);
 }
 
 export function getGuidesForRole(role: GuideRole): Guide[] {
-  return GUIDE_REGISTRY.filter((guide) => guideAllowsRole(guide, role));
+  return GUIDE_REGISTRY.filter((guide) => guide.discoverable !== false && guideAllowsRole(guide, role));
 }
 
 export function getGuidesForPath(pathname: string, role: GuideRole): Guide[] {
-  return getGuidesForRole(role).filter((guide) => guideMatchesPath(guide, pathname));
+  return GUIDE_REGISTRY.filter((guide) => guideAllowsRole(guide, role) && guideMatchesPath(guide, pathname));
 }
 
 export function getGuideById(id: string): Guide | undefined {
