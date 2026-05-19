@@ -1281,7 +1281,7 @@ class TestIdempotencyKeyHardening:
             ),
         )
 
-        service = SubscriptionService(db_session)
+        service = PaymentService(db_session)
         for amount in (Decimal("100.00"), Decimal("250.00")):
             await service.create_subscription_checkout_for_proposal(
                 proposal_id=42,
