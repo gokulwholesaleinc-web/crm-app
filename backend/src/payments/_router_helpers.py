@@ -48,13 +48,15 @@ async def _verify_contact_access(db, contact_id: int | None, current_user) -> No
 
 async def _verify_company_access(db, company_id: int | None, current_user) -> None:
     """Raise 403 if the caller cannot access the referenced company."""
-    if company_id is None or _is_privileged(current_user):
+    if company_id is None:
         return
     from src.companies.models import Company
     result = await db.execute(select(Company).where(Company.id == company_id))
     company = result.scalar_one_or_none()
     if company is None:
         raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Company not found")
+    if _is_privileged(current_user):
+        return
     if company.owner_id != current_user.id:
         raise_forbidden("You do not have permission to reference this company")
 
@@ -77,7 +79,9 @@ async def _verify_opportunity_access(db, opportunity_id: int | None, current_use
         raise_forbidden("You do not have permission to reference this opportunity")
 
 
-async def _verify_stripe_customer_access(db, stripe_customer_id: int, current_user) -> StripeCustomer:
+async def _verify_stripe_customer_access(
+    db, stripe_customer_id: int, current_user
+) -> StripeCustomer:
     """Load a StripeCustomer and raise 403 unless caller owns the linked contact/company.
 
     StripeCustomer has no `owner_id` column itself, so access is derived from

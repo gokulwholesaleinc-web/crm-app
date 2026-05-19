@@ -6,10 +6,6 @@ function renderForm(overrides: Partial<React.ComponentProps<typeof OneTimeInvoic
   const defaults = {
     dueDays: 30,
     setDueDays: vi.fn(),
-    paymentMethodCard: true,
-    setPaymentMethodCard: vi.fn(),
-    paymentMethodAch: false,
-    setPaymentMethodAch: vi.fn(),
   };
   return renderWithProviders(<OneTimeInvoiceForm {...defaults} {...overrides} />);
 }
@@ -28,30 +24,11 @@ describe('OneTimeInvoiceForm', () => {
     expect(setDueDays).toHaveBeenCalledWith(60);
   });
 
-  it('renders Card checkbox checked when paymentMethodCard is true', () => {
-    renderForm({ paymentMethodCard: true });
-    const cardCheckbox = screen.getByRole('checkbox', { name: /card/i });
-    expect(cardCheckbox).toBeChecked();
-  });
-
-  it('renders ACH checkbox unchecked when paymentMethodAch is false', () => {
-    renderForm({ paymentMethodAch: false });
-    const achCheckbox = screen.getByRole('checkbox', { name: /ach/i });
-    expect(achCheckbox).not.toBeChecked();
-  });
-
-  it('calls setPaymentMethodCard with false when card checkbox is unchecked', () => {
-    const setPaymentMethodCard = vi.fn();
-    renderForm({ paymentMethodCard: true, setPaymentMethodCard });
-    fireEvent.click(screen.getByRole('checkbox', { name: /card/i }));
-    expect(setPaymentMethodCard).toHaveBeenCalledWith(false);
-  });
-
-  it('calls setPaymentMethodAch with true when ACH checkbox is checked', () => {
-    const setPaymentMethodAch = vi.fn();
-    renderForm({ paymentMethodAch: false, setPaymentMethodAch });
-    fireEvent.click(screen.getByRole('checkbox', { name: /ach/i }));
-    expect(setPaymentMethodAch).toHaveBeenCalledWith(true);
+  it('does not render explicit payment method checkboxes', () => {
+    renderForm();
+    expect(screen.queryByRole('checkbox', { name: /card/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: /ach/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/stripe will offer available payment methods/i)).toBeInTheDocument();
   });
 
   it('shows all four due-day options', () => {

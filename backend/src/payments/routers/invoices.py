@@ -49,7 +49,6 @@ async def create_and_send_invoice(
             user_id=current_user.id,
             currency=request_data.currency,
             due_days=request_data.due_days,
-            payment_method_types=request_data.payment_method_types,
         )
         return CreateAndSendInvoiceResponse(**result)
     except ValueError as e:

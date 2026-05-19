@@ -36,13 +36,13 @@ beforeEach(() => {
 });
 
 describe('OnboardingLinkGenerator', () => {
-  it('renders generate button and "No payment method" status when no link and no existing customer', () => {
+  it('renders generate button and "No Stripe customer" status when no link and no existing customer', () => {
     renderWithProviders(<OnboardingLinkGenerator contactId={1} />);
     expect(screen.getByRole('button', { name: /generate payment setup link/i })).toBeInTheDocument();
-    expect(screen.getByText(/no payment method/i)).toBeInTheDocument();
+    expect(screen.getByText(/no stripe customer/i)).toBeInTheDocument();
   });
 
-  it('shows "Payment method on file" when a Stripe customer matching contactId exists', () => {
+  it('shows linked Stripe customer wording when a Stripe customer matching contactId exists', () => {
     const customer: StripeCustomer = {
       id: 1, stripe_customer_id: 'cus_test', email: null, name: null,
       contact_id: 7, company_id: null, created_at: '', updated_at: '',
@@ -50,10 +50,11 @@ describe('OnboardingLinkGenerator', () => {
     mockStripeCustomers.mockReturnValue({ data: customerListOf(customer), isLoading: false });
 
     renderWithProviders(<OnboardingLinkGenerator contactId={7} />);
-    expect(screen.getByText(/payment method on file/i)).toBeInTheDocument();
+    expect(screen.getByText(/stripe customer linked/i)).toBeInTheDocument();
+    expect(screen.queryByText(/payment method on file/i)).not.toBeInTheDocument();
   });
 
-  it('shows "Payment method on file" when a Stripe customer matching companyId exists', () => {
+  it('shows linked Stripe customer wording when a Stripe customer matching companyId exists', () => {
     const customer: StripeCustomer = {
       id: 2, stripe_customer_id: 'cus_test2', email: null, name: null,
       contact_id: null, company_id: 99, created_at: '', updated_at: '',
@@ -61,7 +62,8 @@ describe('OnboardingLinkGenerator', () => {
     mockStripeCustomers.mockReturnValue({ data: customerListOf(customer), isLoading: false });
 
     renderWithProviders(<OnboardingLinkGenerator companyId={99} />);
-    expect(screen.getByText(/payment method on file/i)).toBeInTheDocument();
+    expect(screen.getByText(/stripe customer linked/i)).toBeInTheDocument();
+    expect(screen.queryByText(/payment method on file/i)).not.toBeInTheDocument();
   });
 
   it('clicking generate calls mutateAsync with correct payload including window.location.origin', async () => {

@@ -5,14 +5,17 @@ Validates:
 - Onboarding link endpoint validation
 - New webhook handlers (invoice.paid, invoice.payment_failed, invoice.sent,
   async payment events, setup_intent.succeeded)
-- ACH payment_method_types in checkout (service-level check)
+- Hosted invoice and Checkout calls rely on Stripe dynamic payment methods
 - No mocking — uses real DB operations via in-memory SQLite
 """
 
 import hashlib
 import hmac
 import json
+import sys
 import time
+from decimal import Decimal
+from types import SimpleNamespace
 
 import pytest
 from httpx import AsyncClient
@@ -20,7 +23,7 @@ from src.auth.models import User
 from src.auth.security import create_access_token
 from src.config import settings
 from src.payments.models import Payment, StripeCustomer, Subscription
-from src.payments.service import PaymentService
+from src.payments.service import PaymentService, SubscriptionService
 
 
 def _token(user: User) -> dict:
@@ -207,7 +210,7 @@ class TestCreateAndSendInvoice:
     async def test_create_invoice_accepts_full_body(
         self, client: AsyncClient, test_user, stripe_customer,
     ):
-        """Should accept customer_id, amount, description, due_days, payment_method_types."""
+        """Should accept customer_id, amount, description, and due_days."""
         response = await client.post(
             "/api/payments/invoices/create-and-send",
             json={
@@ -215,7 +218,6 @@ class TestCreateAndSendInvoice:
                 "amount": 250.00,
                 "description": "Consulting services",
                 "due_days": 14,
-                "payment_method_types": ["card", "us_bank_account"],
             },
             headers=_token(test_user),
         )
@@ -866,3 +868,310 @@ class TestIdempotencyKeyPresence:
     def test_uuid_imported(self):
         import src.payments.service as svc
         assert hasattr(svc, "uuid")
+
+
+class TestStripeClientConfiguration:
+    """Stripe SDK setup must apply both key and pinned API version."""
+
+    def test_get_stripe_sets_api_key_and_api_version(self, monkeypatch):
+        import src.payments.service as svc
+
+        fake_stripe = SimpleNamespace(api_key=None, api_version=None)
+        monkeypatch.setitem(sys.modules, "stripe", fake_stripe)
+        monkeypatch.setattr(svc.settings, "STRIPE_SECRET_KEY", "sk_test_configured")
+        monkeypatch.setattr(svc.settings, "STRIPE_API_VERSION", "2026-04-22.dahlia")
+
+        assert svc._get_stripe() is fake_stripe
+        assert fake_stripe.api_key == "sk_test_configured"
+        assert fake_stripe.api_version == "2026-04-22.dahlia"
+
+
+class TestStripeMinorUnitsAndHostedPaymentMethods:
+    """Hosted Stripe flows must use currency-aware amounts and defaults."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("currency", "amount", "expected_minor_units"),
+        [
+            ("USD", Decimal("12.34"), 1234),
+            ("JPY", Decimal("5000"), 5000),
+        ],
+    )
+    async def test_checkout_uses_currency_minor_units_without_payment_method_types(
+        self,
+        db_session,
+        test_user,
+        monkeypatch,
+        currency,
+        amount,
+        expected_minor_units,
+    ):
+        import src.payments.service as svc
+
+        calls = []
+
+        class _Session:
+            @staticmethod
+            def create(**kwargs):
+                calls.append(kwargs)
+                return SimpleNamespace(id=f"cs_{currency.lower()}", url="https://checkout.example")
+
+        fake_stripe = SimpleNamespace(checkout=SimpleNamespace(Session=_Session))
+        monkeypatch.setattr(svc, "_get_stripe", lambda: fake_stripe)
+
+        service = PaymentService(db_session)
+        await service.create_checkout_session(
+            amount=amount,
+            currency=currency,
+            success_url="https://example.com/success",
+            cancel_url="https://example.com/cancel",
+            user_id=test_user.id,
+        )
+
+        assert calls
+        params = calls[0]
+        assert params["line_items"][0]["price_data"]["unit_amount"] == expected_minor_units
+        assert "payment_method_types" not in params
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("currency", "amount", "expected_minor_units"),
+        [
+            ("USD", Decimal("12.34"), 1234),
+            ("JPY", Decimal("5000"), 5000),
+        ],
+    )
+    async def test_payment_intent_uses_currency_minor_units_and_stable_idempotency_key(
+        self,
+        db_session,
+        test_user,
+        monkeypatch,
+        currency,
+        amount,
+        expected_minor_units,
+    ):
+        import src.payments.service as svc
+
+        calls = []
+
+        class _PaymentIntent:
+            @staticmethod
+            def create(**kwargs):
+                calls.append(kwargs)
+                return SimpleNamespace(id=f"pi_{len(calls)}", client_secret="secret")
+
+        fake_stripe = SimpleNamespace(PaymentIntent=_PaymentIntent)
+        monkeypatch.setattr(svc, "_get_stripe", lambda: fake_stripe)
+
+        service = PaymentService(db_session)
+        for _ in range(2):
+            await service.create_payment_intent(
+                amount=amount,
+                currency=currency,
+                user_id=test_user.id,
+            )
+
+        assert [call["amount"] for call in calls] == [expected_minor_units, expected_minor_units]
+        assert calls[0]["idempotency_key"]
+        assert calls[0]["idempotency_key"] == calls[1]["idempotency_key"]
+
+    def test_invoice_helper_uses_currency_minor_units_and_omits_payment_settings(self):
+        calls = {"invoice_create": [], "item_create": []}
+
+        class _Invoice:
+            @staticmethod
+            def create(**kwargs):
+                calls["invoice_create"].append(kwargs)
+                return SimpleNamespace(id="in_hosted")
+
+            @staticmethod
+            def finalize_invoice(invoice_id):
+                assert invoice_id == "in_hosted"
+                return SimpleNamespace(id=invoice_id)
+
+            @staticmethod
+            def send_invoice(invoice_id):
+                assert invoice_id == "in_hosted"
+                return SimpleNamespace(id=invoice_id, hosted_invoice_url="https://invoice.example")
+
+            @staticmethod
+            def void_invoice(invoice_id):
+                raise AssertionError(f"unexpected void for {invoice_id}")
+
+        class _InvoiceItem:
+            @staticmethod
+            def create(**kwargs):
+                calls["item_create"].append(kwargs)
+                return SimpleNamespace(id="ii_hosted")
+
+        fake_stripe = SimpleNamespace(Invoice=_Invoice, InvoiceItem=_InvoiceItem)
+        service = PaymentService(db=None)
+
+        service._stripe_create_finalize_send_invoice(
+            stripe=fake_stripe,
+            stripe_customer_id="cus_hosted",
+            amount=Decimal("5000"),
+            currency="JPY",
+            description="Hosted invoice",
+            due_days=30,
+            idem_base="manual_invoice_key",
+        )
+
+        assert calls["item_create"][0]["amount"] == 5000
+        assert "payment_settings" not in calls["invoice_create"][0]
+        assert calls["invoice_create"][0]["idempotency_key"] == "manual_invoice_key"
+        assert calls["item_create"][0]["idempotency_key"] == "manual_invoice_key_item"
+
+
+class TestDeterministicStripeIdempotency:
+    """Logical retries should reuse Stripe idempotency keys."""
+
+    @pytest.mark.asyncio
+    async def test_checkout_session_uses_stable_idempotency_key(
+        self, db_session, test_user, monkeypatch,
+    ):
+        import src.payments.service as svc
+
+        calls = []
+
+        class _Session:
+            @staticmethod
+            def create(**kwargs):
+                calls.append(kwargs)
+                return SimpleNamespace(id=f"cs_{len(calls)}", url="https://checkout.example")
+
+        fake_stripe = SimpleNamespace(checkout=SimpleNamespace(Session=_Session))
+        monkeypatch.setattr(svc, "_get_stripe", lambda: fake_stripe)
+
+        service = PaymentService(db_session)
+        for _ in range(2):
+            await service.create_checkout_session(
+                amount=Decimal("25.00"),
+                currency="USD",
+                success_url="https://example.com/success",
+                cancel_url="https://example.com/cancel",
+                user_id=test_user.id,
+            )
+
+        assert calls[0]["idempotency_key"]
+        assert calls[0]["idempotency_key"] == calls[1]["idempotency_key"]
+
+    @pytest.mark.asyncio
+    async def test_sync_customer_create_uses_stable_idempotency_key(
+        self, db_session, test_contact, monkeypatch,
+    ):
+        import src.payments.service as svc
+
+        calls = []
+
+        class _Customer:
+            @staticmethod
+            def create(**kwargs):
+                calls.append(kwargs)
+                return SimpleNamespace(id=f"cus_{len(calls)}")
+
+        monkeypatch.setattr(svc, "_get_stripe", lambda: SimpleNamespace(Customer=_Customer))
+
+        service = PaymentService(db_session)
+        first_customer = await service.sync_customer(contact_id=test_contact.id)
+        await db_session.delete(first_customer)
+        await db_session.flush()
+        await service.sync_customer(contact_id=test_contact.id)
+
+        assert calls[0]["idempotency_key"]
+        assert calls[0]["idempotency_key"] == calls[1]["idempotency_key"]
+
+    @pytest.mark.asyncio
+    async def test_manual_invoice_uses_stable_idempotency_key(
+        self, db_session, test_user, stripe_customer, monkeypatch,
+    ):
+        import src.payments.service as svc
+
+        invoice_create_calls = []
+        item_create_calls = []
+
+        class _Invoice:
+            @staticmethod
+            def create(**kwargs):
+                invoice_create_calls.append(kwargs)
+                return SimpleNamespace(id=f"in_{len(invoice_create_calls)}")
+
+            @staticmethod
+            def finalize_invoice(invoice_id):
+                return SimpleNamespace(id=invoice_id)
+
+            @staticmethod
+            def send_invoice(invoice_id):
+                return SimpleNamespace(id=invoice_id, hosted_invoice_url="https://invoice.example")
+
+            @staticmethod
+            def void_invoice(invoice_id):
+                raise AssertionError(f"unexpected void for {invoice_id}")
+
+        class _InvoiceItem:
+            @staticmethod
+            def create(**kwargs):
+                item_create_calls.append(kwargs)
+                return SimpleNamespace(id=f"ii_{len(item_create_calls)}")
+
+        monkeypatch.setattr(
+            svc,
+            "_get_stripe",
+            lambda: SimpleNamespace(Invoice=_Invoice, InvoiceItem=_InvoiceItem),
+        )
+
+        service = PaymentService(db_session)
+        for _ in range(2):
+            await service.create_and_send_invoice(
+                customer_id=stripe_customer.id,
+                amount=Decimal("40.00"),
+                description="Manual invoice",
+                user_id=test_user.id,
+                currency="USD",
+                due_days=30,
+            )
+
+        assert invoice_create_calls[0]["idempotency_key"]
+        assert invoice_create_calls[0]["idempotency_key"] == invoice_create_calls[1]["idempotency_key"]
+        assert item_create_calls[0]["idempotency_key"] == item_create_calls[1]["idempotency_key"]
+
+
+class TestSubscriptionCancellationStripeFailure:
+    """A failed Stripe modify must not make local state look canceled."""
+
+    @pytest.mark.asyncio
+    async def test_cancel_does_not_mark_local_subscription_canceled_when_stripe_fails(
+        self, db_session, test_user, stripe_customer, monkeypatch,
+    ):
+        import src.payments.service as svc
+
+        subscription = Subscription(
+            stripe_subscription_id="sub_live_cancel_failure",
+            customer_id=stripe_customer.id,
+            status="active",
+            cancel_at_period_end=False,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(subscription)
+        await db_session.commit()
+        await db_session.refresh(subscription)
+
+        class _Subscription:
+            @staticmethod
+            def modify(*args, **kwargs):
+                raise RuntimeError("stripe unavailable")
+
+        monkeypatch.setattr(
+            svc,
+            "_get_stripe",
+            lambda: SimpleNamespace(Subscription=_Subscription),
+        )
+
+        service = SubscriptionService(db_session)
+        with pytest.raises(ValueError, match="Failed to cancel subscription on Stripe"):
+            await service.cancel(subscription)
+        await db_session.refresh(subscription)
+
+        assert subscription.status == "active"
+        assert subscription.cancel_at_period_end is False

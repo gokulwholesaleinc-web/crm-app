@@ -3,8 +3,7 @@
 import hashlib
 import logging
 import uuid
-from collections.abc import Sequence
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import String, func, or_, select
@@ -15,6 +14,7 @@ from src.core.base_service import CRUDService
 from src.core.constants import DEFAULT_PAGE_SIZE
 from src.core.sorting import build_order_clauses
 from src.email.types import EmailAttachment
+from src.payments.amounts import to_stripe_minor_units
 from src.payments.exceptions import NoRecipientEmailError
 from src.payments.models import (
     Payment,
@@ -41,14 +41,25 @@ PAYMENT_SORTABLE_FIELDS: dict[str, Any] = {
 # Common: rounding money to integer cents. Stripe expects amounts as ints.
 # Use banker's-rounding-free half-up so $19.995 → 2000¢, not 1999¢.
 def _to_cents(amount: float | int | Decimal | str) -> int:
-    """Convert a user-facing money amount to integer cents.
+    """Convert a USD display amount to integer cents.
 
     Uses Decimal + ROUND_HALF_UP so values like 19.995 round to 2000
     (not 1999, which is what naive int/truncation produces).
     """
-    dec = amount if isinstance(amount, Decimal) else Decimal(str(amount))
-    cents = (dec * Decimal("100")).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
-    return int(cents)
+    return to_stripe_minor_units(amount, "USD")
+
+
+def _to_stripe_amount(amount: float | int | Decimal | str, currency: str) -> int:
+    """Convert a display amount to Stripe's currency-aware integer amount."""
+    return to_stripe_minor_units(amount, currency)
+
+
+def _stable_stripe_idempotency_key(prefix: str, *parts: object) -> str:
+    """Build a deterministic Stripe idempotency key for logical retries."""
+    payload = "|".join("" if part is None else str(part) for part in parts)
+    digest = hashlib.sha256(payload.encode()).hexdigest()[:24]
+    return f"{prefix}_{digest}"
+
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +75,11 @@ def _get_stripe():
         return None
     try:
         import stripe  # pyright: ignore[reportMissingImports]
+
         stripe.api_key = stripe_key
+        stripe_api_version = getattr(settings, "STRIPE_API_VERSION", "")
+        if stripe_api_version:
+            stripe.api_version = stripe_api_version
         return stripe
     except ImportError:
         logger.warning("stripe package not installed")
@@ -241,7 +256,9 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         """
         stripe = _get_stripe()
         if not stripe:
-            raise ValueError("Stripe is not configured. Set STRIPE_SECRET_KEY environment variable.")
+            raise ValueError(
+                "Stripe is not configured. Set STRIPE_SECRET_KEY environment variable."
+            )
 
         # Resolve Stripe customer ID if we have a local customer
         stripe_customer_id = None
@@ -258,6 +275,7 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         if user_id:
             try:
                 from src.email.branded_templates import TenantBrandingHelper
+
                 branding = await TenantBrandingHelper.get_branding_for_user(
                     self.db, user_id
                 )
@@ -265,14 +283,14 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
             except (ImportError, LookupError, OSError) as exc:
                 logger.debug("Could not load tenant branding: %s", exc)
 
+        stripe_amount = _to_stripe_amount(amount, currency)
         price_data: dict = {
             "currency": currency.lower(),
             "product_data": {"name": f"Payment to {company_name} - {currency} {amount}"},
-            "unit_amount": _to_cents(amount),
+            "unit_amount": stripe_amount,
         }
 
         session_params = {
-            "payment_method_types": ["card", "us_bank_account"],
             "line_items": [{"price_data": price_data, "quantity": 1}],
             "mode": "payment",
             "success_url": success_url,
@@ -287,7 +305,29 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         if stripe_customer_id:
             session_params["customer"] = stripe_customer_id
 
-        session = stripe.checkout.Session.create(**session_params)
+        idempotency_key = _stable_stripe_idempotency_key(
+            "chk",
+            customer_id,
+            user_id,
+            stripe_amount,
+            currency.lower(),
+            success_url,
+            cancel_url,
+        )
+        session = stripe.checkout.Session.create(
+            **session_params,
+            idempotency_key=idempotency_key,
+        )
+
+        existing_result = await self.db.execute(
+            select(Payment).where(Payment.stripe_checkout_session_id == session.id)
+        )
+        existing_payment = existing_result.scalar_one_or_none()
+        if existing_payment:
+            return {
+                "checkout_session_id": session.id,
+                "checkout_url": session.url,
+            }
 
         # Create local payment record.
         # ``quote_id`` and ``opportunity_id`` are no longer accepted from
@@ -329,7 +369,9 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         """
         stripe = _get_stripe()
         if not stripe:
-            raise ValueError("Stripe is not configured. Set STRIPE_SECRET_KEY environment variable.")
+            raise ValueError(
+                "Stripe is not configured. Set STRIPE_SECRET_KEY environment variable."
+            )
 
         # Resolve Stripe customer ID
         stripe_customer_id = None
@@ -341,14 +383,37 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
             if customer:
                 stripe_customer_id = customer.stripe_customer_id
 
+        stripe_amount = _to_stripe_amount(amount, currency)
         intent_params = {
-            "amount": _to_cents(amount),
+            "amount": stripe_amount,
             "currency": currency.lower(),
         }
         if stripe_customer_id:
             intent_params["customer"] = stripe_customer_id
 
-        intent = stripe.PaymentIntent.create(**intent_params)
+        idempotency_key = _stable_stripe_idempotency_key(
+            "pi",
+            customer_id,
+            opportunity_id,
+            user_id,
+            stripe_amount,
+            currency.lower(),
+        )
+        intent = stripe.PaymentIntent.create(
+            **intent_params,
+            idempotency_key=idempotency_key,
+        )
+
+        existing_result = await self.db.execute(
+            select(Payment).where(Payment.stripe_payment_intent_id == intent.id)
+        )
+        existing_payment = existing_result.scalar_one_or_none()
+        if existing_payment:
+            return {
+                "payment_intent_id": intent.id,
+                "client_secret": intent.client_secret,
+                "payment_id": existing_payment.id,
+            }
 
         # Create local payment record. ``quote_id`` is left NULL (column
         # preserved for historical reads only).
@@ -385,6 +450,9 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         returns the existing record. Otherwise creates a new Stripe customer
         (if Stripe is configured) or a local-only record.
         """
+        if contact_id is None and company_id is None:
+            raise ValueError("Either contact_id or company_id is required")
+
         # Check if we already have a StripeCustomer for this entity
         if contact_id:
             result = await self.db.execute(
@@ -402,26 +470,27 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
             if existing:
                 return existing
 
-        # Resolve email/name from contact or company if not provided
-        if contact_id and not email:
+        # Resolve email/name from contact or company if not provided, and
+        # validate the CRM entity before creating anything in Stripe.
+        if contact_id:
             from src.contacts.models import Contact
-            contact_result = await self.db.execute(
-                select(Contact).where(Contact.id == contact_id)
-            )
-            contact = contact_result.scalar_one_or_none()
-            if contact:
-                email = email or contact.email
-                name = name or getattr(contact, "full_name", None)
 
-        if company_id and not email:
+            contact_result = await self.db.execute(select(Contact).where(Contact.id == contact_id))
+            contact = contact_result.scalar_one_or_none()
+            if not contact:
+                raise ValueError(f"Contact {contact_id} not found")
+            email = email or contact.email
+            name = name or getattr(contact, "full_name", None)
+
+        if company_id:
             from src.companies.models import Company
-            company_result = await self.db.execute(
-                select(Company).where(Company.id == company_id)
-            )
+
+            company_result = await self.db.execute(select(Company).where(Company.id == company_id))
             company = company_result.scalar_one_or_none()
-            if company:
-                email = email or company.email
-                name = name or company.name
+            if not company:
+                raise ValueError(f"Company {company_id} not found")
+            email = email or company.email
+            name = name or company.name
 
         # Try to create Stripe customer
         stripe = _get_stripe()
@@ -432,7 +501,16 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
                 stripe_params["email"] = email
             if name:
                 stripe_params["name"] = name
-            stripe_cust = stripe.Customer.create(**stripe_params)
+            stripe_cust = stripe.Customer.create(
+                **stripe_params,
+                idempotency_key=_stable_stripe_idempotency_key(
+                    "cus",
+                    contact_id,
+                    company_id,
+                    email,
+                    name,
+                ),
+            )
             stripe_customer_id = stripe_cust.id
         else:
             stripe_customer_id = f"local_{uuid.uuid4().hex[:16]}"
@@ -543,6 +621,7 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         Delegates to payments.pdf module for the HTML rendering.
         """
         from src.payments.pdf import generate_invoice_pdf as _gen
+
         return await _gen(self.db, payment_id)
 
     async def send_payment_invoice(self, payment_id: int) -> None:
@@ -718,7 +797,9 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         return await processor._find_payment(lookup_field, obj, obj_key=obj_key)
 
     async def _set_payment_status(
-        self, payment: Payment | None, new_status: str,
+        self,
+        payment: Payment | None,
+        new_status: str,
         guard_statuses: tuple = ("succeeded", "refunded"),
     ) -> None:
         """Set payment status. Delegates to WebhookProcessor."""
@@ -804,7 +885,6 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         due_days: int,
         idem_base: str,
         metadata: dict | None = None,
-        payment_method_types: Sequence[str] | None = None,
     ):
         """Create+finalize+send a Stripe Invoice with a single line item.
 
@@ -828,10 +908,6 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
             }
             if metadata:
                 invoice_params["metadata"] = metadata
-            if payment_method_types:
-                invoice_params["payment_settings"] = {
-                    "payment_method_types": payment_method_types,
-                }
 
             invoice = stripe.Invoice.create(
                 **invoice_params,
@@ -842,7 +918,7 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
 
             stripe.InvoiceItem.create(
                 customer=stripe_customer_id,
-                amount=_to_cents(amount),
+                amount=_to_stripe_amount(amount, currency),
                 currency=currency.lower(),
                 description=description,
                 invoice=invoice.id,
@@ -856,7 +932,8 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
                     stripe.Invoice.void_invoice(invoice.id)
                 except Exception:
                     logger.warning(
-                        "Failed to void draft invoice %s after error", invoice.id,
+                        "Failed to void draft invoice %s after error",
+                        invoice.id,
                     )
             raise ValueError(f"Failed to create invoice: {exc}") from exc
 
@@ -869,7 +946,6 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         currency: str = "USD",
         due_days: int = 30,
         quote_id: int | None = None,
-        payment_method_types: Sequence[str] | None = None,
     ) -> dict:
         """Create a Stripe Invoice, finalize it, and send it.
 
@@ -878,9 +954,22 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         """
         stripe = _get_stripe()
         if not stripe:
-            raise ValueError("Stripe is not configured. Set STRIPE_SECRET_KEY environment variable.")
+            raise ValueError(
+                "Stripe is not configured. Set STRIPE_SECRET_KEY environment variable."
+            )
 
         customer = await self.sync_customer_from_id(customer_id)
+        stripe_amount = _to_stripe_amount(amount, currency)
+        idem_base = _stable_stripe_idempotency_key(
+            "inv",
+            customer_id,
+            user_id,
+            stripe_amount,
+            currency.lower(),
+            description,
+            due_days,
+            quote_id,
+        )
         invoice = self._stripe_create_finalize_send_invoice(
             stripe=stripe,
             stripe_customer_id=customer.stripe_customer_id,
@@ -888,9 +977,20 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
             currency=currency,
             description=description,
             due_days=due_days,
-            idem_base=f"inv_{customer_id}_{uuid.uuid4().hex[:12]}",
-            payment_method_types=payment_method_types,
+            idem_base=idem_base,
         )
+
+        existing_result = await self.db.execute(
+            select(Payment).where(Payment.stripe_invoice_id == invoice.id)
+        )
+        existing_payment = existing_result.scalar_one_or_none()
+        if existing_payment:
+            return {
+                "invoice_id": invoice.id,
+                "payment_id": existing_payment.id,
+                "status": existing_payment.status,
+                "invoice_url": getattr(invoice, "hosted_invoice_url", None),
+            }
 
         # Quote-driven invoice inheritance retired 2026-05-14 — quotes
         # router unmounted. ``quote_id`` is still persisted on the Payment
@@ -1034,8 +1134,9 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         # collapses to one Session. Includes success_url + cancel_url so
         # changing the redirect target spawns a fresh Session instead of
         # silently returning the cached one with the old URLs.
+        stripe_amount = _to_stripe_amount(amount, currency)
         idem_payload = (
-            f"{customer_id}|{user_id}|{int(_to_cents(amount))}|{currency.lower()}"
+            f"{customer_id}|{user_id}|{stripe_amount}|{currency.lower()}"
             f"|{interval}|{interval_count}|{description}|{success_url}|{cancel_url}"
         )
         idempotency_key = f"sub_chk_{hashlib.sha256(idem_payload.encode()).hexdigest()[:24]}"
@@ -1050,7 +1151,7 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
                     "quantity": 1,
                     "price_data": {
                         "currency": currency.lower(),
-                        "unit_amount": _to_cents(amount),
+                        "unit_amount": stripe_amount,
                         "recurring": {
                             "interval": interval,
                             "interval_count": interval_count,
@@ -1131,6 +1232,7 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
                 "Stripe customer was not created — check Stripe connectivity",
             )
 
+        stripe_amount = _to_stripe_amount(amount, currency)
         session = stripe.checkout.Session.create(
             mode="subscription",
             customer=customer.stripe_customer_id,
@@ -1141,7 +1243,7 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
                     "quantity": 1,
                     "price_data": {
                         "currency": currency.lower(),
-                        "unit_amount": _to_cents(amount),
+                        "unit_amount": stripe_amount,
                         "recurring": {
                             "interval": interval,
                             "interval_count": interval_count,
@@ -1180,7 +1282,9 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
 
         stripe = _get_stripe()
         if not stripe:
-            raise ValueError("Stripe is not configured. Set STRIPE_SECRET_KEY environment variable.")
+            raise ValueError(
+                "Stripe is not configured. Set STRIPE_SECRET_KEY environment variable."
+            )
 
         customer = await self.sync_customer(
             contact_id=contact_id,
@@ -1244,9 +1348,7 @@ class StripeCustomerService:
         self.db = db
 
     async def get_by_id(self, id: int) -> StripeCustomer | None:
-        result = await self.db.execute(
-            select(StripeCustomer).where(StripeCustomer.id == id)
-        )
+        result = await self.db.execute(select(StripeCustomer).where(StripeCustomer.id == id))
         return result.scalar_one_or_none()
 
     async def get_list(
@@ -1382,14 +1484,23 @@ class SubscriptionService:
         Otherwise marks the local record as canceled.
         """
         stripe = _get_stripe()
-        if stripe and subscription.stripe_subscription_id and not subscription.stripe_subscription_id.startswith("local_"):
+        if (
+            stripe
+            and subscription.stripe_subscription_id
+            and not subscription.stripe_subscription_id.startswith("local_")
+        ):
             try:
                 stripe.Subscription.modify(
                     subscription.stripe_subscription_id,
                     cancel_at_period_end=True,
                 )
             except Exception as exc:
-                logger.warning("Failed to cancel subscription on Stripe %s: %s", subscription.stripe_subscription_id, exc)
+                logger.warning(
+                    "Failed to cancel subscription on Stripe %s: %s",
+                    subscription.stripe_subscription_id,
+                    exc,
+                )
+                raise ValueError(f"Failed to cancel subscription on Stripe: {exc}") from exc
 
         subscription.status = "canceled"
         subscription.cancel_at_period_end = True

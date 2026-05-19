@@ -128,7 +128,7 @@ export interface CreateCheckoutRequest {
 }
 
 export interface CreateCheckoutResponse {
-  session_id: string;
+  checkout_session_id: string;
   checkout_url: string;
   payment_id: number;
 }
@@ -156,7 +156,6 @@ export interface CreateAndSendInvoiceRequest {
   amount: number;
   description: string;
   due_days?: number;
-  payment_method_types?: string[];
 }
 
 export interface CreateAndSendInvoiceResponse {

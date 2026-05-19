@@ -22,7 +22,7 @@ Go to **Stripe Dashboard → Developers → API Keys → Create restricted key**
 
 **Why RAK over secret key:** If the key leaks, damage is limited to these exact resources. A full secret key grants unrestricted access to your Stripe account.
 
-**Note:** Publishable key is not needed — the frontend does not load Stripe.js.
+**Note:** Publishable key is not required by the current app because the frontend does not load Stripe.js. Leave `STRIPE_PUBLISHABLE_KEY` empty unless a future browser-side Stripe integration needs it.
 
 Copy the key (starts with `rk_live_` or `rk_test_`).
 
@@ -32,7 +32,7 @@ Copy the key (starts with `rk_live_` or `rk_test_`).
 
 Go to **Stripe Dashboard → Developers → Webhooks → Add endpoint**.
 
-- **URL:** `https://backend-production-29c6.up.railway.app/api/payments/webhook`
+- **URL:** `<your-backend-origin>/api/payments/webhook`
 - **Events to subscribe:**
   - `checkout.session.completed`
   - `checkout.session.async_payment_succeeded`
@@ -59,8 +59,10 @@ In **Railway Dashboard → backend service → Variables**, add:
 | Variable | Value |
 |---|---|
 | `STRIPE_SECRET_KEY` | RAK from step 1 (`rk_live_...` or `rk_test_...`) |
-| `STRIPE_PUBLISHABLE_KEY` | Publishable key from Dashboard (for future use) |
 | `STRIPE_WEBHOOK_SECRET` | Signing secret from step 2 (`whsec_...`) |
+| `STRIPE_API_VERSION` | `2026-04-22.dahlia` |
+| `FRONTEND_BASE_URL` | Public frontend origin with no trailing slash, used for Checkout redirects |
+| `STRIPE_PUBLISHABLE_KEY` | Optional; leave empty unless the frontend starts loading Stripe.js |
 
 Railway will redeploy automatically after saving variables.
 

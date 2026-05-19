@@ -27,8 +27,7 @@ export function OnboardingLinkGenerator({
   //
   // Send BOTH ids when present so the backend OR's them — a Stripe
   // customer may be linked at the company level only, and a
-  // contact-only filter would miss an actually-onboarded business
-  // and falsely flash "no payment method" on the badge.
+  // contact-only filter would miss a business-level Stripe customer.
   let lookupParams: { contact_id?: number; company_id?: number; page_size: number } | undefined;
   if (contactId || companyId) {
     lookupParams = { page_size: 1 };
@@ -36,7 +35,7 @@ export function OnboardingLinkGenerator({
     if (companyId) lookupParams.company_id = companyId;
   }
   const { data: customersData } = useStripeCustomers(lookupParams);
-  const hasPaymentMethod = (customersData?.total ?? 0) > 0;
+  const hasStripeCustomer = (customersData?.total ?? 0) > 0;
 
   const handleGenerateLink = async () => {
     try {
@@ -75,13 +74,13 @@ export function OnboardingLinkGenerator({
         <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">
           Payment Setup
         </h3>
-        {hasPaymentMethod ? (
-          <span className="inline-flex items-center rounded-full bg-green-100 dark:bg-green-900/30 px-2.5 py-0.5 text-xs font-medium text-green-800 dark:text-green-300">
-            Payment method on file
+        {hasStripeCustomer ? (
+          <span className="inline-flex items-center rounded-full bg-blue-100 dark:bg-blue-900/30 px-2.5 py-0.5 text-xs font-medium text-blue-800 dark:text-blue-300">
+            Stripe customer linked
           </span>
         ) : (
           <span className="inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-700 px-2.5 py-0.5 text-xs font-medium text-gray-600 dark:text-gray-400">
-            No payment method
+            No Stripe customer
           </span>
         )}
       </div>

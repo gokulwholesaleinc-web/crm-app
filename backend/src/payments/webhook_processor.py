@@ -10,12 +10,12 @@ import hmac
 import json
 import logging
 from datetime import UTC, datetime
-from decimal import Decimal
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.payments.amounts import from_stripe_minor_units
 from src.payments.exceptions import NoRecipientEmailError
 from src.payments.models import (
     Payment,
@@ -80,6 +80,7 @@ class WebhookProcessor:
         # `src.payments.service.settings` and `_get_stripe` and have the
         # patches take effect here via Python's sys.modules cache.
         import src.payments.service as _svc_mod
+
         _settings = _svc_mod.settings
         webhook_secret = getattr(_settings, "STRIPE_WEBHOOK_SECRET", "")
         if not webhook_secret:
@@ -114,7 +115,9 @@ class WebhookProcessor:
             obj = event["data"]["object"]
         else:
             if not self._verify_webhook_signature(
-                payload, sig_header, webhook_secret,
+                payload,
+                sig_header,
+                webhook_secret,
                 tolerance=self.WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS,
             ):
                 raise ValueError("Invalid webhook signature.")
@@ -168,9 +171,7 @@ class WebhookProcessor:
         # the common case of duplicate deliveries from Stripe's own retry
         # machinery.
         if event_id:
-            self.db.add(
-                WebhookEvent(event_id=event_id, event_type=event_type or "unknown")
-            )
+            self.db.add(WebhookEvent(event_id=event_id, event_type=event_type or "unknown"))
             await self.db.flush()
 
         return {
@@ -198,9 +199,7 @@ class WebhookProcessor:
         more than `tolerance` seconds old (or in the future).
         """
         try:
-            elements = dict(
-                pair.split("=", 1) for pair in sig_header.split(",") if "=" in pair
-            )
+            elements = dict(pair.split("=", 1) for pair in sig_header.split(",") if "=" in pair)
             timestamp = elements.get("t", "")
             signature = elements.get("v1", "")
 
@@ -218,9 +217,7 @@ class WebhookProcessor:
 
             # Compute expected signature
             signed_payload = f"{timestamp}.".encode() + payload
-            expected = hmac.new(
-                secret.encode(), signed_payload, hashlib.sha256
-            ).hexdigest()
+            expected = hmac.new(secret.encode(), signed_payload, hashlib.sha256).hexdigest()
 
             return hmac.compare_digest(expected, signature)
         except (ValueError, KeyError, TypeError) as exc:
@@ -236,13 +233,13 @@ class WebhookProcessor:
         value = obj.get(obj_key)
         if not value:
             return None
-        result = await self.db.execute(
-            select(Payment).where(lookup_field == value)
-        )
+        result = await self.db.execute(select(Payment).where(lookup_field == value))
         return result.scalar_one_or_none()
 
     async def _set_payment_status(
-        self, payment: Payment | None, new_status: str,
+        self,
+        payment: Payment | None,
+        new_status: str,
         guard_statuses: tuple = ("succeeded", "refunded"),
     ) -> None:
         """Set payment status if payment exists and current status is not in guard_statuses."""
@@ -256,6 +253,7 @@ class WebhookProcessor:
     async def _send_payment_receipt(self, payment_id: int) -> None:
         """Delegate to PaymentService.send_payment_receipt to avoid duplicating logic."""
         from src.payments.service import PaymentService
+
         svc = PaymentService(self.db)
         await svc.send_payment_receipt(payment_id)
 
@@ -395,16 +393,13 @@ class WebhookProcessor:
         proposal: Proposal | None = None
         if payment.stripe_invoice_id:
             result = await self.db.execute(
-                select(Proposal).where(
-                    Proposal.stripe_invoice_id == payment.stripe_invoice_id
-                )
+                select(Proposal).where(Proposal.stripe_invoice_id == payment.stripe_invoice_id)
             )
             proposal = result.scalar_one_or_none()
         if proposal is None and payment.stripe_checkout_session_id:
             result = await self.db.execute(
                 select(Proposal).where(
-                    Proposal.stripe_checkout_session_id
-                    == payment.stripe_checkout_session_id
+                    Proposal.stripe_checkout_session_id == payment.stripe_checkout_session_id
                 )
             )
             proposal = result.scalar_one_or_none()
@@ -669,11 +664,9 @@ class WebhookProcessor:
                 customer_row.company_id if customer_row else None,
             )
 
-        amount_cents = invoice_obj.get("amount_paid") or invoice_obj.get("total") or 0
-        amount_dollars = (Decimal(int(amount_cents)) / Decimal("100")).quantize(
-            Decimal("0.01")
-        )
         currency = (invoice_obj.get("currency") or "usd").upper()
+        amount_cents = invoice_obj.get("amount_paid") or invoice_obj.get("total") or 0
+        amount_dollars = from_stripe_minor_units(amount_cents, currency)
 
         # Trace the renewal back to the proposal/quote/opportunity that
         # spawned the subscription so MRR reports can attribute renewal
@@ -685,10 +678,9 @@ class WebhookProcessor:
         opportunity_id = None
         if stripe_subscription_id:
             from src.proposals.models import Proposal
+
             proposal_result = await self.db.execute(
-                select(Proposal).where(
-                    Proposal.stripe_subscription_id == stripe_subscription_id
-                )
+                select(Proposal).where(Proposal.stripe_subscription_id == stripe_subscription_id)
             )
             source_proposal = proposal_result.scalar_one_or_none()
             if source_proposal is not None:
@@ -717,9 +709,7 @@ class WebhookProcessor:
             # ONLY swallowable case here; any other DB error must
             # propagate so Stripe retries instead of silently losing a
             # paid renewal that breaks MRR/ARR reporting.
-            logger.info(
-                "invoice.paid renewal insert race for %s: %s", invoice_id, exc
-            )
+            logger.info("invoice.paid renewal insert race for %s: %s", invoice_id, exc)
             # Winning racer already emitted PAYMENT_RECEIVED; returning the
             # rolled-back row would propagate id=None into the emit payload
             # and double-fire the notification.
@@ -799,9 +789,7 @@ class WebhookProcessor:
         """Handle setup_intent.succeeded -- log for future payment method reuse."""
         setup_id = setup_obj.get("id")
         customer_id = setup_obj.get("customer")
-        logger.info(
-            "SetupIntent succeeded: %s for customer %s", setup_id, customer_id
-        )
+        logger.info("SetupIntent succeeded: %s for customer %s", setup_id, customer_id)
 
     # ------------------------------------------------------------------
     # Proposal-billing reconciliation
@@ -857,9 +845,7 @@ class WebhookProcessor:
 
         from src.proposals.models import Proposal
 
-        result = await self.db.execute(
-            select(Proposal).where(Proposal.id == proposal_id)
-        )
+        result = await self.db.execute(select(Proposal).where(Proposal.id == proposal_id))
         proposal = result.scalar_one_or_none()
         if proposal is None:
             return
