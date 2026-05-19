@@ -1,6 +1,6 @@
 /**
  * Admin page for browsing, filtering, and revoking EntityShare rows.
- * Accessible to admin/manager roles only.
+ * Accessible to admin role only.
  */
 
 import { useState } from 'react';
@@ -73,8 +73,7 @@ export default function AdminSharingPage() {
   const user = useAuthStore((s) => s.user);
   const queryClient = useQueryClient();
 
-  const isAuthorized =
-    user?.is_superuser || user?.role === 'admin' || user?.role === 'manager';
+  const isAuthorized = user?.is_superuser || user?.role === 'admin';
 
   const [page, setPage] = useState(1);
   const [entityType, setEntityType] = useState('');
@@ -147,7 +146,7 @@ export default function AdminSharingPage() {
           Access Denied
         </h1>
         <p className="max-w-md text-sm text-gray-500 dark:text-gray-400">
-          Only admins and managers can view this page.
+          Only admins can view this page.
         </p>
         <Button variant="secondary" className="mt-6" onClick={() => navigate('/')}>
           Go to Dashboard

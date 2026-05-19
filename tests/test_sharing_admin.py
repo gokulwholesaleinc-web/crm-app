@@ -188,17 +188,17 @@ class TestAdminSharesAuthz:
         assert "page_size" in data
 
     @pytest.mark.asyncio
-    async def test_manager_gets_200(
+    async def test_manager_gets_403(
         self,
         client: AsyncClient,
         db_session: AsyncSession,
         manager_user: User,
     ):
-        """manager role also gets 200."""
+        """manager role is denied — sharing audit is admin-only."""
         response = await client.get(
             "/api/sharing/admin", headers=_headers(manager_user)
         )
-        assert response.status_code == 200
+        assert response.status_code == 403
 
     @pytest.mark.asyncio
     async def test_admin_authz_uses_user_roles_source_of_truth(
@@ -434,3 +434,17 @@ class TestAdminRevokeShare:
         assert response.status_code == 200
         ids = [item["id"] for item in response.json()["items"]]
         assert sample_share.id not in ids
+
+    @pytest.mark.asyncio
+    async def test_unrelated_manager_cannot_revoke(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        manager_user: User,
+        sample_share: EntityShare,
+    ):
+        """Manager who is neither sharer nor recipient is denied (admin-only bypass)."""
+        response = await client.delete(
+            f"/api/sharing/{sample_share.id}", headers=_headers(manager_user)
+        )
+        assert response.status_code == 403
