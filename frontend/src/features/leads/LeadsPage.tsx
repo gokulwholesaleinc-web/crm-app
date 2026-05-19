@@ -236,7 +236,6 @@ function LeadsPage() {
 
   const [showForm, setShowForm] = useState(false);
   const [formDirty, setFormDirty] = useState(false);
-  const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; lead: Lead | null }>(INITIAL_DELETE_CONFIRM);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
@@ -604,15 +603,6 @@ function LeadsPage() {
     setShowForm(false);
     setEditingLead(null);
     setFormDirty(false);
-    setDiscardConfirmOpen(false);
-  };
-
-  const handleFormCancel = () => {
-    if (formDirty) {
-      setDiscardConfirmOpen(true);
-      return;
-    }
-    closeForm();
   };
 
   const toggleSelectAll = () => {
@@ -1058,36 +1048,27 @@ function LeadsPage() {
         fullScreenOnMobile
         confirmClose={formDirty}
       >
-        <LeadForm
-          // Force a fresh form instance whenever the modal flips between
-          // create / edit-A / edit-B. Without the key, RHF defaultValues
-          // and the LeadForm internal source/pipeline state seed only on
-          // mount, so swapping `editingLead` while the modal is still
-          // visible would leak the prior lead's values onto the new PUT.
-          key={editingLead?.id ?? 'new'}
-          initialData={getInitialFormData()}
-          onSubmit={handleFormSubmit}
-          onCancel={handleFormCancel}
-          isLoading={
-            createLeadMutation.isPending || updateLeadMutation.isPending || checkDuplicatesMutation.isPending
-          }
-          submitLabel={editingLead ? 'Update Lead' : 'Create Lead'}
-          score={editingLead?.score ?? null}
-          requireContactFirst={!editingLead}
-          onDirtyChange={setFormDirty}
-        />
+        {({ requestClose }) => (
+          <LeadForm
+            // Force a fresh form instance whenever the modal flips between
+            // create / edit-A / edit-B. Without the key, RHF defaultValues
+            // and the LeadForm internal source/pipeline state seed only on
+            // mount, so swapping `editingLead` while the modal is still
+            // visible would leak the prior lead's values onto the new PUT.
+            key={editingLead?.id ?? 'new'}
+            initialData={getInitialFormData()}
+            onSubmit={handleFormSubmit}
+            onCancel={requestClose}
+            isLoading={
+              createLeadMutation.isPending || updateLeadMutation.isPending || checkDuplicatesMutation.isPending
+            }
+            submitLabel={editingLead ? 'Update Lead' : 'Create Lead'}
+            score={editingLead?.score ?? null}
+            requireContactFirst={!editingLead}
+            onDirtyChange={setFormDirty}
+          />
+        )}
       </Modal>
-
-      <ConfirmDialog
-        isOpen={discardConfirmOpen}
-        onClose={() => setDiscardConfirmOpen(false)}
-        onConfirm={closeForm}
-        title="Discard unsaved changes?"
-        message="Your lead changes have not been saved."
-        confirmLabel="Discard"
-        cancelLabel="Keep editing"
-        variant="warning"
-      />
 
       {/* Delete Confirmation Dialog */}
       <ConfirmDialog

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { PlusIcon, FunnelIcon, BookmarkIcon, XMarkIcon } from '@heroicons/react/24/outline';
-import { Button, ConfirmDialog, Modal, PaginationBar } from '../../components/ui';
+import { Button, Modal, PaginationBar } from '../../components/ui';
 import { SkeletonTable } from '../../components/ui/Skeleton';
 import { DuplicateWarningModal } from '../../components/shared/DuplicateWarningModal';
 import { SortableTh } from '../../components/shared/SortableTh';
@@ -37,7 +37,6 @@ function ContactsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [showForm, setShowForm] = useState(false);
   const [formDirty, setFormDirty] = useState(false);
-  const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [showSmartListBuilder, setShowSmartListBuilder] = useState(false);
   const [activeFilters, setActiveFilters] = useState<FilterGroup | null>(null);
@@ -109,7 +108,6 @@ function ContactsPage() {
     setShowForm(false);
     setEditingContact(null);
     setFormDirty(false);
-    setDiscardConfirmOpen(false);
   };
 
   const doCreateContact = async (data: ContactFormData) => {
@@ -165,14 +163,6 @@ function ContactsPage() {
   const handleViewDuplicate = (id: number) => {
     setShowDuplicateWarning(false);
     window.open(`/contacts/${id}`, '_blank', 'noopener,noreferrer');
-  };
-
-  const handleFormCancel = () => {
-    if (formDirty) {
-      setDiscardConfirmOpen(true);
-      return;
-    }
-    closeForm();
   };
 
   const getInitialFormData = (): Partial<ContactFormData> | undefined => {
@@ -580,28 +570,19 @@ function ContactsPage() {
         size="lg"
         confirmClose={formDirty}
       >
-        <ContactForm
-          initialData={getInitialFormData()}
-          onSubmit={handleFormSubmit}
-          onCancel={handleFormCancel}
-          isLoading={
-            createContactMutation.isPending || updateContactMutation.isPending || checkDuplicatesMutation.isPending
-          }
-          submitLabel={editingContact ? 'Update Contact' : 'Create Contact'}
-          onDirtyChange={setFormDirty}
-        />
+        {({ requestClose }) => (
+          <ContactForm
+            initialData={getInitialFormData()}
+            onSubmit={handleFormSubmit}
+            onCancel={requestClose}
+            isLoading={
+              createContactMutation.isPending || updateContactMutation.isPending || checkDuplicatesMutation.isPending
+            }
+            submitLabel={editingContact ? 'Update Contact' : 'Create Contact'}
+            onDirtyChange={setFormDirty}
+          />
+        )}
       </Modal>
-
-      <ConfirmDialog
-        isOpen={discardConfirmOpen}
-        onClose={() => setDiscardConfirmOpen(false)}
-        onConfirm={closeForm}
-        title="Discard unsaved changes?"
-        message="Your contact changes have not been saved."
-        confirmLabel="Discard"
-        cancelLabel="Keep editing"
-        variant="warning"
-      />
 
       {/* Duplicate Warning Modal */}
       <DuplicateWarningModal

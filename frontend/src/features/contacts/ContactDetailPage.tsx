@@ -73,7 +73,6 @@ function ContactDetailPage() {
   const targetEmail = searchParams.get('email');
   const [showEditForm, setShowEditForm] = useState(false);
   const [formDirty, setFormDirty] = useState(false);
-  const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEmailCompose, setShowEmailCompose] = useState(false);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
@@ -128,15 +127,6 @@ function ContactDetailPage() {
   const closeEditForm = () => {
     setShowEditForm(false);
     setFormDirty(false);
-    setDiscardConfirmOpen(false);
-  };
-
-  const requestEditClose = () => {
-    if (formDirty) {
-      setDiscardConfirmOpen(true);
-      return;
-    }
-    closeEditForm();
   };
 
   const handleAddAlias = async () => {
@@ -579,26 +569,17 @@ function ContactDetailPage() {
         size="lg"
         confirmClose={formDirty}
       >
-        <ContactForm
-          initialData={contact ? contactToFormData(contact) : undefined}
-          onSubmit={handleEditSubmit}
-          onCancel={requestEditClose}
-          isLoading={updateContactMutation.isPending}
-          submitLabel="Update Contact"
-          onDirtyChange={setFormDirty}
-        />
+        {({ requestClose }) => (
+          <ContactForm
+            initialData={contact ? contactToFormData(contact) : undefined}
+            onSubmit={handleEditSubmit}
+            onCancel={requestClose}
+            isLoading={updateContactMutation.isPending}
+            submitLabel="Update Contact"
+            onDirtyChange={setFormDirty}
+          />
+        )}
       </Modal>
-
-      <ConfirmDialog
-        isOpen={discardConfirmOpen}
-        onClose={() => setDiscardConfirmOpen(false)}
-        onConfirm={closeEditForm}
-        title="Discard unsaved changes?"
-        message="Your contact changes have not been saved."
-        confirmLabel="Discard"
-        cancelLabel="Keep editing"
-        variant="warning"
-      />
 
       <ConfirmDialog
         isOpen={showDeleteConfirm}

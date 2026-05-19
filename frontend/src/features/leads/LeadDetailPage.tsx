@@ -50,7 +50,6 @@ function LeadDetailPage() {
   const [showConvertModal, setShowConvertModal] = useState(false);
   const [showEditForm, setShowEditForm] = useState(false);
   const [formDirty, setFormDirty] = useState(false);
-  const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEmailCompose, setShowEmailCompose] = useState(false);
   const actionRowRef = useRef<HTMLDivElement>(null);
@@ -102,15 +101,6 @@ function LeadDetailPage() {
   const closeEditForm = () => {
     setShowEditForm(false);
     setFormDirty(false);
-    setDiscardConfirmOpen(false);
-  };
-
-  const requestEditClose = () => {
-    if (formDirty) {
-      setDiscardConfirmOpen(true);
-      return;
-    }
-    closeEditForm();
   };
 
   const getInitialFormData = (): Partial<LeadFormData> | undefined => {
@@ -486,27 +476,18 @@ function LeadDetailPage() {
         fullScreenOnMobile
         confirmClose={formDirty}
       >
-        <LeadForm
-          initialData={getInitialFormData()}
-          onSubmit={handleEditSubmit}
-          onCancel={requestEditClose}
-          isLoading={updateLeadMutation.isPending}
-          submitLabel="Update Lead"
-          score={lead.score ?? null}
-          onDirtyChange={setFormDirty}
-        />
+        {({ requestClose }) => (
+          <LeadForm
+            initialData={getInitialFormData()}
+            onSubmit={handleEditSubmit}
+            onCancel={requestClose}
+            isLoading={updateLeadMutation.isPending}
+            submitLabel="Update Lead"
+            score={lead.score ?? null}
+            onDirtyChange={setFormDirty}
+          />
+        )}
       </Modal>
-
-      <ConfirmDialog
-        isOpen={discardConfirmOpen}
-        onClose={() => setDiscardConfirmOpen(false)}
-        onConfirm={closeEditForm}
-        title="Discard unsaved changes?"
-        message="Your lead changes have not been saved."
-        confirmLabel="Discard"
-        cancelLabel="Keep editing"
-        variant="warning"
-      />
 
       {/* Delete Confirmation Dialog */}
       <ConfirmDialog

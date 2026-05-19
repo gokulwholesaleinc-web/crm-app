@@ -6,12 +6,19 @@ import { ConfirmDialogBase } from './ConfirmDialogBase';
 
 export type ModalSize = 'sm' | 'md' | 'lg' | 'xl' | 'full';
 
+/** Render API exposed to children when `children` is a function. Lets a
+ *  form's Cancel button trigger the same dirty-close confirm flow as the
+ *  Modal's X / overlay click, so the two paths can't drift apart. */
+export interface ModalRenderApi {
+  requestClose: () => void;
+}
+
 export interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
   title?: string;
   description?: string;
-  children: ReactNode;
+  children: ReactNode | ((api: ModalRenderApi) => ReactNode);
   size?: ModalSize;
   showCloseButton?: boolean;
   closeOnOverlayClick?: boolean;
@@ -132,7 +139,7 @@ export function Modal({
                       )}
                     </div>
                   )}
-                  {children}
+                  {typeof children === 'function' ? children({ requestClose }) : children}
                 </Dialog.Panel>
               </Transition.Child>
             </div>

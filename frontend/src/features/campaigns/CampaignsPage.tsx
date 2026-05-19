@@ -250,7 +250,6 @@ export function CampaignsPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [formDirty, setFormDirty] = useState(false);
-  const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
   const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; campaign: Campaign | null }>(INITIAL_DELETE_CONFIRM);
 
@@ -335,15 +334,6 @@ export function CampaignsPage() {
     setShowForm(false);
     setEditingCampaign(null);
     setFormDirty(false);
-    setDiscardConfirmOpen(false);
-  };
-
-  const handleFormCancel = () => {
-    if (formDirty) {
-      setDiscardConfirmOpen(true);
-      return;
-    }
-    closeForm();
   };
 
   const campaigns = campaignsData?.items || [];
@@ -531,25 +521,16 @@ export function CampaignsPage() {
         size="lg"
         confirmClose={formDirty}
       >
-        <CampaignForm
-          campaign={editingCampaign || undefined}
-          onSubmit={handleFormSubmit}
-          onCancel={handleFormCancel}
-          isLoading={createCampaign.isPending || updateCampaign.isPending}
-          onDirtyChange={setFormDirty}
-        />
+        {({ requestClose }) => (
+          <CampaignForm
+            campaign={editingCampaign || undefined}
+            onSubmit={handleFormSubmit}
+            onCancel={requestClose}
+            isLoading={createCampaign.isPending || updateCampaign.isPending}
+            onDirtyChange={setFormDirty}
+          />
+        )}
       </Modal>
-
-      <ConfirmDialog
-        isOpen={discardConfirmOpen}
-        onClose={() => setDiscardConfirmOpen(false)}
-        onConfirm={closeForm}
-        title="Discard unsaved changes?"
-        message="Your campaign changes have not been saved."
-        confirmLabel="Discard"
-        cancelLabel="Keep editing"
-        variant="warning"
-      />
 
       {/* Delete Confirmation Dialog */}
       <ConfirmDialog

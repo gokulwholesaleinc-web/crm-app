@@ -7,8 +7,9 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
+import { showError } from '../../utils/toast';
 import { Card, CardHeader, CardBody } from '../../components/ui/Card';
 import { Avatar } from '../../components/ui/Avatar';
 import { Spinner } from '../../components/ui/Spinner';
@@ -82,7 +83,8 @@ function SettingsPage() {
   );
   const firstSectionId = visibleNavItems[0]?.id ?? 'profile';
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const { hash } = useLocation();
+  const { hash, pathname, search } = useLocation();
+  const navigate = useNavigate();
   const [activeSection, setActiveSection] = useState<string>(firstSectionId);
 
   // Refs per section, keyed by id. Used both for IntersectionObserver
@@ -99,12 +101,19 @@ function SettingsPage() {
   }, [activeSection, firstSectionId, visibleSectionIds]);
 
   // Deep-link scroll: when ?#section is in the URL, scroll to it once
-  // we've finished loading the user (so layout has settled).
+  // we've finished loading the user (so layout has settled). When the
+  // hash points at a section the user's role can't see (saved /settings
+  // #webhooks link sent to a sales rep), surface the gate instead of
+  // silently redirecting to #profile — and strip the hash so a refresh
+  // doesn't bounce them again.
   useEffect(() => {
     if (isLoading || !hash) return;
     const id = hash.slice(1);
     if (!visibleSectionIds.has(id)) {
+      const label = NAV_ITEMS.find((item) => item.id === id)?.label ?? id;
+      showError(`${label} settings aren't available for your role.`);
       setActiveSection(firstSectionId);
+      navigate({ pathname, search }, { replace: true });
       return;
     }
     const target = document.getElementById(id);
@@ -115,7 +124,7 @@ function SettingsPage() {
       block: 'start',
     });
     setActiveSection(id);
-  }, [firstSectionId, hash, isLoading, visibleSectionIds]);
+  }, [firstSectionId, hash, isLoading, navigate, pathname, search, visibleSectionIds]);
 
   // Track which section the reader is on. We pick the *last* section
   // whose top has crossed below the viewport's mid-line — that

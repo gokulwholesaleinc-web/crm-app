@@ -38,7 +38,17 @@ import { showSuccess, showError } from '../../../utils/toast';
 import { useGoogleCalendarSync } from '../../../hooks/useGoogleCalendarSync';
 import { usePermissions } from '../../../hooks/usePermissions';
 
-function ConnectionBadge({ connected }: { connected: boolean }) {
+function ConnectionBadge({ connected }: { connected: boolean | null }) {
+  if (connected === null) {
+    // Same shape as MailchimpCard's StatusPill — when the status query
+    // is gated to admins, render an honest "Admin only" pill for
+    // everyone else instead of lying with "Not connected".
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 dark:bg-gray-700 px-2.5 py-0.5 text-xs font-medium text-gray-600 dark:text-gray-400">
+        Admin only
+      </span>
+    );
+  }
   return connected ? (
     <span className="inline-flex items-center gap-1 rounded-full bg-green-100 dark:bg-green-900/30 px-2.5 py-0.5 text-xs font-medium text-green-700 dark:text-green-400">
       <CheckCircleIcon className="h-3.5 w-3.5" aria-hidden="true" />
@@ -159,7 +169,9 @@ function MetaCard({ onRequestDisconnect }: { onRequestDisconnect: () => void }) 
     return <Spinner size="sm" />;
   }
 
-  const connected = status?.connected ?? false;
+  // Mirror MailchimpCard: when the Meta status query is admin-gated and
+  // disabled, signal "unknown" so the badge doesn't claim "Not connected".
+  const connected: boolean | null = isAdmin ? status?.connected ?? false : null;
   const pages = status?.pages ?? [];
 
   return (
@@ -177,9 +189,11 @@ function MetaCard({ onRequestDisconnect }: { onRequestDisconnect: () => void }) 
           <ConnectionBadge connected={connected} />
         </div>
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-          {connected
-            ? `${pages.length} page${pages.length !== 1 ? 's' : ''} linked · Lead capture & social sync`
-            : 'Connect Facebook pages, Instagram, and Lead Ads'}
+          {connected === null
+            ? 'Facebook pages, Instagram, and Lead Ads. Ask an admin if you need access.'
+            : connected
+              ? `${pages.length} page${pages.length !== 1 ? 's' : ''} linked · Lead capture & social sync`
+              : 'Connect Facebook pages, Instagram, and Lead Ads'}
         </p>
         {connected && status?.token_expiry && (
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
