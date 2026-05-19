@@ -48,9 +48,23 @@ def upgrade() -> None:
         "work_sessions",
         ["user_id", "entity_type", "entity_id", "ended_at"],
     )
+    # Partial unique index on the OPEN session per (user, entity, source).
+    # Without it, two heartbeats firing in the same tick (the 45s interval
+    # + a visibilitychange) can both SELECT zero open rows and both INSERT,
+    # leaving two open sessions that extend independently and silently
+    # double Time-by-Rep. SQLite supports partial indexes via raw SQL.
+    if bind.dialect.name in ("postgresql", "sqlite"):
+        op.execute(
+            "CREATE UNIQUE INDEX uq_work_sessions_open_per_entity "
+            "ON work_sessions (user_id, entity_type, entity_id, source) "
+            "WHERE ended_at IS NULL"
+        )
 
 
 def downgrade() -> None:
+    bind = op.get_bind()
+    if bind.dialect.name in ("postgresql", "sqlite"):
+        op.execute("DROP INDEX IF EXISTS uq_work_sessions_open_per_entity")
     op.drop_index("ix_work_sessions_open", table_name="work_sessions")
     op.drop_index("ix_work_sessions_entity", table_name="work_sessions")
     op.drop_index("ix_work_sessions_user_seen", table_name="work_sessions")

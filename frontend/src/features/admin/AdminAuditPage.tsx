@@ -32,7 +32,9 @@ import { useAuthStore } from '../../store/authStore';
 import type {
   AdminAuditEntitySummary,
   AdminAuditFeedItem,
+  AdminAuditFeedResponse,
   AdminAuditSecurityEvent,
+  AdminAuditSummaryResponse,
   AdminAuditUserDetail,
   AdminAuditUserSummary,
   AdminAuditEntityDetail,
@@ -49,6 +51,38 @@ const TABS: { id: TabId; name: string }[] = [
 ];
 
 const PAGE_SIZE = 50;
+
+/** Replaces a 3-deep nested ternary in the header — the count label is
+ *  per-tab so the JSX stays the same shape regardless of which tab is
+ *  active. */
+function tabCountLabel(
+  activeTab: TabId,
+  feed: AdminAuditFeedResponse | undefined,
+  summary: AdminAuditSummaryResponse | undefined,
+): string {
+  const fmt = (n: number) => n.toLocaleString();
+  switch (activeTab) {
+    case 'feed':
+      return `${fmt(feed?.total ?? 0)} matching audit events`;
+    case 'users':
+      return `${fmt(summary?.users.length ?? 0)} reps`;
+    case 'entities':
+      return `${fmt(summary?.entities.length ?? 0)} touched entities`;
+    case 'security':
+      return `${fmt(summary?.security.length ?? 0)} security signals`;
+  }
+}
+
+/** Severity → Badge variant lookup. Unknown severities (e.g. backend
+ *  added a new tier we haven't taught the UI about) fall back to gray. */
+const SEVERITY_BADGE: Record<string, 'red' | 'yellow' | 'gray'> = {
+  high: 'red',
+  medium: 'yellow',
+  low: 'gray',
+};
+function severityBadgeVariant(severity: string): 'red' | 'yellow' | 'gray' {
+  return SEVERITY_BADGE[severity] ?? 'gray';
+}
 
 const DATE_PRESETS = [
   { label: 'Today', days: 0 },
@@ -142,8 +176,16 @@ function csvCell(value: unknown): string {
   return `"${text.replaceAll('"', '""')}"`;
 }
 
-function downloadVisibleFeedCsv(rows: AdminAuditFeedItem[]) {
+function downloadVisibleFeedCsv(
+  rows: AdminAuditFeedItem[],
+  context: { page: number; pageSize: number; totalRows: number | null },
+) {
   const headers = ['time', 'user', 'email', 'action', 'entity_type', 'entity_id', 'ip_address', 'changes'];
+  // Footer makes it impossible to confuse "Export visible" with "Export
+  // everything matching the filter". Compliance pulls or security
+  // audits need the full set — render the gap explicitly.
+  const totalRowsText =
+    context.totalRows != null ? String(context.totalRows) : 'unknown';
   const lines = [
     headers.map(csvCell).join(','),
     ...rows.map((row) => [
@@ -156,6 +198,11 @@ function downloadVisibleFeedCsv(rows: AdminAuditFeedItem[]) {
       row.ip_address || '',
       formatChangePreview(row.changes),
     ].map(csvCell).join(',')),
+    csvCell(
+      `# Visible page ${context.page} of ${rows.length}-row chunks ` +
+        `(page size ${context.pageSize}). Filter total: ${totalRowsText} ` +
+        `rows. Re-run with a narrower date range for a complete export.`,
+    ),
   ];
   const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
@@ -516,15 +563,15 @@ export default function AdminAuditPage() {
     page_size: PAGE_SIZE,
   }), [summaryFilters, page]);
 
+  // Drawer queries reuse the dashboard filters minus entity_type
+  // (the drawer is already scoped to one entity) and force first-page
+  // pagination so the user always lands on the most recent slice.
   const detailFilters = useMemo(() => ({
-    start_date: startDate || undefined,
-    end_date: endDate || undefined,
-    user_id: userId ? Number(userId) : undefined,
-    action: action || undefined,
-    search: search || undefined,
+    ...summaryFilters,
+    entity_type: undefined,
     page: 1,
     page_size: 25,
-  }), [startDate, endDate, userId, action, search]);
+  }), [summaryFilters]);
 
   const { data: summary, isLoading: summaryLoading, refetch: refetchSummary } =
     useAdminAuditSummary(summaryFilters);
@@ -649,10 +696,23 @@ export default function AdminAuditPage() {
           <Button
             variant="secondary"
             leftIcon={<ArrowDownTrayIcon className="h-4 w-4" />}
-            onClick={() => downloadVisibleFeedCsv(feed?.items ?? [])}
+            onClick={() =>
+              downloadVisibleFeedCsv(feed?.items ?? [], {
+                page: feedFilters.page,
+                pageSize: feedFilters.page_size,
+                totalRows: feed?.total ?? null,
+              })
+            }
             disabled={!feed?.items.length}
+            title={
+              feed?.total != null
+                ? `Exports the visible ${feed.items.length} row${feed.items.length === 1 ? '' : 's'} of ${feed.total} matching the current filter`
+                : undefined
+            }
           >
-            Export visible
+            {feed?.total != null
+              ? `Export visible (${feed.items.length}/${feed.total})`
+              : 'Export visible'}
           </Button>
           <Button
             variant="secondary"
@@ -775,13 +835,7 @@ export default function AdminAuditPage() {
         <div className="flex flex-col gap-2 px-4 pt-2 sm:flex-row sm:items-center sm:justify-between">
           <TabBar tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} />
           <p className="pb-2 text-xs text-gray-500 dark:text-gray-400 sm:pb-0">
-            {activeTab === 'feed'
-              ? `${(feed?.total ?? 0).toLocaleString()} matching audit events`
-              : activeTab === 'users'
-                ? `${(summary?.users.length ?? 0).toLocaleString()} reps`
-                : activeTab === 'entities'
-                  ? `${(summary?.entities.length ?? 0).toLocaleString()} touched entities`
-                  : `${(summary?.security.length ?? 0).toLocaleString()} security signals`}
+            {tabCountLabel(activeTab, feed, summary)}
           </p>
         </div>
         <div className="p-4">
@@ -945,7 +999,7 @@ function SecurityTable({
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-2">
               <Badge
-                variant={event.severity === 'high' ? 'red' : event.severity === 'medium' ? 'yellow' : 'gray'}
+                variant={severityBadgeVariant(event.severity)}
                 size="sm"
               >
                 {event.severity}
