@@ -22,8 +22,15 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.auth.models import User
+from src.payments.amounts import to_stripe_minor_units
 from src.payments.models import Payment, StripeCustomer, Subscription
-from src.payments.service import PaymentService, _to_cents
+from src.payments.service import PaymentService
+
+
+def _to_cents(amount):
+    """Test shim: USD-only minor-unit conversion. Kept so existing
+    half-up rounding assertions don't have to be re-parametrized."""
+    return to_stripe_minor_units(amount, "USD")
 from src.webhooks.stripe_events import WebhookEvent
 
 # ---------------------------------------------------------------------------

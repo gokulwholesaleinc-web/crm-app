@@ -34,8 +34,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.auth.models import User
 from src.auth.security import create_access_token
 from src.contacts.models import Contact
+from src.payments.amounts import to_stripe_minor_units
 from src.payments.models import Payment, StripeCustomer, Subscription
-from src.payments.service import _to_cents
+
+
+def _to_cents(amount):
+    """Test shim: USD-only minor-unit conversion. Kept as the audit
+    test still asserts the historical USD-centric rounding contract."""
+    return to_stripe_minor_units(amount, "USD")
 from src.proposals.models import Proposal
 from src.webhooks.stripe_events import WebhookEvent
 
