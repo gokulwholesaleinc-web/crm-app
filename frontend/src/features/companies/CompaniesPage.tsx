@@ -409,9 +409,9 @@ export function CompaniesPage() {
   const hasActiveFilters = Boolean(filters.search || filters.status || filters.industry);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-guide="companies-page">
       {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between" data-guide="companies-header">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Companies</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
@@ -431,7 +431,7 @@ export function CompaniesPage() {
       </div>
 
       {/* Search and Filters */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4" data-guide="companies-search">
         <div className="flex-1 sm:max-w-md">
           <Input
             value={searchQuery}
@@ -462,7 +462,7 @@ export function CompaniesPage() {
 
       {/* Filters Panel */}
       {showFilters && (
-        <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+        <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4" data-guide="companies-filters">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
             <Select
               label="Status"
@@ -519,7 +519,7 @@ export function CompaniesPage() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4" data-guide="companies-list">
             {companies.map((company) => (
               <CompanyCard
                 key={company.id}
@@ -533,7 +533,7 @@ export function CompaniesPage() {
 
           {/* Pagination */}
           {companiesData && (
-            <div className="flex flex-col gap-3 pt-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+            <div className="flex flex-col gap-3 pt-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4" data-guide="companies-pagination">
               <div className="flex items-center justify-center gap-3 sm:justify-start">
                 <span className="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
                   {companiesData.total} total

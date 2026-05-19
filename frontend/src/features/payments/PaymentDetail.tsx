@@ -139,9 +139,9 @@ function PaymentDetailPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-guide="payment-detail-page">
       {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between" data-guide="payment-detail-header">
         <div className="flex items-center gap-4">
           <button
             type="button"
@@ -165,7 +165,7 @@ function PaymentDetailPage() {
         </div>
 
         {/* Action Buttons */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2" data-guide="payment-detail-actions">
           <button
             type="button"
             onClick={handleDownloadInvoice}
@@ -229,7 +229,7 @@ function PaymentDetailPage() {
       )}
 
       {payment.stripe_payment_url && payment.status !== 'succeeded' && (
-        <div className="rounded-lg border border-primary-200 dark:border-primary-800 bg-primary-50 dark:bg-primary-900/10 p-4">
+        <div className="rounded-lg border border-primary-200 dark:border-primary-800 bg-primary-50 dark:bg-primary-900/10 p-4" data-guide="payment-detail-payment-link">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex-1 min-w-0">
               <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">
@@ -267,11 +267,11 @@ function PaymentDetailPage() {
       )}
 
       {/* Payment Details Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6" data-guide="payment-detail-grid">
         {/* Main Content */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="lg:col-span-2 space-y-6" data-guide="payment-detail-main">
           {/* Amount Card */}
-          <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-transparent dark:border-gray-700">
+          <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-transparent dark:border-gray-700" data-guide="payment-detail-amount">
             <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-4">Payment Amount</h2>
             <p className="text-3xl font-bold text-gray-900 dark:text-gray-100" style={{ fontVariantNumeric: 'tabular-nums' }}>
               {formatCurrency(payment.amount, payment.currency)}
@@ -282,7 +282,7 @@ function PaymentDetailPage() {
           </div>
 
           {/* Payment Method & Receipt */}
-          <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-transparent dark:border-gray-700">
+          <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-transparent dark:border-gray-700" data-guide="payment-detail-details">
             <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-4">Payment Details</h2>
             <dl className="space-y-3">
               {payment.payment_method && (
@@ -324,16 +324,16 @@ function PaymentDetailPage() {
               are billed standalone, with the back-up PDF (signed estimate,
               statement of work, etc.) attached here. Reuses the shared
               AttachmentList that already powers Contacts/Companies. */}
-          <div>
+          <div data-guide="payment-detail-attachments">
             <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">Attachments</h2>
             <AttachmentList entityType="payments" entityId={payment.id} />
           </div>
         </div>
 
         {/* Sidebar */}
-        <div className="space-y-6">
+        <div className="space-y-6" data-guide="payment-detail-sidebar">
           {/* Info */}
-          <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-transparent dark:border-gray-700">
+          <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-transparent dark:border-gray-700" data-guide="payment-detail-metadata">
             <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-4">Details</h2>
             <dl className="space-y-3">
               <div>
@@ -348,7 +348,7 @@ function PaymentDetailPage() {
           </div>
 
           {/* Related Entities */}
-          <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-transparent dark:border-gray-700">
+          <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-transparent dark:border-gray-700" data-guide="payment-detail-related">
             <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-4">Related</h2>
             <dl className="space-y-3">
               {payment.customer && (

@@ -317,7 +317,7 @@ function ProposalDetailPage() {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-guide="proposal-detail-page">
       <StickyActionBar triggerRef={actionRowRef}>
         {canSendStatus && (
           <Button
@@ -337,7 +337,7 @@ function ProposalDetailPage() {
         )}
       </StickyActionBar>
       {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between" data-guide="proposal-detail-header">
         <div className="flex items-center gap-4">
           <button
             type="button"
@@ -367,7 +367,7 @@ function ProposalDetailPage() {
             secondary. Accept/Reject collapse into a single "Mark Result"
             disclosure to avoid the wall-of-buttons clutter. Delete lives
             in the overflow menu so a misclick can't nuke a sent proposal. */}
-        <div ref={actionRowRef} className="flex flex-wrap items-center gap-2">
+        <div ref={actionRowRef} className="flex flex-wrap items-center gap-2" data-guide="proposal-detail-actions">
           <HelpLink anchor="tutorial-esign" label="How clients sign and accept" />
 
           {/* PRIMARY action — status-driven. The single highest-leverage
@@ -434,6 +434,7 @@ function ProposalDetailPage() {
           during the current session. Dismissible, no auto-toast spam. */}
       {showDealWonBanner && (
         <div
+          data-guide="proposal-detail-deal-won"
           role="status"
           aria-live="polite"
           className="flex items-center justify-between gap-3 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 px-4 py-3"
@@ -466,6 +467,7 @@ function ProposalDetailPage() {
           hide partial-fail from the operator. */}
       {proposal.signed_pdf_error != null && (
         <div
+          data-guide="proposal-detail-signed-pdf-error"
           role="alert"
           aria-live="polite"
           className="flex items-start justify-between gap-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-4 py-3"
@@ -495,28 +497,32 @@ function ProposalDetailPage() {
       {/* Status timeline — tells the Draft → Sent → Viewed → Signed
           story at a glance. Replaces the implicit "stack two status pills
           and bury dates in the sidebar" pattern. */}
-      <StatusTimeline steps={timelineSteps} />
+      <div data-guide="proposal-detail-status-timeline">
+        <StatusTimeline steps={timelineSteps} />
+      </div>
 
       {/* Pre-send checklist — only shows when the proposal is in a
           sendable status AND at least one required gate is failing.
           Once everything's green it auto-hides so a polished proposal
           doesn't carry a clutter card. */}
       {canSendStatus && !checklistReady && (
-        <SendChecklist
-          items={sendChecklist}
-          hideWhenAllGreen
-        />
+        <div data-guide="proposal-detail-send-checklist">
+          <SendChecklist
+            items={sendChecklist}
+            hideWhenAllGreen
+          />
+        </div>
       )}
 
       {/* Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6" data-guide="proposal-detail-grid">
         {/* Main Content — each section is inline-editable via pencil
             icon; the original "open the entire edit modal to tweak two
             sentences in Scope" friction is gone. The modal still owns
             related-record reassignment + billing changes. */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="lg:col-span-2 space-y-6" data-guide="proposal-detail-sections">
           {!hasAnyContent && canEdit && (
-            <div className="rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600 bg-gray-50/50 dark:bg-gray-800/40 p-8 text-center">
+            <div className="rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600 bg-gray-50/50 dark:bg-gray-800/40 p-8 text-center" data-guide="proposal-detail-empty-state">
               <DocumentTextIcon className="mx-auto h-10 w-10 text-gray-300 dark:text-gray-600" aria-hidden="true" />
               <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">
                 This proposal is empty
@@ -532,51 +538,61 @@ function ProposalDetailPage() {
             </div>
           )}
 
-          <InlineSectionEditor
-            title="Executive Summary"
-            value={proposal.executive_summary ?? null}
-            onSave={(v) => handleSectionSave('executive_summary', v)}
-            canEdit={canEdit}
-            placeholder="The 30-second pitch. What we're proposing, why it matters to the client."
-          />
-          <InlineSectionEditor
-            title="Scope of Work"
-            value={proposal.scope_of_work ?? null}
-            onSave={(v) => handleSectionSave('scope_of_work', v)}
-            canEdit={canEdit}
-            rows={6}
-            placeholder="Deliverables, phases, what's in and out of scope."
-          />
-          <InlineSectionEditor
-            title="Pricing"
-            value={proposal.pricing_section ?? null}
-            onSave={(v) => handleSectionSave('pricing_section', v)}
-            canEdit={canEdit}
-            placeholder="Line-item breakdown, assumptions, anything beyond the structured amount on the right."
-          />
-          <InlineSectionEditor
-            title="Timeline"
-            value={proposal.timeline ?? null}
-            onSave={(v) => handleSectionSave('timeline', v)}
-            canEdit={canEdit}
-            rows={3}
-            placeholder="Kickoff, milestones, expected completion."
-          />
-          <InlineSectionEditor
-            title="Terms"
-            value={proposal.terms ?? null}
-            onSave={(v) => handleSectionSave('terms', v)}
-            canEdit={canEdit}
-            rows={3}
-            placeholder="Payment terms, IP, cancellation, anything legal."
-          />
+          <div data-guide="proposal-detail-executive-summary">
+            <InlineSectionEditor
+              title="Executive Summary"
+              value={proposal.executive_summary ?? null}
+              onSave={(v) => handleSectionSave('executive_summary', v)}
+              canEdit={canEdit}
+              placeholder="The 30-second pitch. What we're proposing, why it matters to the client."
+            />
+          </div>
+          <div data-guide="proposal-detail-scope">
+            <InlineSectionEditor
+              title="Scope of Work"
+              value={proposal.scope_of_work ?? null}
+              onSave={(v) => handleSectionSave('scope_of_work', v)}
+              canEdit={canEdit}
+              rows={6}
+              placeholder="Deliverables, phases, what's in and out of scope."
+            />
+          </div>
+          <div data-guide="proposal-detail-pricing">
+            <InlineSectionEditor
+              title="Pricing"
+              value={proposal.pricing_section ?? null}
+              onSave={(v) => handleSectionSave('pricing_section', v)}
+              canEdit={canEdit}
+              placeholder="Line-item breakdown, assumptions, anything beyond the structured amount on the right."
+            />
+          </div>
+          <div data-guide="proposal-detail-timeline">
+            <InlineSectionEditor
+              title="Timeline"
+              value={proposal.timeline ?? null}
+              onSave={(v) => handleSectionSave('timeline', v)}
+              canEdit={canEdit}
+              rows={3}
+              placeholder="Kickoff, milestones, expected completion."
+            />
+          </div>
+          <div data-guide="proposal-detail-terms">
+            <InlineSectionEditor
+              title="Terms"
+              value={proposal.terms ?? null}
+              onSave={(v) => handleSectionSave('terms', v)}
+              canEdit={canEdit}
+              rows={3}
+              placeholder="Payment terms, IP, cancellation, anything legal."
+            />
+          </div>
 
           {/* Content (fallback) — only renders for legacy proposals that
               were authored before the structured-section split. Read-only
               because editing a free-form blob doesn't have a destination
               field on the new schema. */}
           {proposal.content && !proposal.executive_summary && !proposal.scope_of_work && (
-            <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-gray-100 dark:border-gray-700">
+            <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-gray-100 dark:border-gray-700" data-guide="proposal-detail-legacy-content">
               <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">Content</h2>
               <p className="text-sm text-gray-900 dark:text-gray-100 whitespace-pre-wrap">{proposal.content}</p>
             </div>
@@ -585,16 +601,18 @@ function ProposalDetailPage() {
           {/* Attachments — PDFs that ride along on the public link.
               Locked once the customer signs so the audit trail stays
               honest about what they were shown. */}
-          <ProposalAttachmentsCard
-            proposalId={proposal.id}
-            isLocked={Boolean(proposal.signed_at)}
-          />
+          <div data-guide="proposal-detail-attachments">
+            <ProposalAttachmentsCard
+              proposalId={proposal.id}
+              isLocked={Boolean(proposal.signed_at)}
+            />
+          </div>
         </div>
 
         {/* Sidebar */}
-        <div className="space-y-6">
+        <div className="space-y-6" data-guide="proposal-detail-sidebar">
           {/* Proposal Info */}
-          <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-gray-100 dark:border-gray-700">
+          <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-gray-100 dark:border-gray-700" data-guide="proposal-detail-details">
             <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-4">Details</h2>
             <dl className="space-y-3">
               <div>
@@ -654,9 +672,11 @@ function ProposalDetailPage() {
           {/* E-sign + view audit trail. Signer name/email/IP/UA +
               timestamp on accept, plus the full public-link view log
               for forensics and billing disputes. */}
-          <ProposalAuditCard proposal={proposal} />
+          <div data-guide="proposal-detail-audit">
+            <ProposalAuditCard proposal={proposal} />
+          </div>
 
-          <div ref={signingDocumentsRef}>
+          <div ref={signingDocumentsRef} data-guide="proposal-detail-signing-documents">
             <SigningDocumentsCard
               proposalId={proposal.id}
               documents={proposal.signing_documents ?? []}
@@ -671,33 +691,39 @@ function ProposalDetailPage() {
           {(proposal.signing_documents ?? []).length === 0 &&
             proposal.master_contract_pdf_path && (
               <>
-                <MasterContractCard
-                  proposalId={proposal.id}
-                  currentPath={proposal.master_contract_pdf_path ?? null}
-                  signedPdfPath={proposal.signed_pdf_path ?? null}
-                  isLocked={Boolean(proposal.signed_at)}
-                  onUploaded={() => {
-                    void refetch();
-                  }}
-                />
-                <SignaturePlacementCard
-                  proposalId={proposal.id}
-                  currentCoords={proposal.signature_field_coords ?? null}
-                  isLocked={Boolean(proposal.signed_at)}
-                />
+                <div data-guide="proposal-detail-master-contract">
+                  <MasterContractCard
+                    proposalId={proposal.id}
+                    currentPath={proposal.master_contract_pdf_path ?? null}
+                    signedPdfPath={proposal.signed_pdf_path ?? null}
+                    isLocked={Boolean(proposal.signed_at)}
+                    onUploaded={() => {
+                      void refetch();
+                    }}
+                  />
+                </div>
+                <div data-guide="proposal-detail-signature-placement">
+                  <SignaturePlacementCard
+                    proposalId={proposal.id}
+                    currentCoords={proposal.signature_field_coords ?? null}
+                    isLocked={Boolean(proposal.signed_at)}
+                  />
+                </div>
               </>
             )}
 
           {/* Sharing */}
-          <EntitySharing
-            entityType="proposals"
-            entityId={proposal.id}
-            ownerName={proposal.owner?.full_name ?? undefined}
-            canManage={canManageSharing}
-          />
+          <div data-guide="proposal-detail-sharing">
+            <EntitySharing
+              entityType="proposals"
+              entityId={proposal.id}
+              ownerName={proposal.owner?.full_name ?? undefined}
+              canManage={canManageSharing}
+            />
+          </div>
 
           {/* Related Entities */}
-          <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-gray-100 dark:border-gray-700">
+          <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-gray-100 dark:border-gray-700" data-guide="proposal-detail-related">
             <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-4">Related</h2>
             <dl className="space-y-3">
               {proposal.contact && (

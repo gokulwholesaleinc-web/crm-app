@@ -34,15 +34,27 @@ function GuideMenuItem({
               : 'text-gray-700 dark:text-gray-300',
           )}
         >
-          {completed ? (
-            <CheckCircleIcon className="mt-0.5 h-5 w-5 flex-shrink-0 text-green-500" aria-hidden="true" />
-          ) : (
-            <AcademicCapIcon className="mt-0.5 h-5 w-5 flex-shrink-0 text-primary-500" aria-hidden="true" />
-          )}
+          <span
+            className={clsx(
+              'mt-0.5 inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg',
+              completed
+                ? 'bg-green-50 text-green-600 dark:bg-green-900/20 dark:text-green-300'
+                : 'bg-primary-50 text-primary-600 dark:bg-primary-900/30 dark:text-primary-300',
+            )}
+          >
+            {completed ? (
+              <CheckCircleIcon className="h-4 w-4" aria-hidden="true" />
+            ) : (
+              <AcademicCapIcon className="h-4 w-4" aria-hidden="true" />
+            )}
+          </span>
           <span className="min-w-0">
             <span className="block font-medium">{completed ? `Restart ${guide.title}` : guide.title}</span>
             <span className="mt-0.5 block text-xs text-gray-500 dark:text-gray-400">
               {guide.description}
+            </span>
+            <span className="mt-1 inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+              {getStepSummary(guide.steps.length)}
             </span>
           </span>
         </button>
@@ -51,8 +63,26 @@ function GuideMenuItem({
   );
 }
 
+function getLauncherPageLabel(pathname: string): string {
+  const segment = pathname.split('/').filter(Boolean)[0];
+  if (!segment) return 'Dashboard';
+  return segment
+    .split('-')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function getGuideSummary(count: number): string {
+  return `${count} ${count === 1 ? 'guide' : 'guides'}`;
+}
+
+function getStepSummary(count: number): string {
+  return `${count} ${count === 1 ? 'step' : 'steps'}`;
+}
+
 export function GuideLauncher() {
   const {
+    availableGuides,
     currentPageGuides,
     recommendedGuides,
     guidesDisabled,
@@ -76,6 +106,27 @@ export function GuideLauncher() {
       : onDashboard
         ? recommendedGuides.slice(0, 4)
         : [];
+  const pageLabel = getLauncherPageLabel(location.pathname);
+  const completedCount = availableGuides.filter((guide) => isCompleted(guide.id)).length;
+  const launcherLabel = guidesDisabled
+    ? 'Guides off'
+    : currentGuide
+      ? 'Page guide'
+      : onDashboard
+        ? 'Guides'
+        : 'Help guides';
+  const launcherTitle = guidesDisabled
+    ? 'Guides are disabled'
+    : currentGuide
+      ? `Open ${currentGuide.title} guide for ${pageLabel}`
+      : `Open guides for ${pageLabel}`;
+  const menuDescription = guidesDisabled
+    ? 'Guides are disabled for your account.'
+    : currentGuide
+      ? `${currentGuide.title} is available for ${pageLabel}.`
+      : menuGuides.length > 0
+        ? `${getGuideSummary(menuGuides.length)} recommended from your role.`
+        : `No guide is tied to ${pageLabel} yet. Help has every role-relevant tour.`;
 
   return (
     <Menu as="div" className="relative" data-guide="header-guide">
@@ -86,15 +137,15 @@ export function GuideLauncher() {
             ? 'text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:text-gray-500 dark:hover:bg-gray-700 dark:hover:text-gray-300'
             : 'text-primary-700 hover:bg-primary-50 dark:text-primary-300 dark:hover:bg-primary-900/20',
         )}
-        aria-label="Open guide menu"
-        title="Guide"
+        aria-label={launcherTitle}
+        title={launcherTitle}
       >
         {guidesDisabled ? (
           <NoSymbolIcon className="h-5 w-5" aria-hidden="true" />
         ) : (
           <AcademicCapIcon className="h-5 w-5" aria-hidden="true" />
         )}
-        <span className="hidden lg:inline">Guide</span>
+        <span className="hidden lg:inline">{launcherLabel}</span>
       </Menu.Button>
       <Transition
         as={Fragment}
@@ -107,17 +158,25 @@ export function GuideLauncher() {
       >
         <Menu.Items className="absolute right-0 z-50 mt-2 w-80 origin-top-right rounded-lg bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5 focus-visible:outline-none dark:bg-gray-800 dark:ring-gray-700">
           <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700">
-            <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-              Interactive guides
-            </p>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                  {currentGuide ? `${pageLabel} guide` : 'Interactive guides'}
+                </p>
+                <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                  {menuDescription}
+                </p>
+              </div>
+              <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+                {completedCount}/{availableGuides.length}
+              </span>
+            </div>
             <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
               {guidesDisabled
-                ? 'Guides are disabled for your account.'
+                ? 'Re-enable guides to run page tours again.'
                 : currentGuide
-                  ? 'Start the current page tour or pick a recommended refresher.'
-                  : menuGuides.length > 0
-                    ? 'Pick a recommended tour or browse all guides in Help.'
-                    : 'No tour for this page yet — browse all guides in Help.'}
+                  ? 'Start the current page tour, then browse Help for role-specific refreshers.'
+                  : 'Completion count is scoped to guides available for your role.'}
             </p>
           </div>
 

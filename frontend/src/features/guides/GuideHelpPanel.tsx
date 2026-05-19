@@ -4,23 +4,30 @@ import {
   CheckCircleIcon,
   NoSymbolIcon,
 } from '@heroicons/react/24/outline';
+import clsx from 'clsx';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { useGuides } from './GuideProvider';
+
+function getStepSummary(count: number): string {
+  return `${count} ${count === 1 ? 'step' : 'steps'}`;
+}
 
 export function GuideHelpPanel() {
   const {
     role,
     availableGuides,
     recommendedGuides,
-    completedGuideIds,
     guidesDisabled,
     isCompleted,
     startGuide,
     setGuidesEnabled,
     resetProgress,
   } = useGuides();
-  const completedCount = completedGuideIds.length;
+  const totalGuideCount = availableGuides.length;
+  const completedCount = availableGuides.filter((guide) => isCompleted(guide.id)).length;
+  const completionPercent =
+    totalGuideCount > 0 ? Math.round((completedCount / totalGuideCount) * 100) : 0;
   const recommendedIds = new Set(recommendedGuides.map((guide) => guide.id));
 
   return (
@@ -38,48 +45,88 @@ export function GuideHelpPanel() {
             include short “try this” prompts, and can be restarted whenever you need a refresher.
           </p>
           <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            {completedCount} completed · {guidesDisabled ? 'Guides disabled' : 'Guides enabled'}
+            {guidesDisabled ? 'Guides disabled' : 'Guides enabled'} for your account
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant={guidesDisabled ? 'primary' : 'secondary'}
-            size="sm"
-            onClick={() => setGuidesEnabled(guidesDisabled)}
-            leftIcon={guidesDisabled ? <AcademicCapIcon className="h-4 w-4" /> : <NoSymbolIcon className="h-4 w-4" />}
-          >
-            {guidesDisabled ? 'Re-enable guides' : 'Disable guides'}
-          </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={resetProgress}
-            leftIcon={<ArrowPathIcon className="h-4 w-4" />}
-          >
-            Reset progress
-          </Button>
+        <div className="w-full lg:w-80">
+          <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-700 dark:bg-gray-900/40">
+            <div className="flex items-center justify-between gap-3 text-xs font-medium text-gray-600 dark:text-gray-300">
+              <span>Guide progress</span>
+              <span>
+                {completedCount}/{totalGuideCount} complete
+              </span>
+            </div>
+            <div
+              className="mt-2 h-1.5 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700"
+              role="progressbar"
+              aria-label="Guide completion progress"
+              aria-valuemin={0}
+              aria-valuemax={totalGuideCount}
+              aria-valuenow={completedCount}
+            >
+              <div
+                className="h-full rounded-full bg-primary-500 transition-[width] duration-200 motion-reduce:transition-none"
+                style={{ width: `${completionPercent}%` }}
+              />
+            </div>
+          </div>
+          <div className="mt-2 flex flex-wrap justify-end gap-2">
+            <Button
+              variant={guidesDisabled ? 'primary' : 'secondary'}
+              size="sm"
+              onClick={() => setGuidesEnabled(guidesDisabled)}
+              leftIcon={guidesDisabled ? <AcademicCapIcon className="h-4 w-4" /> : <NoSymbolIcon className="h-4 w-4" />}
+            >
+              {guidesDisabled ? 'Re-enable guides' : 'Disable guides'}
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={resetProgress}
+              leftIcon={<ArrowPathIcon className="h-4 w-4" />}
+            >
+              Reset progress
+            </Button>
+          </div>
         </div>
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {availableGuides.map((guide) => {
           const completed = isCompleted(guide.id);
+          const recommended = recommendedIds.has(guide.id);
           return (
             <div
               key={guide.id}
-              className="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800/60"
+              className={clsx(
+                'rounded-lg border bg-white p-3 shadow-sm transition-colors dark:bg-gray-900/40',
+                completed
+                  ? 'border-green-200 dark:border-green-900/60'
+                  : recommended
+                    ? 'border-primary-200 dark:border-primary-800/70'
+                    : 'border-gray-200 dark:border-gray-700',
+              )}
             >
+              <div
+                className={clsx(
+                  'mb-3 h-1 rounded-full',
+                  completed ? 'bg-green-500' : recommended ? 'bg-primary-500' : 'bg-gray-300 dark:bg-gray-600',
+                )}
+              />
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-1.5">
                     <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
                       {guide.title}
                     </h3>
-                    {recommendedIds.has(guide.id) && (
+                    {recommended && (
                       <span className="rounded-full bg-primary-100 px-2 py-0.5 text-[11px] font-medium text-primary-700 dark:bg-primary-900/30 dark:text-primary-200">
                         Recommended
                       </span>
                     )}
+                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                      {getStepSummary(guide.steps.length)}
+                    </span>
                   </div>
                   <p className="mt-1 text-xs leading-5 text-gray-600 dark:text-gray-300">
                     {guide.description}

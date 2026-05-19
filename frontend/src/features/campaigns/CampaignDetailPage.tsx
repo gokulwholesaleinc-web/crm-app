@@ -450,9 +450,9 @@ export function CampaignDetailPage() {
   const statusStyle = getStatusColor(campaign.status, 'campaign');
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-guide="campaign-detail-page">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-start gap-4" data-guide="campaign-detail-header">
         <button
           onClick={() => navigate('/campaigns')}
           className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors self-start"
@@ -476,7 +476,7 @@ export function CampaignDetailPage() {
             <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mt-1">{campaign.description}</p>
           )}
         </div>
-        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto" data-guide="campaign-detail-actions">
           {campaign.campaign_type === 'email' && (
             <HelpLink anchor="tutorial-email-campaign" label="How email campaigns work" />
           )}
@@ -506,7 +506,7 @@ export function CampaignDetailPage() {
           actions it advertises (canManageCampaign), and only on fresh email
           campaigns with no steps configured yet. */}
       {canManageCampaign && campaign.campaign_type === 'email' && steps.length === 0 && (
-        <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-4 sm:p-5">
+        <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-4 sm:p-5" data-guide="campaign-detail-setup">
           <h2 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-3">
             Get this campaign live in 3 steps
           </h2>
@@ -566,7 +566,7 @@ export function CampaignDetailPage() {
       )}
 
       {/* Campaign Details */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4" data-guide="campaign-detail-summary">
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-3 sm:p-4">
           <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Campaign Type</p>
           <p className="text-base sm:text-lg font-medium text-gray-900 dark:text-gray-100 capitalize">{campaign.campaign_type}</p>
@@ -589,11 +589,13 @@ export function CampaignDetailPage() {
 
       {/* Mailchimp send summary */}
       {campaign.send_via === 'mailchimp' && (
-        <MailchimpStatsPanel campaignId={campaign.id} mailchimpCampaignId={campaign.mailchimp_campaign_id ?? null} />
+        <div data-guide="campaign-detail-mailchimp">
+          <MailchimpStatsPanel campaignId={campaign.id} mailchimpCampaignId={campaign.mailchimp_campaign_id ?? null} />
+        </div>
       )}
 
       {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4" data-guide="campaign-detail-stats">
         <StatCard
           icon={UsersIcon}
           label="Total Members"
@@ -621,7 +623,7 @@ export function CampaignDetailPage() {
 
       {/* Funnel Stats */}
       {stats && (
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6" data-guide="campaign-detail-funnel">
           <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Campaign Funnel</h3>
           {/* Desktop: horizontal funnel */}
           <div className="hidden sm:flex items-center justify-between">
@@ -670,7 +672,7 @@ export function CampaignDetailPage() {
       {/* Campaign Steps — only operators who can update campaigns can
           add/reorder/delete steps; backend gates the underlying endpoints. */}
       {canManageCampaign && campaign.campaign_type === 'email' && campaignId && (
-        <div ref={stepBuilderRef} className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
+        <div ref={stepBuilderRef} className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6" data-guide="campaign-detail-steps">
           <CampaignStepBuilder
             steps={steps}
             templates={templates}
@@ -686,14 +688,14 @@ export function CampaignDetailPage() {
 
       {/* Email Analytics */}
       {campaign.campaign_type === 'email' && campaignId && (
-        <div>
+        <div data-guide="campaign-detail-analytics">
           <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3">Email Analytics</h3>
           <CampaignAnalyticsSection campaignId={campaignId} />
         </div>
       )}
 
       {/* Members */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700" data-guide="campaign-detail-members">
         <div className="px-4 sm:px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100">Campaign Members</h3>
           {canManageCampaign && (

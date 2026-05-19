@@ -133,7 +133,7 @@ export function CompanyDetailPage() {
       currentUser.role === 'manager');
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-guide="company-detail-page">
       <StickyActionBar triggerRef={actionRowRef}>
         <Button
           variant="secondary"
@@ -147,7 +147,7 @@ export function CompanyDetailPage() {
         </Button>
       </StickyActionBar>
       {/* Header */}
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-4" data-guide="company-detail-header">
         <div className="flex items-start gap-3 sm:gap-4">
           <button
             type="button"
@@ -196,7 +196,7 @@ export function CompanyDetailPage() {
             </div>
           </div>
         </div>
-        <div ref={actionRowRef} className="flex items-center gap-2 w-full sm:w-auto sm:ml-auto">
+        <div ref={actionRowRef} className="flex items-center gap-2 w-full sm:w-auto sm:ml-auto" data-guide="company-detail-actions">
           <Button
             variant="secondary"
             onClick={() => navigate(`/proposals?action=new&company_id=${companyId}`)}
@@ -214,16 +214,20 @@ export function CompanyDetailPage() {
       </div>
 
       {/* Tabs */}
-      <TabBar tabs={TABS} activeTab={activeTab} onTabChange={handleTabChange} />
+      <div data-guide="company-detail-tabs">
+        <TabBar tabs={TABS} activeTab={activeTab} onTabChange={handleTabChange} />
+      </div>
 
       {/* Tab Content */}
       {activeTab === 'overview' && companyId && (
-        <OverviewTab
-          company={company}
-          contacts={contacts}
-          isLoadingContacts={isLoadingContacts}
-          companyId={companyId}
-        />
+        <div data-guide="company-detail-overview">
+          <OverviewTab
+            company={company}
+            contacts={contacts}
+            isLoadingContacts={isLoadingContacts}
+            companyId={companyId}
+          />
+        </div>
       )}
 
       {/* Contracts tab content removed 2026-05-14 — contracts router unmounted. */}
@@ -231,29 +235,39 @@ export function CompanyDetailPage() {
       {/* Quotes tab content removed 2026-05-14 — quotes router unmounted. */}
 
       {activeTab === 'proposals' && (
-        <ProposalsTab proposals={companyProposals} />
+        <div data-guide="company-detail-proposals">
+          <ProposalsTab proposals={companyProposals} />
+        </div>
       )}
 
       {activeTab === 'payments' && companyId && (
-        <Suspense fallback={<SuspenseFallback />}>
-          <EntityPaymentsTab entityType="company" entityId={companyId} />
-        </Suspense>
+        <div data-guide="company-detail-payments">
+          <Suspense fallback={<SuspenseFallback />}>
+            <EntityPaymentsTab entityType="company" entityId={companyId} />
+          </Suspense>
+        </div>
       )}
 
       {activeTab === 'activities' && companyId && (
-        <ActivitiesTab entityType="company" entityId={companyId} />
+        <div data-guide="company-detail-activities">
+          <ActivitiesTab entityType="company" entityId={companyId} />
+        </div>
       )}
 
       {activeTab === 'meta' && companyId && (
-        <Suspense fallback={<SuspenseFallback />}>
-          <MetaTab companyId={companyId} />
-        </Suspense>
+        <div data-guide="company-detail-meta">
+          <Suspense fallback={<SuspenseFallback />}>
+            <MetaTab companyId={companyId} />
+          </Suspense>
+        </div>
       )}
 
       {activeTab === 'expenses' && companyId && (
-        <Suspense fallback={<SuspenseFallback />}>
-          <ExpensesTab companyId={companyId} />
-        </Suspense>
+        <div data-guide="company-detail-expenses">
+          <Suspense fallback={<SuspenseFallback />}>
+            <ExpensesTab companyId={companyId} />
+          </Suspense>
+        </div>
       )}
 
       {companyId && (

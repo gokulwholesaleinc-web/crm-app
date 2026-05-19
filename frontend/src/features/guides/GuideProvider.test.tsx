@@ -57,6 +57,27 @@ const MISSING_TARGET_GUIDE: Guide = {
   ],
 };
 
+const ACTION_STEP_GUIDE: Guide = {
+  id: 'action-step',
+  title: 'Action step tour',
+  description: 'Test guide',
+  roles: ['sales_rep'],
+  path: '/',
+  steps: [
+    {
+      title: 'Use the control',
+      body: 'This step should expose action styling and progress.',
+      action: 'click the visible control.',
+      selector: '[data-guide="action-target"]',
+    },
+    {
+      title: 'Confirm the result',
+      body: 'This step finishes the guide.',
+      selector: '[data-guide="action-target"]',
+    },
+  ],
+};
+
 describe('GuideTourOverlay', () => {
   beforeEach(() => {
     useAuthStore.setState({
@@ -67,6 +88,10 @@ describe('GuideTourOverlay', () => {
     });
     vi.mocked(accountApi.getAccountPreferences).mockResolvedValue(ACCOUNT_PREFS);
     vi.mocked(accountApi.updateAccountPreferences).mockResolvedValue(ACCOUNT_PREFS);
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: vi.fn(),
+    });
   });
 
   afterEach(() => {
@@ -88,13 +113,50 @@ describe('GuideTourOverlay', () => {
 
     expect(screen.getByRole('dialog', { name: 'Still useful' })).toBeInTheDocument();
     expect(screen.getByText('This step should render without a matching selector.')).toBeInTheDocument();
-    expect(screen.getByText(/doesn['’]t have a visible page target/i)).toBeInTheDocument();
+    expect(screen.getByText(/You can keep going/i)).toBeInTheDocument();
 
     await waitFor(() => {
       expect(warn).toHaveBeenCalledWith(
         expect.stringContaining('[guides] Missing selector "[data-guide="does-not-exist"]"'),
       );
     });
+  });
+
+  it('shows guide progress and action-step treatment', () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      x: 16,
+      y: 24,
+      top: 24,
+      right: 160,
+      bottom: 72,
+      left: 16,
+      width: 144,
+      height: 48,
+      toJSON: () => ({}),
+    } as DOMRect);
+
+    render(
+      <>
+        <button type="button" data-guide="action-target">
+          Target
+        </button>
+        <GuideTourOverlay
+          guide={ACTION_STEP_GUIDE}
+          stepIndex={0}
+          onStepChange={() => {}}
+          onClose={() => {}}
+          onComplete={() => {}}
+        />
+      </>,
+    );
+
+    expect(screen.getByText('Action step')).toBeInTheDocument();
+    expect(screen.getByText('Step 1 of 2')).toBeInTheDocument();
+    expect(screen.getByText('50%')).toBeInTheDocument();
+    expect(screen.getByText(/click the visible control/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole('progressbar', { name: 'Action step tour progress' }),
+    ).toHaveAttribute('aria-valuenow', '1');
   });
 });
 

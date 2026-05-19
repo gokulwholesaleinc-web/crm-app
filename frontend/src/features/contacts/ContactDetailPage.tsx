@@ -185,7 +185,7 @@ function ContactDetailPage() {
       currentUser.role === 'manager');
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-guide="contact-detail-page">
       <StickyActionBar triggerRef={actionRowRef}>
         <Button
           variant="primary"
@@ -199,7 +199,7 @@ function ContactDetailPage() {
           Edit
         </Button>
       </StickyActionBar>
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between" data-guide="contact-detail-header">
         <div className="flex items-center space-x-4">
           <button
             type="button"
@@ -246,7 +246,7 @@ function ContactDetailPage() {
             )}
           </div>
         </div>
-        <div ref={actionRowRef} className="flex items-center gap-3 w-full sm:w-auto">
+        <div ref={actionRowRef} className="flex items-center gap-3 w-full sm:w-auto" data-guide="contact-detail-actions">
           <Button
             variant="primary"
             onClick={() => setShowEmailCompose(true)}
@@ -286,10 +286,12 @@ function ContactDetailPage() {
         </div>
       </div>
 
-      <TabBar tabs={TABS} activeTab={activeTab} onTabChange={handleTabChange} />
+      <div data-guide="contact-detail-tabs">
+        <TabBar tabs={TABS} activeTab={activeTab} onTabChange={handleTabChange} />
+      </div>
 
       {activeTab === 'details' && contactId && (
-        <>
+        <div className="space-y-6" data-guide="contact-detail-details">
           <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="h-20 bg-gray-200 dark:bg-gray-700 rounded" /></div>}>
             <PaymentSummary contactId={contactId} />
           </Suspense>
@@ -427,15 +429,17 @@ function ContactDetailPage() {
               </dl>
             </div>
           </div>
-        </>
+        </div>
       )}
 
       {activeTab === 'activities' && contactId && (
-        <ActivitiesTab entityType="contact" entityId={contactId} />
+        <div data-guide="contact-detail-activities">
+          <ActivitiesTab entityType="contact" entityId={contactId} />
+        </div>
       )}
 
       {activeTab === 'emails' && contactId && (
-        <div className="bg-white dark:bg-gray-800 shadow rounded-lg">
+        <div className="bg-white dark:bg-gray-800 shadow rounded-lg" data-guide="contact-detail-emails">
           <div className="px-4 py-5 sm:p-6">
             <GmailReconnectBanner />
             <div className="flex items-center justify-between mb-4">
@@ -473,7 +477,7 @@ function ContactDetailPage() {
       {/* Quotes tab content removed 2026-05-14 — quotes router unmounted. */}
 
       {activeTab === 'proposals' && contactId && (
-        <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden border border-transparent dark:border-gray-700">
+        <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden border border-transparent dark:border-gray-700" data-guide="contact-detail-proposals">
           {proposals.length === 0 ? (
             <div className="text-center py-12 px-4">
               <p className="text-sm text-gray-500 dark:text-gray-400">No proposals for this contact.</p>
@@ -518,15 +522,19 @@ function ContactDetailPage() {
       )}
 
       {activeTab === 'payments' && contactId && (
-        <Suspense fallback={<SuspenseFallback />}>
-          <EntityPaymentsTab entityType="contact" entityId={contactId} />
-        </Suspense>
+        <div data-guide="contact-detail-payments">
+          <Suspense fallback={<SuspenseFallback />}>
+            <EntityPaymentsTab entityType="contact" entityId={contactId} />
+          </Suspense>
+        </div>
       )}
 
       {activeTab === 'documents' && contactId && (
-        <Suspense fallback={<SuspenseFallback />}>
-          <DocumentsTab entityType="contacts" entityId={contactId} />
-        </Suspense>
+        <div data-guide="contact-detail-documents">
+          <Suspense fallback={<SuspenseFallback />}>
+            <DocumentsTab entityType="contacts" entityId={contactId} />
+          </Suspense>
+        </div>
       )}
 
       {contactId && (
