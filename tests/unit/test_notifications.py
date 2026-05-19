@@ -706,6 +706,9 @@ class TestProposalSentNotifiesOwner:
         user_a = await _create_user(db_session, "proposal_owner_send@example.com")
         await _enable_in_app(db_session, user_a)
         admin_b = await _create_user(db_session, "admin_actor_proposal@example.com", is_superuser=True)
+        test_contact.owner_id = user_a.id
+        await db_session.commit()
+        await db_session.refresh(test_contact)
 
         create_resp = await client.post(
             "/api/proposals",

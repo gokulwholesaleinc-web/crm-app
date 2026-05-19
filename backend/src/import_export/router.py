@@ -19,8 +19,41 @@ from src.import_export.csv_handler import (
     ALLOWED_MERGE_STRATEGIES,
     CSVHandler,
 )
+from src.roles.service import RoleService
 
 MAX_CSV_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+
+
+async def _require_import_permission(
+    db: DBSession,
+    current_user: User,
+    entity_type: str,
+    action: str,
+) -> None:
+    if current_user.is_superuser:
+        return
+    has_permission = await RoleService(db).check_permission(
+        current_user.id,
+        entity_type,
+        action,
+    )
+    if not has_permission:
+        raise HTTPException(
+            status_code=HTTPStatus.FORBIDDEN,
+            detail=f"You do not have permission to {action} {entity_type}",
+        )
+
+
+async def _require_import_write_permissions(
+    db: DBSession,
+    current_user: User,
+    entity_type: str,
+    *,
+    match_key: str = "none",
+) -> None:
+    await _require_import_permission(db, current_user, entity_type, "create")
+    if match_key != "none":
+        await _require_import_permission(db, current_user, entity_type, "update")
 
 
 def _validate_dedup_args(match_key: str, merge_strategy: str) -> None:
@@ -155,6 +188,12 @@ async def import_contacts(
 ):
     """Import contacts from CSV file."""
     _validate_dedup_args(match_key, merge_strategy)
+    await _require_import_write_permissions(
+        db,
+        current_user,
+        "contacts",
+        match_key=match_key,
+    )
     csv_content = await _read_csv_upload(file)
 
     handler = CSVHandler(db)
@@ -197,14 +236,23 @@ async def import_companies(
     action is "create_new", "link_existing", or "skip".
     If omitted, all contacts are auto-created.
     """
-    csv_content = await _read_csv_upload(file)
-
     parsed_decisions = None
     if contact_decisions:
         try:
             parsed_decisions = json.loads(contact_decisions)
         except json.JSONDecodeError:
             raise_bad_request("contact_decisions must be valid JSON")
+    await _require_import_permission(db, current_user, "companies", "create")
+    # Company imports can auto-create contacts from the contact-person column;
+    # require that capability up front instead of letting a read-only role write
+    # contacts indirectly through the company wizard.
+    await _require_import_permission(db, current_user, "contacts", "create")
+    if parsed_decisions and any(
+        decision.get("action") == "link_existing" for decision in parsed_decisions
+    ):
+        await _require_import_permission(db, current_user, "contacts", "update")
+
+    csv_content = await _read_csv_upload(file)
 
     handler = CSVHandler(db)
     result = await handler.import_companies(
@@ -243,6 +291,12 @@ async def import_leads(
 ):
     """Import leads from CSV file."""
     _validate_dedup_args(match_key, merge_strategy)
+    await _require_import_write_permissions(
+        db,
+        current_user,
+        "leads",
+        match_key=match_key,
+    )
     csv_content = await _read_csv_upload(file)
 
     handler = CSVHandler(db)
@@ -336,6 +390,12 @@ async def import_with_mapping(
         raise_bad_request("Invalid entity type. Must be: contacts, companies, or leads")
 
     _validate_dedup_args(match_key, merge_strategy)
+    await _require_import_write_permissions(
+        db,
+        current_user,
+        entity_type,
+        match_key=match_key,
+    )
     csv_content = await _read_csv_upload(file)
 
     try:

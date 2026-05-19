@@ -84,7 +84,10 @@ function GoogleCalendarCard({ onRequestDisconnect }: { onRequestDisconnect: () =
   const needsReconnect = state === 'needs_reconnect';
 
   return (
-    <div className="flex items-start gap-4 py-4 first:pt-0 last:pb-0">
+    <div
+      id="integrations-google-calendar"
+      className="flex items-start gap-4 py-4 first:pt-0 last:pb-0 scroll-mt-24"
+    >
       <div className="flex-shrink-0">
         <div className="h-10 w-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
           <CalendarDaysIcon className="h-5 w-5 text-blue-600 dark:text-blue-400" aria-hidden="true" />

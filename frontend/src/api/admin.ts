@@ -16,7 +16,7 @@ import type {
   User,
 } from '../types';
 
-export type ApprovalRole = Exclude<RoleName, 'viewer'>;
+export type ApprovalRole = RoleName;
 
 const ADMIN_BASE = '/api/admin';
 
@@ -131,4 +131,3 @@ export const adminApi = {
   getRejectedEmails,
   unblockRejectedEmail,
 };
-

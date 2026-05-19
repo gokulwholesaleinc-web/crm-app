@@ -18,6 +18,8 @@ from src.companies.models import Company
 from src.contacts.models import Contact
 from src.leads.models import Lead
 from src.opportunities.models import Opportunity
+from src.roles.models import DEFAULT_PERMISSIONS, RoleName, UserRole
+from src.roles.service import RoleService
 from src.whitelabel.models import Tenant
 
 
@@ -103,10 +105,11 @@ class TestAdminUpdateUser:
         client: AsyncClient,
         db_session: AsyncSession,
         admin_headers: dict,
+        seed_roles: list,
         test_superuser: User,
         test_user: User,
     ):
-        """Admin can update a user's role."""
+        """Admin role updates sync user_roles and effective permissions."""
         response = await client.patch(
             f"/api/admin/users/{test_user.id}",
             json={"role": "manager"},
@@ -116,12 +119,30 @@ class TestAdminUpdateUser:
         data = response.json()
         assert data["role"] == "manager"
 
+        await db_session.refresh(test_user)
+        assert test_user.role == RoleName.MANAGER.value
+
+        manager_role = next(r for r in seed_roles if r.name == RoleName.MANAGER.value)
+        assignment = (
+            await db_session.execute(
+                select(UserRole).where(UserRole.user_id == test_user.id)
+            )
+        ).scalar_one()
+        assert assignment.role_id == manager_role.id
+
+        service = RoleService(db_session)
+        assert await service.get_user_role_name(test_user.id) == RoleName.MANAGER.value
+        assert (
+            await service.get_user_permissions(test_user.id)
+        ) == DEFAULT_PERMISSIONS[RoleName.MANAGER]
+
     @pytest.mark.asyncio
     async def test_update_role_invalidates_auth_cache(
         self,
         client: AsyncClient,
         db_session: AsyncSession,
         admin_headers: dict,
+        seed_roles: list,
         test_superuser: User,
         test_user: User,
     ):
@@ -137,6 +158,31 @@ class TestAdminUpdateUser:
 
         assert response.status_code == 200
         assert test_user.id not in _user_cache
+
+    @pytest.mark.asyncio
+    async def test_update_role_invalidates_data_scope_cache(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        admin_headers: dict,
+        seed_roles: list,
+        test_superuser: User,
+        test_user: User,
+    ):
+        """Role changes must flush data-scope cache so ownership rules update immediately."""
+        import time
+
+        from src.core.data_scope import _scope_cache
+        _scope_cache[test_user.id] = (time.monotonic(), object())
+
+        response = await client.patch(
+            f"/api/admin/users/{test_user.id}",
+            json={"role": "manager"},
+            headers=admin_headers,
+        )
+
+        assert response.status_code == 200
+        assert test_user.id not in _scope_cache
 
     @pytest.mark.asyncio
     async def test_deactivate_user_via_patch(
@@ -172,6 +218,31 @@ class TestAdminUpdateUser:
             headers=admin_headers,
         )
         assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_update_last_active_admin_role_rejected(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        admin_auth_headers: dict,
+        test_admin_user: User,
+    ):
+        """Generic admin updates cannot demote the last active admin."""
+        response = await client.patch(
+            f"/api/admin/users/{test_admin_user.id}",
+            json={"role": "viewer"},
+            headers=admin_auth_headers,
+        )
+
+        assert response.status_code == 400
+        assert "last active admin" in response.json()["detail"].lower()
+
+        persisted_user = (
+            await db_session.execute(select(User).where(User.id == test_admin_user.id))
+        ).scalar_one()
+        assert persisted_user.role == RoleName.ADMIN.value
+        service = RoleService(db_session)
+        assert await service.get_user_role_name(test_admin_user.id) == RoleName.ADMIN.value
 
     @pytest.mark.asyncio
     async def test_update_user_forbidden_for_regular_user(
@@ -616,10 +687,11 @@ class TestAdminAssignRole:
         client: AsyncClient,
         db_session: AsyncSession,
         admin_headers: dict,
+        seed_roles: list,
         test_superuser: User,
         test_user: User,
     ):
-        """Admin can assign a valid role to a user."""
+        """Admin assign-role uses the shared role source of truth."""
         response = await client.post(
             f"/api/admin/users/{test_user.id}/assign-role",
             json={"role": "manager"},
@@ -628,6 +700,23 @@ class TestAdminAssignRole:
         assert response.status_code == 200
         data = response.json()
         assert data["role"] == "manager"
+
+        await db_session.refresh(test_user)
+        assert test_user.role == RoleName.MANAGER.value
+
+        manager_role = next(r for r in seed_roles if r.name == RoleName.MANAGER.value)
+        assignment = (
+            await db_session.execute(
+                select(UserRole).where(UserRole.user_id == test_user.id)
+            )
+        ).scalar_one()
+        assert assignment.role_id == manager_role.id
+
+        service = RoleService(db_session)
+        assert await service.get_user_role_name(test_user.id) == RoleName.MANAGER.value
+        assert (
+            await service.get_user_permissions(test_user.id)
+        ) == DEFAULT_PERMISSIONS[RoleName.MANAGER]
 
     @pytest.mark.asyncio
     async def test_assign_invalid_role(
@@ -677,6 +766,31 @@ class TestAdminAssignRole:
             headers=non_admin_headers,
         )
         assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_assign_role_rejects_last_active_admin_demotion(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        admin_auth_headers: dict,
+        test_admin_user: User,
+    ):
+        """Assign-role cannot demote the last active admin."""
+        response = await client.post(
+            f"/api/admin/users/{test_admin_user.id}/assign-role",
+            json={"role": "viewer"},
+            headers=admin_auth_headers,
+        )
+
+        assert response.status_code == 400
+        assert "last active admin" in response.json()["detail"].lower()
+
+        persisted_user = (
+            await db_session.execute(select(User).where(User.id == test_admin_user.id))
+        ).scalar_one()
+        assert persisted_user.role == RoleName.ADMIN.value
+        service = RoleService(db_session)
+        assert await service.get_user_role_name(test_admin_user.id) == RoleName.ADMIN.value
 
 
 class TestAdminRoleAccess:

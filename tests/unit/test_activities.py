@@ -1240,6 +1240,74 @@ class TestPersonalCalendarPrivacy:
         ]
         assert calendar_mirror.id not in all_ids
 
+    @pytest.mark.asyncio
+    async def test_admin_calendar_without_owner_id_defaults_to_self(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        test_user: User,
+        test_superuser: User,
+    ):
+        """Admin hitting /calendar without ?owner_id sees THEIR OWN events.
+
+        Regression for PR #373 codex commit where the filter compiled
+        `owner_id == None` to `owner_id IS NULL`, silently returning an
+        empty calendar for any admin viewing their own page. Pre-PR
+        behavior was to default to self; this test pins that contract.
+        """
+        from src.auth.security import create_access_token
+
+        scheduled = datetime.now(UTC) + timedelta(days=1)
+        admin_event = Activity(
+            activity_type="meeting",
+            subject="Admin's own meeting",
+            entity_type="users",
+            entity_id=test_superuser.id,
+            scheduled_at=scheduled,
+            priority="normal",
+            is_completed=False,
+            owner_id=test_superuser.id,
+            created_by_id=test_superuser.id,
+        )
+        other_user_event = Activity(
+            activity_type="meeting",
+            subject="Some other user's meeting",
+            entity_type="users",
+            entity_id=test_user.id,
+            scheduled_at=scheduled,
+            priority="normal",
+            is_completed=False,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add_all([admin_event, other_user_event])
+        await db_session.commit()
+
+        admin_token = create_access_token(data={"sub": str(test_superuser.id)})
+        admin_headers = {"Authorization": f"Bearer {admin_token}"}
+
+        start = (scheduled - timedelta(days=1)).date().isoformat()
+        end = (scheduled + timedelta(days=1)).date().isoformat()
+        response = await client.get(
+            "/api/activities/calendar",
+            headers=admin_headers,
+            params={"start_date": start, "end_date": end},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        all_ids = [
+            item["id"]
+            for date_items in data["dates"].values()
+            for item in date_items
+        ]
+        assert admin_event.id in all_ids, (
+            "Admin must see their own calendar events when no owner_id is given"
+        )
+        assert other_user_event.id not in all_ids, (
+            "Admin without explicit owner_id must NOT see other users' events"
+        )
+
 
 class TestActivityContactPropagation:
     """Activities created against an opportunity copy the opportunity's

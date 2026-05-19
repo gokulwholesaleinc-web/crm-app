@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, Request
 from sqlalchemy import select
 
 from src.admin._router_helpers import _require_admin
+from src.admin.routers.users import _assign_default_role
 from src.admin.schemas import (
     ApproveUserRequest,
     PendingUserResponse,
@@ -58,8 +59,14 @@ async def approve_user(
         )
 
     user.is_approved = True
-    user.role = data.role.value
     await db.commit()
+
+    # Route through _assign_default_role so user_roles, auth cache, and
+    # data-scope cache stay in sync — the prior direct `user.role = ...`
+    # assignment bypassed RoleService and left /api/roles/users/{id}
+    # reporting "no role" until the user was reassigned via a separate
+    # endpoint. _assign_default_role commits the role change itself.
+    await _assign_default_role(db, user.id, data.role.value)
     invalidate_user_cache(user.id)
 
 

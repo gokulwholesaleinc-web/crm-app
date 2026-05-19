@@ -18,10 +18,18 @@ from src.audit.utils import (
     audit_entity_update,
     snapshot_entity,
 )
+from src.auth.models import User
 from src.core.client_ip import get_client_ip
-from src.core.constants import ENTITY_TYPE_PROPOSALS, EntityNames, HTTPStatus
+from src.core.constants import (
+    ENTITY_TYPE_COMPANIES,
+    ENTITY_TYPE_CONTACTS,
+    ENTITY_TYPE_PROPOSALS,
+    EntityNames,
+    HTTPStatus,
+)
 from src.core.data_scope import DataScope, check_record_access_or_shared, get_data_scope
 from src.core.http_errors import value_error_as_400
+from src.core.permissions import require_permission
 from src.core.rate_limit import limiter
 from src.core.router_utils import (
     CurrentUser,
@@ -61,6 +69,13 @@ from src.proposals.service import ProposalService, ProposalTemplateService
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/proposals", tags=["proposals"])
+
+# There is no live "proposals" permission domain. Staff proposal mutations
+# are customer-facing sales writes, so gate them with contacts write
+# permissions until a first-class proposals permission is introduced.
+ProposalCreateUser = Annotated[User, Depends(require_permission("contacts", "create"))]
+ProposalUpdateUser = Annotated[User, Depends(require_permission("contacts", "update"))]
+ProposalDeleteUser = Annotated[User, Depends(require_permission("contacts", "delete"))]
 
 # Hard cap on the raw signature_image payload (base64-encoded PNG)
 # accepted by /public/{token}/accept. A typical drawn signature lands
@@ -176,10 +191,12 @@ async def list_proposals(
 async def create_proposal(
     proposal_data: ProposalCreate,
     request: Request,
-    current_user: CurrentUser,
+    current_user: ProposalCreateUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
 ):
     """Create a new proposal."""
+    await _check_proposal_reference_access(db, proposal_data, current_user, data_scope)
     service = ProposalService(db)
     with value_error_as_400():
         proposal = await service.create(proposal_data, current_user.id)
@@ -205,7 +222,7 @@ async def list_templates(
 @router.post("/templates", response_model=ProposalTemplateResponse, status_code=HTTPStatus.CREATED)
 async def create_template(
     template_data: ProposalTemplateCreate,
-    current_user: CurrentUser,
+    current_user: ProposalCreateUser,
     db: DBSession,
 ):
     """Create a new proposal template."""
@@ -245,7 +262,7 @@ async def get_template(
 async def update_template(
     template_id: int,
     template_data: ProposalTemplateUpdate,
-    current_user: CurrentUser,
+    current_user: ProposalUpdateUser,
     db: DBSession,
 ):
     """Update a proposal template."""
@@ -253,6 +270,7 @@ async def update_template(
     template = await service.get_by_id(template_id)
     if not template:
         raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Template not found")
+    check_ownership(template, current_user, "proposal template")
 
     update_data = template_data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
@@ -266,7 +284,7 @@ async def update_template(
 @router.delete("/templates/{template_id}", status_code=HTTPStatus.NO_CONTENT)
 async def delete_template(
     template_id: int,
-    current_user: CurrentUser,
+    current_user: ProposalDeleteUser,
     db: DBSession,
 ):
     """Delete a proposal template."""
@@ -274,6 +292,7 @@ async def delete_template(
     template = await service.get_by_id(template_id)
     if not template:
         raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Template not found")
+    check_ownership(template, current_user, "proposal template")
     await db.delete(template)
     await db.flush()
 
@@ -282,8 +301,9 @@ async def delete_template(
 async def create_proposal_from_template(
     request_data: CreateFromTemplateRequest,
     request: Request,
-    current_user: CurrentUser,
+    current_user: ProposalCreateUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
 ):
     """Create a new proposal from a template with merge variable replacement."""
     service = ProposalService(db)
@@ -303,6 +323,10 @@ async def create_proposal_from_template(
     contact = contact_result.scalar_one_or_none()
     if not contact:
         raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Contact not found")
+    check_record_access_or_shared(
+        contact, current_user, data_scope.role_name,
+        shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_CONTACTS),
+    )
 
     # Fetch company if provided
     company = None
@@ -314,6 +338,10 @@ async def create_proposal_from_template(
         company = company_result.scalar_one_or_none()
         if not company:
             raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Company not found")
+        check_record_access_or_shared(
+            company, current_user, data_scope.role_name,
+            shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_COMPANIES),
+        )
 
     # Build merge variables
     from datetime import date
@@ -398,6 +426,37 @@ async def _signing_document_or_404(
     return document
 
 
+async def _check_proposal_reference_access(
+    db: DBSession,
+    proposal_data: ProposalCreate | ProposalUpdate,
+    current_user: User,
+    data_scope: DataScope,
+) -> None:
+    from src.companies.models import Company
+    from src.contacts.models import Contact
+
+    data = proposal_data.model_dump(exclude_unset=True)
+    contact_id = data.get("contact_id")
+    if contact_id is not None:
+        contact = await db.get(Contact, contact_id)
+        if contact is None:
+            raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Contact not found")
+        check_record_access_or_shared(
+            contact, current_user, data_scope.role_name,
+            shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_CONTACTS),
+        )
+
+    company_id = data.get("company_id")
+    if company_id is not None:
+        company = await db.get(Company, company_id)
+        if company is None:
+            raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Company not found")
+        check_record_access_or_shared(
+            company, current_user, data_scope.role_name,
+            shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_COMPANIES),
+        )
+
+
 @router.post(
     "/{proposal_id}/attachments",
     response_model=AttachmentResponse,
@@ -405,7 +464,7 @@ async def _signing_document_or_404(
 )
 async def upload_proposal_attachment(
     proposal_id: int,
-    current_user: CurrentUser,
+    current_user: ProposalUpdateUser,
     db: DBSession,
     file: UploadFile = File(...),
 ):
@@ -473,7 +532,7 @@ async def list_proposal_attachments(
 async def delete_proposal_attachment(
     proposal_id: int,
     attachment_id: int,
-    current_user: CurrentUser,
+    current_user: ProposalUpdateUser,
     db: DBSession,
 ):
     """Staff delete of a proposal attachment. Refuses once signed."""
@@ -838,7 +897,7 @@ async def list_signing_documents(
 )
 async def upload_signing_document(
     proposal_id: int,
-    current_user: CurrentUser,
+    current_user: ProposalUpdateUser,
     db: DBSession,
     file: UploadFile = File(...),
 ):
@@ -871,7 +930,7 @@ async def update_signing_document(
     proposal_id: int,
     document_id: int,
     document_data: ProposalSigningDocumentUpdate,
-    current_user: CurrentUser,
+    current_user: ProposalUpdateUser,
     db: DBSession,
 ):
     """Save or clear the visual signature area for one signable PDF."""
@@ -897,7 +956,7 @@ async def update_signing_document(
 async def delete_signing_document(
     proposal_id: int,
     document_id: int,
-    current_user: CurrentUser,
+    current_user: ProposalUpdateUser,
     db: DBSession,
 ):
     """Delete a signable PDF before the proposal is signed."""
@@ -1027,7 +1086,7 @@ async def download_signing_document_signed_pdf(
 )
 async def upload_master_contract(
     proposal_id: int,
-    current_user: CurrentUser,
+    current_user: ProposalUpdateUser,
     db: DBSession,
     file: UploadFile = File(...),
 ):
@@ -1220,10 +1279,12 @@ async def update_proposal(
     proposal_id: int,
     proposal_data: ProposalUpdate,
     request: Request,
-    current_user: CurrentUser,
+    current_user: ProposalUpdateUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
 ):
     """Update a proposal."""
+    await _check_proposal_reference_access(db, proposal_data, current_user, data_scope)
     service = ProposalService(db)
     proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
     check_ownership(proposal, current_user, EntityNames.PROPOSAL)
@@ -1245,7 +1306,7 @@ async def update_proposal(
 async def delete_proposal(
     proposal_id: int,
     request: Request,
-    current_user: CurrentUser,
+    current_user: ProposalDeleteUser,
     db: DBSession,
 ):
     """Delete a proposal."""
@@ -1262,7 +1323,7 @@ async def delete_proposal(
 @router.post("/{proposal_id}/send", response_model=ProposalResponse)
 async def send_proposal(
     proposal_id: int,
-    current_user: CurrentUser,
+    current_user: ProposalUpdateUser,
     db: DBSession,
     send_request: ProposalSendRequest | None = None,
 ):
@@ -1288,7 +1349,7 @@ async def send_proposal(
 @router.post("/{proposal_id}/restamp", response_model=ProposalResponse)
 async def restamp_proposal_signed_pdf(
     proposal_id: int,
-    current_user: CurrentUser,
+    current_user: ProposalUpdateUser,
     db: DBSession,
 ):
     """Retry the fail-soft accept-time signed-PDF stamp.
@@ -1335,7 +1396,7 @@ async def get_proposal_pdf(
 @router.post("/{proposal_id}/accept", response_model=ProposalResponse)
 async def accept_proposal(
     proposal_id: int,
-    current_user: CurrentUser,
+    current_user: ProposalUpdateUser,
     db: DBSession,
 ):
     """Mark a proposal as accepted (internal/admin path).
@@ -1387,7 +1448,7 @@ async def accept_proposal(
 async def duplicate_proposal(
     proposal_id: int,
     request: Request,
-    current_user: CurrentUser,
+    current_user: ProposalCreateUser,
     db: DBSession,
     data_scope: Annotated[DataScope, Depends(get_data_scope)],
 ):
@@ -1439,7 +1500,7 @@ async def duplicate_proposal(
 @router.post("/{proposal_id}/reject", response_model=ProposalResponse)
 async def reject_proposal(
     proposal_id: int,
-    current_user: CurrentUser,
+    current_user: ProposalUpdateUser,
     db: DBSession,
 ):
     """Mark a proposal as rejected."""

@@ -32,7 +32,7 @@ import {
   DEFAULT_SECONDARY_NAVIGATION,
   STORAGE_KEY_MAIN,
   STORAGE_KEY_SECONDARY,
-  ADMIN_ONLY_IDS,
+  canSeeSecondaryNavItem,
   readStoredOrder,
   writeStoredOrder,
   applyOrder,
@@ -211,11 +211,9 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
 
   const user = useAuthStore((s) => s.user);
   const { prefs, setPref } = useUserPreferences();
-  const isAdminUser = user?.is_superuser || user?.role === 'admin';
-  const filteredSecondaryNav = secondaryNav.filter((item) => {
-    if (ADMIN_ONLY_IDS.has(item.id)) return isAdminUser;
-    return true;
-  });
+  const filteredSecondaryNav = secondaryNav.filter((item) =>
+    canSeeSecondaryNavItem(item.id, user)
+  );
 
   const hidden = new Set(prefs.hiddenNavIds ?? []);
   const visibleMainNav = mainNav.filter(i => !hidden.has(i.id));

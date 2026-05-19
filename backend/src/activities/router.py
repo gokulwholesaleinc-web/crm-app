@@ -46,6 +46,7 @@ router = APIRouter(prefix="/api/activities", tags=["activities"])
 async def get_calendar_activities(
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
     start_date: str = Query(..., description="Start date (YYYY-MM-DD)"),
     end_date: str = Query(..., description="End date (YYYY-MM-DD)"),
     activity_type: str | None = None,
@@ -82,9 +83,17 @@ async def get_calendar_activities(
 
     if activity_type:
         filters.append(ActivityModel.activity_type == activity_type)
-    # Auto-scope to current user's data by default
-    effective_owner_id = owner_id if owner_id is not None else current_user.id
-    filters.append(ActivityModel.owner_id == effective_owner_id)
+    # Calendar filter rules:
+    #   - Scoped role (sales_rep/viewer): always restricted to self.
+    #   - Admin/manager with explicit owner_id: filter to that user.
+    #   - Admin/manager with NO owner_id: default to self (their own
+    #     calendar page). The prior `owner_id == effective_owner_id`
+    #     chain compiled `None` to `owner_id IS NULL` and silently
+    #     returned an empty calendar — regression vs. pre-PR behavior.
+    if owner_id is not None and data_scope.can_see_all():
+        filters.append(ActivityModel.owner_id == owner_id)
+    else:
+        filters.append(ActivityModel.owner_id == current_user.id)
     # Personal calendar mirrors (entity_type='users') are private to that
     # user — admin/manager scope does NOT override. Same invariant
     # enforced on the list endpoint.
@@ -392,6 +401,7 @@ async def complete_activity(
     """Mark an activity as completed."""
     service = ActivityService(db)
     activity = await get_entity_or_404(service, activity_id, EntityNames.ACTIVITY)
+    check_ownership(activity, current_user, EntityNames.ACTIVITY)
     completed_activity = await service.complete(activity, current_user.id, request.notes)
     return ActivityResponse.model_validate(completed_activity)
 

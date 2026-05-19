@@ -84,6 +84,24 @@ describe('UserApprovalsPage', () => {
     });
   });
 
+  it('offers viewer approval and submits it', async () => {
+    renderPage();
+    await screen.findByText('alice@example.com');
+
+    const selects = screen.getAllByRole('combobox');
+    expect(selects[0]).toHaveDisplayValue('Sales Rep');
+    expect(screen.getAllByRole('option', { name: 'Viewer' })).toHaveLength(
+      PENDING_FIXTURES.length
+    );
+
+    fireEvent.change(selects[0]!, { target: { value: 'viewer' } });
+    fireEvent.click(screen.getAllByRole('button', { name: /approve/i })[0]!);
+
+    await waitFor(() => {
+      expect(approveUser).toHaveBeenCalledWith(1, 'viewer');
+    });
+  });
+
   it('opens reject modal when Reject is clicked', async () => {
     renderPage();
     await screen.findByText('alice@example.com');

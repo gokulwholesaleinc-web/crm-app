@@ -185,6 +185,7 @@ export default function UserApprovalsPage() {
                           className="text-sm rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-2 py-2 sm:py-1 min-h-[44px] sm:min-h-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
                           aria-label={`Role for ${u.email}`}
                         >
+                          <option value="viewer">Viewer</option>
                           <option value="sales_rep">Sales Rep</option>
                           <option value="manager">Manager</option>
                           <option value="admin">Admin</option>
