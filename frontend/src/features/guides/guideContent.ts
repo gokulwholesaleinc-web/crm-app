@@ -15,6 +15,7 @@ export interface Guide {
   description: string;
   roles: readonly GuideRole[];
   path: string;
+  match?: 'exact' | 'prefix';
   steps: readonly GuideStep[];
   completion?: {
     message: string;
@@ -321,16 +322,41 @@ export const GUIDE_REGISTRY: readonly Guide[] = [
     ],
   },
   {
-    id: 'settings-admin-tour',
-    title: 'Settings, roles, and integrations',
-    description: 'Configure profile, branding, pipeline, integrations, roles, notifications, and preferences.',
+    id: 'settings-preferences-tour',
+    title: 'Settings and preferences',
+    description: 'Update your profile, notification preferences, theme, tabs, density, and signature.',
     roles: allRoles,
     path: '/settings',
     steps: [
       {
         title: 'Settings sections',
-        body: 'The left section nav and mobile selector jump to profile, branding, pipeline, integrations, webhooks, roles, account settings, notifications, and preferences.',
+        body: 'The section nav jumps between profile, notifications, preferences, and any admin-only setup areas your role can access.',
         action: 'choose a section from the settings navigation to jump directly to it.',
+        selector: target('settings-nav'),
+      },
+      {
+        title: 'Profile basics',
+        body: 'Keep your name, phone, title, and account details accurate so teammates see the right context.',
+        selector: target('settings-section-profile'),
+      },
+      {
+        title: 'Personal preferences',
+        body: 'Notification preferences, locale, timezone, currency, theme, default landing page, density, tabs, nav visibility, and signature are available now.',
+        selector: target('settings-preferences'),
+      },
+    ],
+  },
+  {
+    id: 'settings-admin-tour',
+    title: 'Admin settings',
+    description: 'Configure tenant branding, integrations, webhooks, roles, notifications, and account defaults.',
+    roles: adminRoles,
+    path: '/settings',
+    steps: [
+      {
+        title: 'Admin setup sections',
+        body: 'Admins can configure tenant-wide setup areas from the settings navigation, including branding, integrations, webhooks, and roles.',
+        action: 'choose a setup section from the settings navigation to jump directly to it.',
         selector: target('settings-nav'),
       },
       {
@@ -339,9 +365,9 @@ export const GUIDE_REGISTRY: readonly Guide[] = [
         selector: target('settings-integrations'),
       },
       {
-        title: 'Personal preferences',
-        body: 'Notification preferences, locale, timezone, currency, theme, default landing page, density, tabs, nav visibility, and signature are available now.',
-        selector: target('settings-preferences'),
+        title: 'Roles and access',
+        body: 'Use Roles when you need to control who can see admin tools, manage users, and configure tenant-level features.',
+        selector: target('settings-roles'),
       },
     ],
   },
@@ -392,12 +418,12 @@ export const GUIDE_REGISTRY: readonly Guide[] = [
     id: 'admin-sharing-tour',
     title: 'Admin sharing',
     description: 'Audit record-level shares and revoke stale access.',
-    roles: managerRoles,
+    roles: adminRoles,
     path: '/admin/sharing',
     steps: [
       {
         title: 'Tenant-wide sharing audit',
-        body: 'Managers and admins can filter every record share by entity type, sender, recipient, and permission.',
+        body: 'Admins can filter every record share by entity type, sender, recipient, and permission.',
         selector: target('admin-sharing-filters'),
       },
       {
@@ -464,12 +490,12 @@ export const ROLE_RECOMMENDATIONS: Record<GuideRole, readonly string[]> = {
     'pipeline-tour',
     'reports-tour',
     'campaigns-tour',
-    'admin-sharing-tour',
   ],
   admin: [
     'user-approvals-tour',
     'admin-dashboard-tour',
     'settings-admin-tour',
+    'admin-sharing-tour',
     'duplicate-cleanup-tour',
     'import-export-tour',
   ],
@@ -494,7 +520,10 @@ export function guideAllowsRole(guide: Guide, role: GuideRole): boolean {
 
 export function guideMatchesPath(guide: Guide, pathname: string): boolean {
   if (guide.path === '/') return pathname === '/';
-  return pathname === guide.path || pathname.startsWith(`${guide.path}/`);
+  if (guide.match === 'prefix') {
+    return pathname === guide.path || pathname.startsWith(`${guide.path}/`);
+  }
+  return pathname === guide.path;
 }
 
 export function getGuidesForRole(role: GuideRole): Guide[] {
