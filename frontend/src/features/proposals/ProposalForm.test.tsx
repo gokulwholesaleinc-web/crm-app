@@ -167,7 +167,6 @@ describe('ProposalForm local drafts', () => {
         amount: '4500',
         currency: 'USD',
       },
-      pendingSigningDocNames: ['MSA.pdf'],
     });
 
     renderCreateForm();
@@ -177,7 +176,12 @@ describe('ProposalForm local drafts', () => {
 
     expect(screen.getByLabelText(/Title/i)).toHaveValue('Recovered proposal');
     expect(amountInput()).toHaveValue(4500);
-    expect(screen.getByText(/Reattach signing document/i)).toHaveTextContent('MSA.pdf');
+  });
+
+  it('does not render the signing-documents picker in the create modal', () => {
+    renderCreateForm();
+    expect(screen.queryByRole('button', { name: /Choose signing PDFs/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/PDFs ready to upload/i)).not.toBeInTheDocument();
   });
 
   it('starts fresh when editing before resolving a saved draft prompt', () => {
@@ -203,7 +207,6 @@ describe('ProposalForm local drafts', () => {
         amount: '4500',
         currency: 'USD',
       },
-      pendingSigningDocNames: ['MSA.pdf'],
     });
 
     renderCreateForm();
@@ -219,89 +222,7 @@ describe('ProposalForm local drafts', () => {
     expect(screen.queryByText(/Unsaved proposal draft found/i)).not.toBeInTheDocument();
     const saved = JSON.parse(window.localStorage.getItem(CREATE_DRAFT_KEY) ?? 'null');
     expect(saved.value.formData.title).toBe('Fresh proposal');
-    expect(saved.value.pendingSigningDocNames).toEqual([]);
-  });
-
-  it('blocks submit until restored signing documents are reattached', async () => {
-    const onSubmit = vi.fn().mockResolvedValue(undefined);
-    writeProposalDraft(CREATE_DRAFT_KEY, 'create', null, {
-      formData: {
-        title: 'Recovered proposal',
-        content: '',
-        contactId: 1,
-        companyId: null,
-        executiveSummary: '',
-        scopeOfWork: '',
-        pricingSection: '',
-        timelineField: '',
-        terms: '',
-        validUntil: '',
-        termsAndConditions: '',
-      },
-      billing: {
-        payment_type: 'one_time',
-        recurring_interval: null,
-        recurring_interval_count: null,
-        amount: '4500',
-        currency: 'USD',
-      },
-      pendingSigningDocNames: ['MSA.pdf'],
-    });
-
-    renderCreateForm({ onSubmit });
-    fireEvent.click(await screen.findByRole('button', { name: /Resume/i }));
-    fireEvent.click(screen.getByRole('button', { name: /Create Proposal/i }));
-
-    expect(onSubmit).not.toHaveBeenCalled();
-    expect(screen.getByRole('alert')).toHaveTextContent('Reattach signing document');
-    expect(window.localStorage.getItem(CREATE_DRAFT_KEY)).not.toBeNull();
-  });
-
-  it('blocks submit until every restored signing document is reattached', async () => {
-    const onSubmit = vi.fn().mockResolvedValue(undefined);
-    writeProposalDraft(CREATE_DRAFT_KEY, 'create', null, {
-      formData: {
-        title: 'Recovered proposal',
-        content: '',
-        contactId: 1,
-        companyId: null,
-        executiveSummary: '',
-        scopeOfWork: '',
-        pricingSection: '',
-        timelineField: '',
-        terms: '',
-        validUntil: '',
-        termsAndConditions: '',
-      },
-      billing: {
-        payment_type: 'one_time',
-        recurring_interval: null,
-        recurring_interval_count: null,
-        amount: '4500',
-        currency: 'USD',
-      },
-      pendingSigningDocNames: ['MSA.pdf', 'SOW.pdf'],
-    });
-
-    const { container } = renderCreateForm({ onSubmit });
-    fireEvent.click(await screen.findByRole('button', { name: /Resume/i }));
-    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
-    const msaFile = new File(['msa'], 'MSA.pdf', { type: 'application/pdf' });
-    const sowFile = new File(['sow'], 'SOW.pdf', { type: 'application/pdf' });
-
-    fireEvent.change(fileInput, { target: { files: [msaFile] } });
-    expect(screen.getByText(/Reattach signing document/i)).toHaveTextContent('SOW.pdf');
-    fireEvent.click(screen.getByRole('button', { name: /Create Proposal/i }));
-
-    expect(onSubmit).not.toHaveBeenCalled();
-    expect(screen.getByRole('alert')).toHaveTextContent('SOW.pdf');
-
-    fireEvent.change(fileInput, { target: { files: [sowFile] } });
-    expect(screen.queryByText(/Reattach signing document/i)).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /Create Proposal/i }));
-
-    await waitFor(() => expect(onSubmit).toHaveBeenCalledOnce());
-    expect(onSubmit.mock.calls[0][1]).toEqual([msaFile, sowFile]);
+    expect(saved.value.pendingSigningDocNames).toBeUndefined();
   });
 
   it('does not show a saved timestamp when browser storage rejects writes', () => {
@@ -385,7 +306,6 @@ describe('ProposalForm local drafts', () => {
         amount: '4500',
         currency: 'USD',
       },
-      pendingSigningDocNames: [],
     });
     window.localStorage.setItem('unrelated-key', 'keep');
 
@@ -495,7 +415,6 @@ describe('ProposalForm local drafts', () => {
         amount: '',
         currency: 'USD',
       },
-      pendingSigningDocNames: [],
     });
 
     renderWithProviders(

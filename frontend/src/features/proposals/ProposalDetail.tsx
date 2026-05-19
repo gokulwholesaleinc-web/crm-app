@@ -80,13 +80,16 @@ function ProposalDetailPage() {
   const location = useLocation();
   const handleBack = useSmartBack('/proposals');
   const proposalId = id ? parseInt(id, 10) : undefined;
-  // ``masterUploadFailed`` from the two-step create flow on
-  // ``ProposalsPage`` — surfaced as a persistent banner inside
-  // ``MasterContractCard`` so the user can't miss the retry surface
-  // when the disappearing toast on navigation goes away.
-  const masterUploadFailedMessage =
-    (location.state as { masterUploadFailed?: string | null } | null)
-      ?.masterUploadFailed ?? null;
+  const locationState = location.state as
+    | { masterUploadFailed?: string | null; focusSigningDocuments?: boolean }
+    | null;
+  // ``masterUploadFailed`` is legacy — used to be set by the create modal's
+  // post-create upload loop, now retired. Read kept for backcompat with any
+  // in-flight nav state from a stale tab.
+  const masterUploadFailedMessage = locationState?.masterUploadFailed ?? null;
+  // ``focusSigningDocuments`` lands a freshly-created proposal on the
+  // Signing Documents card — uploads happen here, not in the create modal.
+  const shouldFocusSigningDocs = Boolean(locationState?.focusSigningDocuments);
 
   const { data: proposal, isLoading, error, refetch } = useProposal(proposalId);
   usePageTitle(proposal ? `Proposal - ${proposal.title}` : 'Proposal');
@@ -106,6 +109,23 @@ function ProposalDetailPage() {
   const prevStatusRef = useRef<string | undefined>(undefined);
 
   const currentStatus = proposal?.status;
+
+  // After "Create Proposal" the user lands here; auto-scroll to the
+  // Signing Documents card so the upload affordance is the next thing
+  // they see. Only fires once per navigation, clears history.state so a
+  // refresh doesn't re-scroll.
+  const proposalIsReady = Boolean(proposal);
+  useEffect(() => {
+    if (!shouldFocusSigningDocs || !proposalIsReady) return;
+    const t = window.setTimeout(() => {
+      signingDocumentsRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      });
+      window.history.replaceState({}, '');
+    }, 150);
+    return () => window.clearTimeout(t);
+  }, [shouldFocusSigningDocs, proposalIsReady]);
 
   // Show a celebratory banner the first time we observe status flip to
   // 'accepted' within this session (polling from sent/viewed → accepted).
