@@ -8,6 +8,7 @@ import { Card, CardHeader, CardBody } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { Spinner } from '../../../components/ui/Spinner';
 import { ConfirmDialog } from '../../../components/ui/ConfirmDialog';
+import { EmptyState } from '../../../components/ui/EmptyState';
 import {
   useWebhooks,
   useCreateWebhook,
@@ -16,6 +17,7 @@ import {
   useTestWebhook,
   useWebhookDeliveries,
 } from '../../../hooks/useWebhooks';
+import { usePermissions } from '../../../hooks/usePermissions';
 import type { Webhook, WebhookCreate, WebhookUpdate } from '../../../types';
 import {
   PlusIcon,
@@ -267,7 +269,8 @@ function DeliveryLog({ webhookId }: { webhookId: number }) {
 }
 
 export function WebhooksSection() {
-  const { data: webhooks, isLoading } = useWebhooks();
+  const { isManagerOrAbove } = usePermissions();
+  const { data: webhooks, isLoading } = useWebhooks(undefined, { enabled: isManagerOrAbove });
   const createMutation = useCreateWebhook();
   const updateMutation = useUpdateWebhook();
   const deleteMutation = useDeleteWebhook();
@@ -290,6 +293,24 @@ export function WebhooksSection() {
       { onSuccess: () => setEditingWebhook(null) }
     );
   };
+
+  if (!isManagerOrAbove) {
+    return (
+      <Card>
+        <CardHeader
+          title="Webhooks"
+          description="Send HTTP callbacks when events occur in the CRM"
+        />
+        <CardBody className="p-4 sm:p-6">
+          <EmptyState
+            variant="error"
+            title="Manager Access Required"
+            description="Only managers and admins can view or manage webhook settings."
+          />
+        </CardBody>
+      </Card>
+    );
+  }
 
   return (
     <Card>

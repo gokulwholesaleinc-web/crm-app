@@ -72,6 +72,8 @@ function ContactDetailPage() {
   );
   const targetEmail = searchParams.get('email');
   const [showEditForm, setShowEditForm] = useState(false);
+  const [formDirty, setFormDirty] = useState(false);
+  const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEmailCompose, setShowEmailCompose] = useState(false);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
@@ -116,11 +118,25 @@ function ContactDetailPage() {
     if (!contactId) return;
     try {
       await updateContactMutation.mutateAsync({ id: contactId, data: contactFormDataToUpdate(data) });
-      setShowEditForm(false);
+      closeEditForm();
       showSuccess('Contact updated successfully');
     } catch {
       showError('Failed to update contact');
     }
+  };
+
+  const closeEditForm = () => {
+    setShowEditForm(false);
+    setFormDirty(false);
+    setDiscardConfirmOpen(false);
+  };
+
+  const requestEditClose = () => {
+    if (formDirty) {
+      setDiscardConfirmOpen(true);
+      return;
+    }
+    closeEditForm();
   };
 
   const handleAddAlias = async () => {
@@ -556,15 +572,33 @@ function ContactDetailPage() {
         replyTo={replyToEmail}
       />
 
-      <Modal isOpen={showEditForm} onClose={() => setShowEditForm(false)} title="Edit Contact" size="lg">
+      <Modal
+        isOpen={showEditForm}
+        onClose={closeEditForm}
+        title="Edit Contact"
+        size="lg"
+        confirmClose={formDirty}
+      >
         <ContactForm
           initialData={contact ? contactToFormData(contact) : undefined}
           onSubmit={handleEditSubmit}
-          onCancel={() => setShowEditForm(false)}
+          onCancel={requestEditClose}
           isLoading={updateContactMutation.isPending}
           submitLabel="Update Contact"
+          onDirtyChange={setFormDirty}
         />
       </Modal>
+
+      <ConfirmDialog
+        isOpen={discardConfirmOpen}
+        onClose={() => setDiscardConfirmOpen(false)}
+        onConfirm={closeEditForm}
+        title="Discard unsaved changes?"
+        message="Your contact changes have not been saved."
+        confirmLabel="Discard"
+        cancelLabel="Keep editing"
+        variant="warning"
+      />
 
       <ConfirmDialog
         isOpen={showDeleteConfirm}

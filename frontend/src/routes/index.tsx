@@ -332,7 +332,7 @@ function AppRoutes() {
       <Route
         path="/admin"
         element={
-          <PrivateRoute>
+          <PrivateRoute allowedRoles={['admin']}>
             <ErrorBoundary>
               <AdminDashboardPage />
             </ErrorBoundary>
@@ -342,7 +342,7 @@ function AppRoutes() {
       <Route
         path="/admin/user-approvals"
         element={
-          <PrivateRoute>
+          <PrivateRoute allowedRoles={['admin']}>
             <ErrorBoundary>
               <UserApprovalsPage />
             </ErrorBoundary>
@@ -352,7 +352,7 @@ function AppRoutes() {
       <Route
         path="/admin/sharing"
         element={
-          <PrivateRoute>
+          <PrivateRoute allowedRoles={['admin']}>
             <ErrorBoundary>
               <AdminSharingPage />
             </ErrorBoundary>
@@ -362,7 +362,7 @@ function AppRoutes() {
       <Route
         path="/admin/dedup"
         element={
-          <PrivateRoute>
+          <PrivateRoute allowedRoles={['admin']}>
             <ErrorBoundary>
               <AdminDedupPage />
             </ErrorBoundary>

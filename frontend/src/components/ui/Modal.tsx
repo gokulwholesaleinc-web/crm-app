@@ -1,7 +1,8 @@
-import { Fragment, ReactNode } from 'react';
+import { Fragment, ReactNode, useEffect, useState } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
+import { ConfirmDialogBase } from './ConfirmDialogBase';
 
 export type ModalSize = 'sm' | 'md' | 'lg' | 'xl' | 'full';
 
@@ -42,94 +43,116 @@ export function Modal({
   closeOnOverlayClick = true,
   fullScreenOnMobile = false,
   confirmClose = false,
-  confirmCloseMessage = 'Discard unsaved changes?',
+  confirmCloseMessage = 'Your changes have not been saved. You can keep editing or discard them.',
 }: ModalProps) {
+  const [isConfirmingClose, setIsConfirmingClose] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) setIsConfirmingClose(false);
+  }, [isOpen]);
+
   const requestClose = () => {
-    if (confirmClose && !window.confirm(confirmCloseMessage)) {
+    if (confirmClose) {
+      setIsConfirmingClose(true);
       return;
     }
     onClose();
   };
 
   return (
-    <Transition appear show={isOpen} as={Fragment}>
-      <Dialog
-        as="div"
-        className="relative z-50"
-        onClose={closeOnOverlayClick ? requestClose : () => {}}
-      >
-        <Transition.Child
-          as={Fragment}
-          enter="ease-out duration-300"
-          enterFrom="opacity-0"
-          enterTo="opacity-100"
-          leave="ease-in duration-200"
-          leaveFrom="opacity-100"
-          leaveTo="opacity-0"
+    <>
+      <Transition appear show={isOpen} as={Fragment}>
+        <Dialog
+          as="div"
+          className="relative z-50"
+          onClose={closeOnOverlayClick ? requestClose : () => {}}
         >
-          <div className="fixed inset-0 bg-black/25 backdrop-blur-sm" />
-        </Transition.Child>
+          <Transition.Child
+            as={Fragment}
+            enter="ease-out duration-300"
+            enterFrom="opacity-0"
+            enterTo="opacity-100"
+            leave="ease-in duration-200"
+            leaveFrom="opacity-100"
+            leaveTo="opacity-0"
+          >
+            <div className="fixed inset-0 bg-black/25 backdrop-blur-sm" />
+          </Transition.Child>
 
-        <div className="fixed inset-0 overflow-y-auto overscroll-contain">
-          <div className={clsx(
-              'flex min-h-full text-center',
-              fullScreenOnMobile
-                ? 'items-end sm:items-center justify-center p-0 sm:p-4'
-                : 'items-center justify-center p-4'
-            )}>
-            <Transition.Child
-              as={Fragment}
-              enter="ease-out duration-300"
-              enterFrom="opacity-0 scale-95"
-              enterTo="opacity-100 scale-100"
-              leave="ease-in duration-200"
-              leaveFrom="opacity-100 scale-100"
-              leaveTo="opacity-0 scale-95"
-            >
-              <Dialog.Panel
-                className={clsx(
-                  'w-full transform bg-white dark:bg-gray-800 p-4 sm:p-6 text-left align-middle shadow-xl transition-[opacity,transform]',
-                  'overflow-y-auto', // Proper scroll behavior
-                  sizeStyles[size],
-                  fullScreenOnMobile ? mobileFullScreenStyles : 'rounded-2xl'
-                )}
+          <div className="fixed inset-0 overflow-y-auto overscroll-contain">
+            <div className={clsx(
+                'flex min-h-full text-center',
+                fullScreenOnMobile
+                  ? 'items-end sm:items-center justify-center p-0 sm:p-4'
+                  : 'items-center justify-center p-4'
+              )}>
+              <Transition.Child
+                as={Fragment}
+                enter="ease-out duration-300"
+                enterFrom="opacity-0 scale-95"
+                enterTo="opacity-100 scale-100"
+                leave="ease-in duration-200"
+                leaveFrom="opacity-100 scale-100"
+                leaveTo="opacity-0 scale-95"
               >
-                {(title || showCloseButton) && (
-                  <div className="flex items-start justify-between mb-4">
-                    <div>
-                      {title && (
-                        <Dialog.Title
-                          as="h3"
-                          className="text-lg font-semibold leading-6 text-gray-900 dark:text-gray-100"
+                <Dialog.Panel
+                  className={clsx(
+                    'w-full transform bg-white dark:bg-gray-800 p-4 sm:p-6 text-left align-middle shadow-xl transition-[opacity,transform]',
+                    'overflow-y-auto', // Proper scroll behavior
+                    sizeStyles[size],
+                    fullScreenOnMobile ? mobileFullScreenStyles : 'rounded-2xl'
+                  )}
+                >
+                  {(title || showCloseButton) && (
+                    <div className="flex items-start justify-between mb-4">
+                      <div>
+                        {title && (
+                          <Dialog.Title
+                            as="h3"
+                            className="text-lg font-semibold leading-6 text-gray-900 dark:text-gray-100"
+                          >
+                            {title}
+                          </Dialog.Title>
+                        )}
+                        {description && (
+                          <Dialog.Description className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                            {description}
+                          </Dialog.Description>
+                        )}
+                      </div>
+                      {showCloseButton && (
+                        <button
+                          type="button"
+                          className="rounded-lg p-2 sm:p-1 text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 -mr-1 sm:mr-0 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center dark:hover:bg-gray-700 dark:hover:text-gray-300"
+                          onClick={requestClose}
                         >
-                          {title}
-                        </Dialog.Title>
-                      )}
-                      {description && (
-                        <Dialog.Description className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                          {description}
-                        </Dialog.Description>
+                          <span className="sr-only">Close</span>
+                          <XMarkIcon className="h-6 w-6 sm:h-5 sm:w-5" aria-hidden="true" />
+                        </button>
                       )}
                     </div>
-                    {showCloseButton && (
-                      <button
-                        type="button"
-                        className="rounded-lg p-2 sm:p-1 text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 -mr-1 sm:mr-0 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center dark:hover:bg-gray-700 dark:hover:text-gray-300"
-                        onClick={requestClose}
-                      >
-                        <span className="sr-only">Close</span>
-                        <XMarkIcon className="h-6 w-6 sm:h-5 sm:w-5" aria-hidden="true" />
-                      </button>
-                    )}
-                  </div>
-                )}
-                {children}
-              </Dialog.Panel>
-            </Transition.Child>
+                  )}
+                  {children}
+                </Dialog.Panel>
+              </Transition.Child>
+            </div>
           </div>
-        </div>
-      </Dialog>
-    </Transition>
+        </Dialog>
+      </Transition>
+      <ConfirmDialogBase
+        isOpen={isConfirmingClose}
+        onClose={() => setIsConfirmingClose(false)}
+        onConfirm={() => {
+          setIsConfirmingClose(false);
+          onClose();
+        }}
+        title="Discard unsaved changes?"
+        message={confirmCloseMessage}
+        confirmLabel="Discard"
+        cancelLabel="Keep editing"
+        variant="warning"
+      />
+    </>
   );
 }
 

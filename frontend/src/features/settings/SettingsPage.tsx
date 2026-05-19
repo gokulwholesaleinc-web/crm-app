@@ -6,7 +6,7 @@
  * viewport's midline wins.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import { Card, CardHeader, CardBody } from '../../components/ui/Card';
@@ -32,37 +32,58 @@ import { AccountPreferencesSection } from './components/AccountPreferencesSectio
 interface NavItem {
   id: string;
   label: string;
+  access?: 'all' | 'manager' | 'superuser';
 }
 
 // Order here drives both the sidebar order and the body order. Keep in
 // sync if you reorder sections in the JSX below.
 const NAV_ITEMS: readonly NavItem[] = [
   { id: 'profile', label: 'Profile' },
-  { id: 'branding', label: 'Branding' },
+  { id: 'branding', label: 'Branding', access: 'superuser' },
   { id: 'pipeline-stages', label: 'Pipeline Stages' },
-  { id: 'lead-sources', label: 'Lead Sources' },
+  { id: 'lead-sources', label: 'Lead Sources', access: 'manager' },
   // IntegrationsSection owns its own `id="integrations"` — link target
   // resolves to that inner div so legacy deep links keep working.
   { id: 'integrations', label: 'Integrations' },
-  { id: 'email-settings', label: 'Email Settings' },
-  { id: 'webhooks', label: 'Webhooks' },
+  { id: 'email-settings', label: 'Email Settings', access: 'superuser' },
+  { id: 'webhooks', label: 'Webhooks', access: 'manager' },
   { id: 'roles', label: 'Roles & Permissions' },
-  { id: 'assignment-rules', label: 'Auto-Assignment' },
+  { id: 'assignment-rules', label: 'Auto-Assignment', access: 'manager' },
   { id: 'account-settings', label: 'Account Settings' },
   { id: 'notifications', label: 'Notifications' },
   { id: 'preferences', label: 'Preferences' },
   { id: 'account-status', label: 'Account Status' },
 ] as const;
 
+function canViewSettingsItem(
+  item: NavItem,
+  {
+    isManagerOrAdmin,
+    isSuperuser,
+  }: { isManagerOrAdmin: boolean; isSuperuser: boolean },
+): boolean {
+  if (!item.access || item.access === 'all') return true;
+  if (item.access === 'manager') return isManagerOrAdmin;
+  return isSuperuser;
+}
+
 function SettingsPage() {
   const user = useAuthStore((s) => s.user);
   const isLoading = useAuthStore((s) => s.isLoading);
+  const isSuperuser = user?.is_superuser === true;
+  const isManagerOrAdmin = isSuperuser || user?.role === 'admin' || user?.role === 'manager';
+  const visibleNavItems = useMemo(
+    () => NAV_ITEMS.filter((item) => canViewSettingsItem(item, { isManagerOrAdmin, isSuperuser })),
+    [isManagerOrAdmin, isSuperuser],
+  );
+  const visibleSectionIds = useMemo(
+    () => new Set(visibleNavItems.map((item) => item.id)),
+    [visibleNavItems],
+  );
+  const firstSectionId = visibleNavItems[0]?.id ?? 'profile';
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const { hash } = useLocation();
-  // NAV_ITEMS is a non-empty `as const` literal, so [0] is statically
-  // guaranteed; the `!` silences `noUncheckedIndexedAccess` without a
-  // dead-branch fallback.
-  const [activeSection, setActiveSection] = useState<string>(NAV_ITEMS[0]!.id);
+  const [activeSection, setActiveSection] = useState<string>(firstSectionId);
 
   // Refs per section, keyed by id. Used both for IntersectionObserver
   // tracking and for the deep-link scroll on hash change.
@@ -71,11 +92,21 @@ function SettingsPage() {
     sectionRefs.current[id] = el;
   };
 
+  useEffect(() => {
+    if (!visibleSectionIds.has(activeSection)) {
+      setActiveSection(firstSectionId);
+    }
+  }, [activeSection, firstSectionId, visibleSectionIds]);
+
   // Deep-link scroll: when ?#section is in the URL, scroll to it once
   // we've finished loading the user (so layout has settled).
   useEffect(() => {
     if (isLoading || !hash) return;
     const id = hash.slice(1);
+    if (!visibleSectionIds.has(id)) {
+      setActiveSection(firstSectionId);
+      return;
+    }
     const target = document.getElementById(id);
     if (!target) return;
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -84,7 +115,7 @@ function SettingsPage() {
       block: 'start',
     });
     setActiveSection(id);
-  }, [hash, isLoading]);
+  }, [firstSectionId, hash, isLoading, visibleSectionIds]);
 
   // Track which section the reader is on. We pick the *last* section
   // whose top has crossed below the viewport's mid-line — that
@@ -98,15 +129,15 @@ function SettingsPage() {
         const visible = entries
           .filter((e) => e.isIntersecting)
           .map((e) => e.target.id)
-          .filter(Boolean);
+          .filter((id) => Boolean(id) && visibleSectionIds.has(id));
         if (visible.length === 0) return;
         // Last in DOM order wins (deepest scrolled-to section).
         setActiveSection((prev) => {
-          const navIndex = NAV_ITEMS.findIndex((n) => n.id === prev);
+          const navIndex = visibleNavItems.findIndex((n) => n.id === prev);
           let candidate = prev;
           let candidateIndex = navIndex;
           for (const id of visible) {
-            const idx = NAV_ITEMS.findIndex((n) => n.id === id);
+            const idx = visibleNavItems.findIndex((n) => n.id === id);
             if (idx > candidateIndex) {
               candidate = id;
               candidateIndex = idx;
@@ -124,7 +155,7 @@ function SettingsPage() {
       if (el) observer.observe(el);
     });
     return () => observer.disconnect();
-  }, [isLoading]);
+  }, [isLoading, visibleNavItems, visibleSectionIds]);
 
   if (isLoading) {
     return (
@@ -183,7 +214,7 @@ function SettingsPage() {
             setActiveSection(id);
           }}
         >
-          {NAV_ITEMS.map((item) => (
+          {visibleNavItems.map((item) => (
             <option key={item.id} value={item.id}>
               {item.label}
             </option>
@@ -202,7 +233,7 @@ function SettingsPage() {
           <ul
             className="sticky top-6 space-y-1 border-l border-gray-200 dark:border-gray-700"
           >
-            {NAV_ITEMS.map((item) => {
+            {visibleNavItems.map((item) => {
               const isActive = item.id === activeSection;
               return (
                 <li key={item.id}>
@@ -326,9 +357,11 @@ function SettingsPage() {
             />
           )}
 
-          <section id="branding" ref={setSectionRef('branding')} className="scroll-mt-6" data-guide="settings-section-branding">
-            <BrandingSection />
-          </section>
+          {visibleSectionIds.has('branding') && (
+            <section id="branding" ref={setSectionRef('branding')} className="scroll-mt-6" data-guide="settings-section-branding">
+              <BrandingSection />
+            </section>
+          )}
 
           <section
             id="pipeline-stages"
@@ -338,13 +371,15 @@ function SettingsPage() {
             <PipelineStagesSection />
           </section>
 
-          <section
-            id="lead-sources"
-            ref={setSectionRef('lead-sources')}
-            className="scroll-mt-6"
-          >
-            <LeadSourcesSection />
-          </section>
+          {visibleSectionIds.has('lead-sources') && (
+            <section
+              id="lead-sources"
+              ref={setSectionRef('lead-sources')}
+              className="scroll-mt-6"
+            >
+              <LeadSourcesSection />
+            </section>
+          )}
 
           {/* `id="integrations"` lives on this wrapper (was previously
               on a `<div>` inside IntegrationsSection — moved here so
@@ -360,29 +395,35 @@ function SettingsPage() {
             <IntegrationsSection />
           </section>
 
-          <section
-            id="email-settings"
-            ref={setSectionRef('email-settings')}
-            className="scroll-mt-6"
-          >
-            <EmailSettingsSection />
-          </section>
+          {visibleSectionIds.has('email-settings') && (
+            <section
+              id="email-settings"
+              ref={setSectionRef('email-settings')}
+              className="scroll-mt-6"
+            >
+              <EmailSettingsSection />
+            </section>
+          )}
 
-          <section id="webhooks" ref={setSectionRef('webhooks')} className="scroll-mt-6" data-guide="settings-webhooks">
-            <WebhooksSection />
-          </section>
+          {visibleSectionIds.has('webhooks') && (
+            <section id="webhooks" ref={setSectionRef('webhooks')} className="scroll-mt-6" data-guide="settings-webhooks">
+              <WebhooksSection />
+            </section>
+          )}
 
           <section id="roles" ref={setSectionRef('roles')} className="scroll-mt-6" data-guide="settings-roles">
             <RolesSection />
           </section>
 
-          <section
-            id="assignment-rules"
-            ref={setSectionRef('assignment-rules')}
-            className="scroll-mt-6"
-          >
-            <AssignmentRulesSection />
-          </section>
+          {visibleSectionIds.has('assignment-rules') && (
+            <section
+              id="assignment-rules"
+              ref={setSectionRef('assignment-rules')}
+              className="scroll-mt-6"
+            >
+              <AssignmentRulesSection />
+            </section>
+          )}
 
           <section
             id="account-settings"

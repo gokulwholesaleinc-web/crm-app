@@ -77,15 +77,18 @@ export default function UserApprovalsPage() {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const queryClient = useQueryClient();
+  const isAdmin = user?.is_superuser || user?.role === 'admin';
 
   const { data: pending, isLoading: loadingPending } = useQuery({
     queryKey: ['admin', 'pending-users'],
     queryFn: getPendingUsers,
+    enabled: isAdmin,
   });
 
   const { data: rejected, isLoading: loadingRejected } = useQuery({
     queryKey: ['admin', 'rejected-emails'],
     queryFn: getRejectedEmails,
+    enabled: isAdmin,
   });
 
   const [selectedRoles, setSelectedRoles] = useState<Record<number, ApprovalRole>>({});
@@ -121,8 +124,6 @@ export default function UserApprovalsPage() {
     },
     onError: () => showError('Failed to unblock email'),
   });
-
-  const isAdmin = user?.is_superuser || user?.role === 'admin';
 
   useEffect(() => {
     if (!isAdmin) {

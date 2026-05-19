@@ -20,11 +20,10 @@ import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { PaginationBar } from '../../components/ui/Pagination';
 import { Select } from '../../components/ui/Select';
 import { useAuthStore } from '../../store/authStore';
+import { useUsers } from '../../hooks/useAuth';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { listAdminShares, revokeShare } from '../../api/sharing';
-import { getAdminUsers } from '../../api/admin';
 import type { AdminShareItem } from '../../api/sharing';
-import type { AdminUser } from '../../types';
 import { formatDate } from '../../utils/formatters';
 
 // ``quotes`` retired 2026-05-14 — quotes router unmounted. Historical
@@ -82,11 +81,7 @@ export default function AdminSharingPage() {
   const [permissionLevel, setPermissionLevel] = useState('');
   const [revokeTarget, setRevokeTarget] = useState<AdminShareItem | null>(null);
 
-  const { data: usersData } = useQuery({
-    queryKey: ['admin', 'users'],
-    queryFn: getAdminUsers,
-    enabled: isAuthorized,
-  });
+  const { data: usersData } = useUsers(0, 200, { enabled: isAuthorized });
 
   const { data, isLoading } = useQuery({
     queryKey: [
@@ -122,7 +117,7 @@ export default function AdminSharingPage() {
     },
   });
 
-  const users: AdminUser[] = usersData ?? [];
+  const users = usersData ?? [];
   const userOptions = [
     { value: '', label: 'Any user' },
     ...users.map((u) => ({

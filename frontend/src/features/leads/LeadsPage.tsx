@@ -236,6 +236,7 @@ function LeadsPage() {
 
   const [showForm, setShowForm] = useState(false);
   const [formDirty, setFormDirty] = useState(false);
+  const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; lead: Lead | null }>(INITIAL_DELETE_CONFIRM);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
@@ -603,10 +604,12 @@ function LeadsPage() {
     setShowForm(false);
     setEditingLead(null);
     setFormDirty(false);
+    setDiscardConfirmOpen(false);
   };
 
   const handleFormCancel = () => {
-    if (formDirty && !window.confirm('Discard unsaved changes?')) {
+    if (formDirty) {
+      setDiscardConfirmOpen(true);
       return;
     }
     closeForm();
@@ -1074,6 +1077,17 @@ function LeadsPage() {
           onDirtyChange={setFormDirty}
         />
       </Modal>
+
+      <ConfirmDialog
+        isOpen={discardConfirmOpen}
+        onClose={() => setDiscardConfirmOpen(false)}
+        onConfirm={closeForm}
+        title="Discard unsaved changes?"
+        message="Your lead changes have not been saved."
+        confirmLabel="Discard"
+        cancelLabel="Keep editing"
+        variant="warning"
+      />
 
       {/* Delete Confirmation Dialog */}
       <ConfirmDialog
