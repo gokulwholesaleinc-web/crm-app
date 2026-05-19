@@ -89,6 +89,76 @@ class TestAdminAuditFeed:
         assert data["items"][0]["action"] == "update"
 
 
+class TestAdminAuditExport:
+    @pytest.mark.asyncio
+    async def test_export_forbidden_for_regular_user(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+    ):
+        """Non-admins get 403 on the streaming CSV export."""
+        response = await client.get(
+            "/api/admin/audit/export.csv", headers=auth_headers
+        )
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_export_streams_full_filtered_set(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        admin_auth_headers: dict,
+        test_user: User,
+        test_admin_user: User,
+    ):
+        """Streaming export honours filters and returns every matching row, not just a page."""
+        now = datetime(2026, 5, 18, 14, 0, tzinfo=UTC)
+        rows = [
+            AuditLog(
+                entity_type="contact",
+                entity_id=100 + i,
+                user_id=test_user.id,
+                action="update",
+                changes=[{"field": "stage", "new_value": f"stage-{i}"}],
+                timestamp=now + timedelta(seconds=i),
+            )
+            for i in range(75)  # > one /feed page (50)
+        ]
+        rows.append(
+            AuditLog(
+                entity_type="lead",
+                entity_id=999,
+                user_id=test_admin_user.id,
+                action="delete",
+                changes=None,
+                timestamp=now + timedelta(seconds=100),
+            )
+        )
+        db_session.add_all(rows)
+        await db_session.commit()
+
+        response = await client.get(
+            "/api/admin/audit/export.csv",
+            headers=admin_auth_headers,
+            params={"user_id": test_user.id, "action": "update"},
+        )
+
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/csv")
+        assert "attachment" in response.headers["content-disposition"]
+
+        body = response.text
+        lines = body.strip().split("\n")
+        # 1 header + 75 update rows; the delete row was excluded by filter.
+        assert len(lines) == 76
+        assert lines[0].startswith("id,created_at,user_id")
+        # Every data row carries the filtered user's email.
+        for line in lines[1:]:
+            assert test_user.email in line
+        # First data row's changes JSON survives the stringify.
+        assert "stage-" in lines[1]
+
+
 class TestAdminAuditSummary:
     @pytest.mark.asyncio
     async def test_summary_aggregates_sessions_activities_and_audits(

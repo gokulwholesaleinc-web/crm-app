@@ -1,8 +1,16 @@
 """Admin-only CRM audit dashboard endpoints."""
 
-from datetime import date
+import csv
+import io
+import json
+import logging
+from datetime import UTC, date, datetime
+from typing import Any
 
 from fastapi import APIRouter, Query, Request
+from fastapi.responses import StreamingResponse
+
+logger = logging.getLogger(__name__)
 
 from src.admin._router_helpers import _require_admin
 from src.audit.schemas import (
@@ -21,6 +29,54 @@ from src.core.entity_types import canonical_plural
 from src.core.router_utils import CurrentUser, DBSession, calculate_pages
 
 router = APIRouter(prefix="/audit")
+
+_CSV_COLUMNS = [
+    "id",
+    "created_at",
+    "user_id",
+    "user_name",
+    "user_email",
+    "action",
+    "entity_type",
+    "entity_id",
+    "ip_address",
+    "changes",
+]
+
+
+def _stringify_changes(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    try:
+        return json.dumps(value, default=str, separators=(",", ":"))
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def _format_csv_row(row: dict, writer: csv.writer, buffer: io.StringIO) -> str:
+    created_at = row.get("created_at")
+    if isinstance(created_at, datetime):
+        created_at_str = created_at.astimezone(UTC).isoformat()
+    else:
+        created_at_str = created_at or ""
+    writer.writerow([
+        row.get("id", ""),
+        created_at_str,
+        row.get("user_id") or "",
+        row.get("user_name") or "",
+        row.get("user_email") or "",
+        row.get("action", ""),
+        row.get("entity_type", ""),
+        row.get("entity_id", ""),
+        row.get("ip_address") or "",
+        _stringify_changes(row.get("changes")),
+    ])
+    chunk = buffer.getvalue()
+    buffer.seek(0)
+    buffer.truncate(0)
+    return chunk
 
 
 @router.get("/feed", response_model=AdminAuditFeedResponse)
@@ -58,6 +114,70 @@ async def get_admin_audit_feed(
         page=page,
         page_size=page_size,
         pages=calculate_pages(total, page_size),
+    )
+
+
+@router.get("/export.csv")
+async def export_admin_audit_csv(
+    request: Request,
+    current_user: CurrentUser,
+    db: DBSession,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    user_id: int | None = None,
+    entity_type: str | None = None,
+    entity_id: int | None = None,
+    action: str | None = None,
+    search: str | None = None,
+):
+    """Stream the full filtered audit feed as CSV.
+
+    Unlike the paginated /feed endpoint, this iterates the result set with a
+    server-side cursor so a multi-month compliance pull doesn't materialize
+    the whole join in memory. Same filters as /feed; no page/page_size.
+    """
+    _require_admin(current_user)
+    service = AuditService(db)
+
+    async def generate():
+        buffer = io.StringIO()
+        writer = csv.writer(buffer)
+        writer.writerow(_CSV_COLUMNS)
+        yield buffer.getvalue()
+        buffer.seek(0)
+        buffer.truncate(0)
+
+        # StreamingResponse already flushed 200 OK by the time we hit the
+        # cursor. If the DB drops or hits a statement timeout mid-pull,
+        # without this guard the user gets a half-complete CSV that opens
+        # cleanly in Excel and looks done — auditor reads stale data.
+        try:
+            async for row in service.iter_admin_feed_rows(
+                start_date=start_date,
+                end_date=end_date,
+                user_id=user_id,
+                entity_type=entity_type,
+                entity_id=entity_id,
+                action=action,
+                search=search,
+            ):
+                yield _format_csv_row(row, writer, buffer)
+        except Exception as exc:  # noqa: BLE001 - need to surface any cursor error
+            logger.exception("admin audit CSV export failed mid-stream")
+            trailer = (
+                f"\n# EXPORT TRUNCATED at {datetime.now(UTC).isoformat()} — "
+                f"{type(exc).__name__}: retry with a narrower date range or filters.\n"
+            )
+            yield trailer
+
+    filename = f"crm-audit-{date.today().isoformat()}.csv"
+    return StreamingResponse(
+        generate(),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+        },
     )
 
 

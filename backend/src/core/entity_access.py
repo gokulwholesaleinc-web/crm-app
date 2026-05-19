@@ -6,6 +6,8 @@ content to a caller, we need to verify the caller has access to the parent
 entity — otherwise they can enumerate across users via ID guessing.
 """
 
+import time
+from collections import OrderedDict
 
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -14,6 +16,44 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.constants import HTTPStatus
 from src.core.data_scope import DataScope, check_record_access_or_shared
 from src.core.entity_types import canonical_plural, canonical_singular
+
+# Short-TTL existence cache for the admin/manager bypass path. Detail pages
+# heartbeat every 45s; without this, each beat fires a SELECT against the
+# parent entity table just to confirm it still exists. Scoped users still
+# pay the cost because the row is needed for shared-list / ownership checks.
+#
+# TTL is intentionally tight: if another admin deletes the parent in this
+# window, heartbeats keep returning 200 for the dead id until the entry
+# expires — annoying but bounded, no security boundary crossed. We accept
+# that staleness rather than wiring delete-hooks into every owner module.
+_EXISTENCE_TTL_SECONDS = 15.0
+_EXISTENCE_CACHE_MAX = 5000
+_existence_cache: OrderedDict[tuple[str, int], float] = OrderedDict()
+
+
+def _existence_cache_get(entity_type: str, entity_id: int) -> bool:
+    key = (canonical_singular(entity_type), entity_id)
+    expiry = _existence_cache.get(key)
+    if expiry is None:
+        return False
+    if expiry < time.monotonic():
+        _existence_cache.pop(key, None)
+        return False
+    _existence_cache.move_to_end(key)
+    return True
+
+
+def _existence_cache_put(entity_type: str, entity_id: int) -> None:
+    key = (canonical_singular(entity_type), entity_id)
+    _existence_cache[key] = time.monotonic() + _EXISTENCE_TTL_SECONDS
+    _existence_cache.move_to_end(key)
+    while len(_existence_cache) > _EXISTENCE_CACHE_MAX:
+        _existence_cache.popitem(last=False)
+
+
+def clear_entity_existence_cache() -> None:
+    """Test hook to drop the cache; not wired into the delete path on purpose."""
+    _existence_cache.clear()
 
 
 async def _resolve_entity(db: AsyncSession, entity_type: str, entity_id: int):
@@ -88,16 +128,22 @@ async def require_entity_access(
     Returns None on success. Used by notes/comments/activities/audit/attachment
     endpoints before they return polymorphic content.
     """
-    # Admin/manager/superuser bypass.
+    # Admin/manager/superuser bypass. The existence cache below MUST stay
+    # inside this branch — scoped users still need the entity row for the
+    # ownership + shared-list check that follows, and skipping it on a cache
+    # hit would silently grant access.
     if data_scope.can_see_all():
         # Still need to confirm the entity exists — otherwise we silently
         # 200 for a missing entity, which is more confusing than correct.
+        if _existence_cache_get(entity_type, entity_id):
+            return
         entity, _ = await _resolve_entity(db, entity_type, entity_id)
         if entity is None:
             raise HTTPException(
                 status_code=HTTPStatus.NOT_FOUND,
                 detail=f"{entity_type} {entity_id} not found",
             )
+        _existence_cache_put(entity_type, entity_id)
         return
 
     entity, plural = await _resolve_entity(db, entity_type, entity_id)

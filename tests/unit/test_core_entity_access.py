@@ -6,7 +6,19 @@ import pytest
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.data_scope import DataScope
-from src.core.entity_access import _resolve_entity, require_entity_access
+from src.core.entity_access import (
+    _resolve_entity,
+    clear_entity_existence_cache,
+    require_entity_access,
+)
+
+
+@pytest.fixture(autouse=True)
+def _reset_existence_cache():
+    """Cache is module-level; reset before every test to keep them independent."""
+    clear_entity_existence_cache()
+    yield
+    clear_entity_existence_cache()
 
 # ---------------------------------------------------------------------------
 # TestResolveEntity
@@ -305,3 +317,65 @@ class TestRequireEntityAccess:
         detail = exc_info.value.detail
         assert "lead" in detail
         assert "12345" in detail
+
+    async def test_admin_existence_cached_skips_second_select(
+        self, db_session: AsyncSession, test_user, test_contact, monkeypatch
+    ):
+        """Admin heartbeats skip the entity SELECT on warm cache hits."""
+        from src.core import entity_access
+
+        scope = self._admin_scope(test_user.id)
+
+        # Warm the cache.
+        await require_entity_access(
+            db_session, "contact", test_contact.id, test_user, scope
+        )
+
+        calls = {"count": 0}
+        original = entity_access._resolve_entity
+
+        async def counting_resolve(*args, **kwargs):
+            calls["count"] += 1
+            return await original(*args, **kwargs)
+
+        monkeypatch.setattr(entity_access, "_resolve_entity", counting_resolve)
+
+        await require_entity_access(
+            db_session, "contact", test_contact.id, test_user, scope
+        )
+        await require_entity_access(
+            db_session, "contact", test_contact.id, test_user, scope
+        )
+
+        assert calls["count"] == 0  # cache served both beats
+
+    async def test_admin_cache_does_not_leak_into_scoped_path(
+        self, db_session: AsyncSession, test_user, _sales_rep_user, seed_roles
+    ):
+        """Cache only fronts the admin bypass — scoped users still get the access check."""
+        from src.contacts.models import Contact
+
+        contact = Contact(
+            first_name="OwnerOnly",
+            last_name="Test",
+            email="owner.only@example.com",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(contact)
+        await db_session.commit()
+        await db_session.refresh(contact)
+
+        # Admin warms the existence cache.
+        admin_scope = self._admin_scope(test_user.id)
+        await require_entity_access(
+            db_session, "contact", contact.id, test_user, admin_scope
+        )
+
+        # Scoped non-owner should still be rejected — cache must not short-circuit.
+        scoped = self._scoped_scope(_sales_rep_user.id)
+        with pytest.raises(HTTPException) as exc_info:
+            await require_entity_access(
+                db_session, "contact", contact.id, _sales_rep_user, scoped
+            )
+        assert exc_info.value.status_code == 403

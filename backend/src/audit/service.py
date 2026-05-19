@@ -156,6 +156,58 @@ class AuditService:
             })
         return items, total
 
+    async def iter_admin_feed_rows(
+        self,
+        *,
+        start_date: date | None = None,
+        end_date: date | None = None,
+        user_id: int | None = None,
+        entity_type: str | None = None,
+        entity_id: int | None = None,
+        action: str | None = None,
+        search: str | None = None,
+        batch_size: int = 500,
+    ):
+        """Yield admin-audit rows from a server-side cursor.
+
+        Used by the streaming CSV export so compliance pulls don't have to
+        materialize the full filtered set in memory at once.
+        """
+        conditions = self._audit_filter_conditions(
+            start_date=start_date,
+            end_date=end_date,
+            user_id=user_id,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            action=action,
+            search=search,
+        )
+        query = (
+            select(
+                AuditLog,
+                User.full_name.label("user_name"),
+                User.email.label("user_email"),
+            )
+            .outerjoin(User, AuditLog.user_id == User.id)
+            .where(*conditions)
+            .order_by(AuditLog.timestamp.desc(), AuditLog.id.desc())
+            .execution_options(yield_per=batch_size)
+        )
+        result = await self.db.stream(query)
+        async for log, user_name, user_email in result:
+            yield {
+                "id": log.id,
+                "entity_type": log.entity_type,
+                "entity_id": log.entity_id,
+                "user_id": log.user_id,
+                "user_name": user_name,
+                "user_email": user_email,
+                "action": log.action,
+                "changes": log.changes,
+                "ip_address": log.ip_address,
+                "created_at": log.timestamp,
+            }
+
     async def get_admin_summary(
         self,
         *,

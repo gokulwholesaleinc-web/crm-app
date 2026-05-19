@@ -16,6 +16,16 @@ vi.mock('../../hooks/usePayments', () => ({
   usePayment: (id: number | undefined) => usePaymentMock(id),
 }));
 
+// PaymentDetail mounts useWorkSessionHeartbeat, which posts to
+// /api/work-sessions/heartbeat on mount. Left un-mocked, that initial POST
+// consumes the apiClient.post mock queued for the resend-receipt tests
+// below, silently flipping the failing-mock and in-flight-mock assertions
+// into the success branch. Stub the hook so each test owns the only post
+// call its render produces.
+vi.mock('../../hooks/useWorkSessionHeartbeat', () => ({
+  useWorkSessionHeartbeat: vi.fn(),
+}));
+
 const apiClientMock = vi.hoisted(() => ({
   post: vi.fn(),
   get: vi.fn(),
