@@ -6,11 +6,18 @@ import { apiClient } from './client';
 
 // Google Calendar
 
+export type CalendarConnectionState =
+  | 'connected'
+  | 'needs_reconnect'
+  | 'disconnected';
+
 export interface CalendarSyncStatus {
+  state: CalendarConnectionState;
   connected: boolean;
   calendar_id: string | null;
   last_synced_at: string | null;
   synced_events_count: number;
+  last_error: string | null;
 }
 
 export const getCalendarStatus = async (): Promise<CalendarSyncStatus> => {

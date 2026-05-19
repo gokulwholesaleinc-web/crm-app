@@ -32,10 +32,12 @@ beforeEach(() => {
 describe('useGoogleCalendarSync', () => {
   it('wires status query to the correct query key', async () => {
     vi.mocked(getCalendarStatus).mockResolvedValue({
+      state: 'connected',
       connected: true,
       calendar_id: 'primary',
       last_synced_at: null,
       synced_events_count: 3,
+      last_error: null,
     });
 
     const { result } = renderHook(() => useGoogleCalendarSync(), {
@@ -50,10 +52,12 @@ describe('useGoogleCalendarSync', () => {
 
   it('derives connected correctly from status', async () => {
     vi.mocked(getCalendarStatus).mockResolvedValue({
+      state: 'disconnected',
       connected: false,
       calendar_id: null,
       last_synced_at: null,
       synced_events_count: 0,
+      last_error: null,
     });
 
     const { result } = renderHook(() => useGoogleCalendarSync(), {
@@ -67,10 +71,12 @@ describe('useGoogleCalendarSync', () => {
 
   it('invalidates both query keys on sync success', async () => {
     vi.mocked(getCalendarStatus).mockResolvedValue({
+      state: 'connected',
       connected: true,
       calendar_id: 'primary',
       last_synced_at: null,
       synced_events_count: 0,
+      last_error: null,
     });
     vi.mocked(syncCalendar).mockResolvedValue({ synced: 5, events: [] });
 

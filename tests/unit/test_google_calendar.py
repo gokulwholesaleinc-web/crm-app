@@ -95,10 +95,184 @@ class TestGoogleCalendarStatus:
         )
         assert response.status_code == 200
         data = response.json()
+        assert "state" in data
         assert "connected" in data
         assert "calendar_id" in data
         assert "last_synced_at" in data
         assert "synced_events_count" in data
+        assert "last_error" in data
+
+    @pytest.mark.asyncio
+    async def test_status_state_disconnected_with_no_credential(
+        self, client: AsyncClient, test_user,
+    ):
+        """No credential row → state=disconnected (distinct from needs_reconnect)."""
+        response = await client.get(
+            "/api/integrations/google-calendar/status",
+            headers=_token(test_user),
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["state"] == "disconnected"
+        assert data["connected"] is False
+        assert data["last_error"] is None
+
+    @pytest.mark.asyncio
+    async def test_status_state_needs_reconnect_when_credential_inactive(
+        self, client: AsyncClient, db_session, test_user,
+    ):
+        """is_active=False on the credential ≡ Google revoked us → needs_reconnect."""
+        from src.integrations.google_calendar.models import GoogleCalendarCredential
+        db_session.add(GoogleCalendarCredential(
+            user_id=test_user.id,
+            access_token="",
+            refresh_token="stale-refresh-token",
+            calendar_id="primary",
+            is_active=False,
+        ))
+        await db_session.commit()
+
+        response = await client.get(
+            "/api/integrations/google-calendar/status",
+            headers=_token(test_user),
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["state"] == "needs_reconnect"
+        assert data["connected"] is False
+        assert data["last_error"] is not None
+        assert "reconnect" in data["last_error"].lower()
+
+    @pytest.mark.asyncio
+    async def test_sync_fast_paths_to_200_on_inactive_credential(
+        self, client: AsyncClient, db_session, test_user,
+    ):
+        """Inactive credential → sync fast-paths to 200/empty; /status keeps reporting needs_reconnect."""
+        from src.integrations.google_calendar.models import GoogleCalendarCredential
+        # Simulates the post-invalid_grant state: refresh_access_token has
+        # already flipped is_active=False (via _mark_revoked). Subsequent
+        # sync calls don't need to round-trip to Google again — they
+        # short-circuit on the is_active gate and let /status drive the UX.
+        db_session.add(GoogleCalendarCredential(
+            user_id=test_user.id,
+            access_token="",
+            refresh_token=None,
+            calendar_id="primary",
+            is_active=False,
+        ))
+        await db_session.commit()
+
+        response = await client.post(
+            "/api/integrations/google-calendar/sync",
+            headers=_token(test_user),
+        )
+        assert response.status_code == 200
+        status = await client.get(
+            "/api/integrations/google-calendar/status",
+            headers=_token(test_user),
+        )
+        assert status.json()["state"] == "needs_reconnect"
+
+    @pytest.mark.asyncio
+    async def test_refresh_access_token_invalid_grant_marks_revoked(
+        self, db_session, test_user, monkeypatch,
+    ):
+        """Google 400 invalid_grant → credential.is_active=False + GoogleCalendarAuthError raised."""
+        import httpx
+
+        from src.integrations.google_calendar import service as svc_module
+        from src.integrations.google_calendar.models import GoogleCalendarCredential
+        from src.integrations.google_calendar.service import (
+            GoogleCalendarAuthError,
+            GoogleCalendarService,
+        )
+
+        credential = GoogleCalendarCredential(
+            user_id=test_user.id,
+            access_token="stale-access",
+            refresh_token="revoked-refresh",
+            calendar_id="primary",
+            is_active=True,
+        )
+        db_session.add(credential)
+        await db_session.commit()
+        await db_session.refresh(credential)
+
+        # Mock the HTTP layer (not the service) via httpx.MockTransport,
+        # same pattern as the Gmail OAuth tests. Returns Google's actual
+        # 400 invalid_grant body so refresh_access_token exercises the
+        # _FATAL_OAUTH_ERROR_CODES path end-to-end.
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(400, json={
+                "error": "invalid_grant",
+                "error_description": "Token has been expired or revoked.",
+            })
+
+        transport = httpx.MockTransport(handler)
+
+        class _PatchedAsyncClient(httpx.AsyncClient):
+            def __init__(self, *a, **kw):
+                kw["transport"] = transport
+                super().__init__(*a, **kw)
+
+        monkeypatch.setattr(svc_module.httpx, "AsyncClient", _PatchedAsyncClient)
+
+        service = GoogleCalendarService(db_session)
+        with pytest.raises(GoogleCalendarAuthError):
+            await service.refresh_access_token(credential)
+
+        # _mark_revoked commits explicitly so the flip survives the raise
+        # (otherwise get_db's rollback-on-yield-exception would undo it).
+        await db_session.refresh(credential)
+        assert credential.is_active is False
+        assert credential.access_token == ""
+
+    @pytest.mark.asyncio
+    async def test_refresh_access_token_transient_error_does_not_revoke(
+        self, db_session, test_user, monkeypatch,
+    ):
+        """Google 400 with non-fatal error code → credential stays active, user can retry."""
+        import httpx
+
+        from src.integrations.google_calendar import service as svc_module
+        from src.integrations.google_calendar.models import GoogleCalendarCredential
+        from src.integrations.google_calendar.service import GoogleCalendarService
+
+        credential = GoogleCalendarCredential(
+            user_id=test_user.id,
+            access_token="stale-access",
+            refresh_token="working-refresh",
+            calendar_id="primary",
+            is_active=True,
+        )
+        db_session.add(credential)
+        await db_session.commit()
+        await db_session.refresh(credential)
+
+        # Google blip: 400 with HTML body (e.g., LB error page misrouted).
+        # Without the fatal-codes filter we'd force-reconnect on a Google
+        # outage; this test pins the new behavior.
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(400, text="<html>Bad Gateway</html>")
+
+        transport = httpx.MockTransport(handler)
+
+        class _PatchedAsyncClient(httpx.AsyncClient):
+            def __init__(self, *a, **kw):
+                kw["transport"] = transport
+                super().__init__(*a, **kw)
+
+        monkeypatch.setattr(svc_module.httpx, "AsyncClient", _PatchedAsyncClient)
+
+        service = GoogleCalendarService(db_session)
+        with pytest.raises(httpx.HTTPStatusError):
+            await service.refresh_access_token(credential)
+
+        await db_session.refresh(credential)
+        assert credential.is_active is True, (
+            "transient 400 from Google must NOT flip is_active — that would "
+            "force every user to reconnect during a Google outage"
+        )
 
 
 # =========================================================================

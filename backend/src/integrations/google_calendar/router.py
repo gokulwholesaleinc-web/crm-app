@@ -13,7 +13,10 @@ from src.integrations.google_calendar.schemas import (
     GoogleCalendarCredentialResponse,
     GoogleCalendarEventCreate,
 )
-from src.integrations.google_calendar.service import GoogleCalendarService
+from src.integrations.google_calendar.service import (
+    GoogleCalendarAuthError,
+    GoogleCalendarService,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -91,9 +94,35 @@ async def sync_calendar(
     service = GoogleCalendarService(db)
     try:
         created = await service.sync_from_google(current_user.id)
+    except GoogleCalendarAuthError as exc:
+        # 409, not 401: the frontend's apiClient unconditionally
+        # dispatches `auth:unauthorized` (→ global logout) on any 401.
+        # Returning 409 with X-Calendar-State preserves the reconnect
+        # signal without nuking the user's session. `_mark_revoked`
+        # already committed is_active=False so /status reports
+        # needs_reconnect by the time this response reaches the client.
+        logger.info(
+            "Calendar sync needs reconnect for user_id=%s: %s",
+            current_user.id,
+            exc,
+        )
+        raise HTTPException(
+            status_code=HTTPStatus.CONFLICT,
+            detail=str(exc),
+            headers={"X-Calendar-State": "needs_reconnect"},
+        ) from exc
+    except HTTPException:
+        # Let typed HTTP errors raised from deeper code (e.g., the
+        # auth error above re-raise path, or any future sub-call that
+        # raises HTTPException) flow through unchanged instead of
+        # getting downgraded to 400 "Sync failed: 409: …".
+        raise
     except Exception as exc:
         logger.exception("Calendar sync failed for user_id=%s", current_user.id)
-        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=f"Sync failed: {str(exc)}") from exc
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail=f"Sync failed: {str(exc)}",
+        ) from exc
     return {"synced": len(created), "events": created}
 
 
@@ -133,6 +162,17 @@ async def push_to_calendar(
     service = GoogleCalendarService(db)
     try:
         sync_event = await service.create_calendar_event(current_user.id, data.activity_id)
+    except GoogleCalendarAuthError as exc:
+        # Same reconnect signal as /sync — _mark_revoked already
+        # committed is_active=False, frontend reads X-Calendar-State.
+        # 409 (not 401) to avoid the apiClient's global auto-logout.
+        raise HTTPException(
+            status_code=HTTPStatus.CONFLICT,
+            detail=str(exc),
+            headers={"X-Calendar-State": "needs_reconnect"},
+        ) from exc
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=f"Push failed: {str(exc)}") from exc
     if not sync_event:
