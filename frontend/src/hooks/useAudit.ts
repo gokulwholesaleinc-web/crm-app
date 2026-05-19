@@ -59,7 +59,12 @@ export function useAdminAuditFeed(filters: AdminAuditFeedFilters) {
     queryKey: auditKeys.adminFeed(filters),
     queryFn: () => auditApi.getAdminAuditFeed(filters),
     ...CACHE_TIMES.REALTIME,
-    refetchInterval: isAdmin ? 30 * 1000 : false,
+    // 2 minutes, not 30s. Audit feed is one of the heavier admin queries
+    // (audit_logs joined to users, JSON `changes` cast for search). 30s
+    // polling from a single open admin tab was ~2,880 queries/day per
+    // admin — Neon compute was the bottleneck, not freshness. The page
+    // has an explicit Refresh button for "I need it now" cases.
+    refetchInterval: isAdmin ? 120 * 1000 : false,
     enabled: isAdmin,
   });
 }

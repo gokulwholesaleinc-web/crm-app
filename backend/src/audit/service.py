@@ -4,7 +4,7 @@ from collections import defaultdict
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
-from sqlalchemy import String, cast, func, or_, select
+from sqlalchemy import String, cast, func, or_, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -182,6 +182,18 @@ class AuditService:
             action=action,
             search=search,
         )
+        # Bound the cursor at 5 minutes on Postgres. Without this, a
+        # wide-date pull with `search` (which casts the JSON `changes`
+        # column and forces a full scan) can pin a Neon pooler slot
+        # indefinitely while the export stalls. SET LOCAL scopes to this
+        # transaction only — no global session change to worry about. The
+        # cursor's existing exception handler in the router converts the
+        # QueryCanceledError into the "EXPORT TRUNCATED" trailer, so the
+        # user sees the truncation rather than getting a half-complete CSV
+        # that looks done. Skipped on SQLite (test harness) since the
+        # dialect doesn't recognize the statement.
+        if self.db.get_bind().dialect.name == "postgresql":
+            await self.db.execute(text("SET LOCAL statement_timeout = '300s'"))
         query = (
             select(
                 AuditLog,

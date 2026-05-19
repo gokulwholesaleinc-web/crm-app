@@ -29,8 +29,17 @@ export function Layout({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   useDensity();
 
+  // Expose the current sidebar width as a CSS variable so descendants
+  // (notably StickyActionBar, which uses position:fixed) can align with
+  // main's left edge without overlapping the sidebar. Mobile (no
+  // sidebar) defaults to 0 via the consumer's `left-0`; the var only
+  // kicks in at lg+ where the sidebar renders.
+  const sidebarStyle = {
+    ['--app-sidebar-w' as string]: sidebarCollapsed ? '4rem' : '16rem',
+  } as React.CSSProperties;
+
   return (
-    <div className="flex flex-col h-screen bg-brand-page overflow-hidden">
+    <div className="flex flex-col h-screen bg-brand-page overflow-hidden" style={sidebarStyle}>
       {/* Skip Link */}
       <a href="#main-content" className="skip-link">Skip to main content</a>
 
