@@ -13,7 +13,10 @@ from src.integrations.google_calendar.schemas import (
     GoogleCalendarCredentialResponse,
     GoogleCalendarEventCreate,
 )
-from src.integrations.google_calendar.service import GoogleCalendarService
+from src.integrations.google_calendar.service import (
+    CalendarReauthRequiredError,
+    GoogleCalendarService,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -91,9 +94,28 @@ async def sync_calendar(
     service = GoogleCalendarService(db)
     try:
         created = await service.sync_from_google(current_user.id)
+    except CalendarReauthRequiredError as exc:
+        # 401, not 400: the user can't fix this by retrying. The detail
+        # tells the frontend to surface a "Reconnect" CTA instead of a
+        # generic "Failed to sync" toast. /status is already updated to
+        # report `needs_reconnect` by the time the response reaches the
+        # client (refresh_access_token flushed is_active=False).
+        logger.info(
+            "Calendar sync needs reconnect for user_id=%s: %s",
+            current_user.id,
+            exc,
+        )
+        raise HTTPException(
+            status_code=HTTPStatus.UNAUTHORIZED,
+            detail=str(exc),
+            headers={"X-Calendar-State": "needs_reconnect"},
+        ) from exc
     except Exception as exc:
         logger.exception("Calendar sync failed for user_id=%s", current_user.id)
-        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=f"Sync failed: {str(exc)}") from exc
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail=f"Sync failed: {str(exc)}",
+        ) from exc
     return {"synced": len(created), "events": created}
 
 

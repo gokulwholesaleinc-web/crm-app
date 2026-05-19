@@ -31,6 +31,29 @@ GOOGLE_CALENDAR_PAGE_SIZE = 2500
 CALENDAR_SYNC_HORIZON_DAYS = 90
 CALENDAR_SYNC_LOCK_NAMESPACE = 100_001
 
+# Discriminator stored on the credential row so /status can distinguish
+# `needs_reconnect` (Google revoked us) from `disconnected` (user clicked
+# Disconnect or never connected). Mirrors the Gmail `GmailAuthError:`
+# convention. We don't add a column for it — when refresh fails with
+# invalid_grant we set is_active=False AND blank the tokens, which the
+# status endpoint reads as `needs_reconnect`.
+
+
+class CalendarReauthRequiredError(Exception):
+    """Google rejected our OAuth2 token; user must re-authorize.
+
+    The 400 response from oauth2.googleapis.com/token with
+    `error=invalid_grant` happens when:
+      - The user revoked our app's access in Google Account settings.
+      - The refresh token expired (e.g., 6 months unused, app in test
+        mode with 7-day refresh tokens).
+      - Google rotated the refresh token and our stored one is stale.
+
+    In all three cases the only fix is the user re-running the OAuth
+    flow. Bubbling this as a typed error lets the router surface a
+    clear "Reconnect required" message instead of a generic 400.
+    """
+
 
 class GoogleCalendarService:
     """Service for Google Calendar OAuth and event sync."""
@@ -75,7 +98,15 @@ class GoogleCalendarService:
     async def refresh_access_token(self, credential: GoogleCalendarCredential) -> GoogleCalendarCredential:
         """Refresh an expired access token using the refresh token."""
         if not credential.refresh_token:
-            raise ValueError("No refresh token available — user must re-authorize")
+            # No refresh token on file ≡ Google won't give us a new
+            # access token; the user has to re-OAuth. Flip is_active so
+            # /status reports `needs_reconnect` (a row exists but is
+            # inactive — distinct from "disconnected" where no row).
+            credential.is_active = False
+            await self.db.flush()
+            raise CalendarReauthRequiredError(
+                "No refresh token on file — please reconnect Google Calendar."
+            )
 
         client_id = getattr(settings, "GOOGLE_CLIENT_ID", "")
         client_secret = getattr(settings, "GOOGLE_CLIENT_SECRET", "")
@@ -87,8 +118,34 @@ class GoogleCalendarService:
                 "refresh_token": credential.refresh_token,
                 "grant_type": "refresh_token",
             })
-            response.raise_for_status()
-            token_data = response.json()
+
+        # Google returns 400 with `{"error": "invalid_grant"}` when our
+        # refresh token has been revoked, expired, or rotated. 401 is
+        # used for some auth misconfigurations. Either way the only fix
+        # is for the user to re-OAuth, so we mark the credential
+        # inactive (preserving the row so /status can report
+        # needs_reconnect) and surface a typed error to the router.
+        if response.status_code in (400, 401):
+            try:
+                error_code = response.json().get("error", "") or ""
+            except ValueError:
+                error_code = ""
+            credential.is_active = False
+            credential.access_token = ""
+            await self.db.flush()
+            logger.warning(
+                "Google Calendar refresh rejected for user_id=%s "
+                "(status=%s, error=%s) — credential marked needs_reconnect",
+                credential.user_id,
+                response.status_code,
+                error_code,
+            )
+            raise CalendarReauthRequiredError(
+                f"Google rejected our refresh token ({error_code or response.status_code}). "
+                "Please reconnect Google Calendar."
+            )
+        response.raise_for_status()
+        token_data = response.json()
 
         credential.access_token = token_data["access_token"]
         if "refresh_token" in token_data:
@@ -125,11 +182,30 @@ class GoogleCalendarService:
         )
         synced_count = count_result.scalar() or 0
 
+        # State derivation matches the Gmail pattern. The row's presence
+        # vs. its is_active flag is the discriminator: refresh_access_token
+        # flips is_active=False (without deleting the row) when Google
+        # rejects our refresh token, so we can tell needs_reconnect apart
+        # from a clean manual disconnect (which deletes the row outright).
+        if credential is None:
+            state = "disconnected"
+            last_error = None
+        elif credential.is_active:
+            state = "connected"
+            last_error = None
+        else:
+            state = "needs_reconnect"
+            last_error = (
+                "Google rejected our refresh token. Reconnect to resume sync."
+            )
+
         return {
+            "state": state,
             "connected": credential is not None and credential.is_active,
             "calendar_id": credential.calendar_id if credential else None,
             "last_synced_at": credential.last_synced_at if credential else None,
             "synced_events_count": synced_count,
+            "last_error": last_error,
         }
 
     async def _get_valid_token(self, credential: GoogleCalendarCredential) -> str:

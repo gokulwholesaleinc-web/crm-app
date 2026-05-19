@@ -62,7 +62,7 @@ function ConnectionBadge({ connected }: { connected: boolean | null }) {
 }
 
 function GoogleCalendarCard({ onRequestDisconnect }: { onRequestDisconnect: () => void }) {
-  const { status, connected, isLoadingStatus, sync, isSyncing } = useGoogleCalendarSync();
+  const { status, connected, state, isLoadingStatus, sync, isSyncing } = useGoogleCalendarSync();
 
   const connectMutation = useMutation({
     mutationFn: () => {
@@ -81,6 +81,8 @@ function GoogleCalendarCard({ onRequestDisconnect }: { onRequestDisconnect: () =
     return <Spinner size="sm" />;
   }
 
+  const needsReconnect = state === 'needs_reconnect';
+
   return (
     <div className="flex items-start gap-4 py-4 first:pt-0 last:pb-0">
       <div className="flex-shrink-0">
@@ -91,12 +93,21 @@ function GoogleCalendarCard({ onRequestDisconnect }: { onRequestDisconnect: () =
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Google Calendar</p>
-          <ConnectionBadge connected={connected} />
+          {needsReconnect ? (
+            <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
+              Needs reconnect
+            </span>
+          ) : (
+            <ConnectionBadge connected={connected} />
+          )}
         </div>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-          {connected
-            ? `Calendar: ${status?.calendar_id ?? 'primary'} · ${status?.synced_events_count ?? 0} synced events`
-            : 'Sync activities and meetings with Google Calendar'}
+        <p className={`text-xs mt-0.5 ${needsReconnect ? 'text-amber-700 dark:text-amber-300' : 'text-gray-500 dark:text-gray-400'}`}>
+          {needsReconnect
+            ? (status?.last_error ??
+                'Google revoked our refresh token. Reconnect to resume sync.')
+            : connected
+              ? `Calendar: ${status?.calendar_id ?? 'primary'} · ${status?.synced_events_count ?? 0} synced events`
+              : 'Sync activities and meetings with Google Calendar'}
         </p>
         {connected && status?.last_synced_at && (
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
@@ -134,9 +145,9 @@ function GoogleCalendarCard({ onRequestDisconnect }: { onRequestDisconnect: () =
             leftIcon={<LinkIcon className="h-4 w-4" />}
             onClick={() => connectMutation.mutate()}
             disabled={connectMutation.isPending}
-            aria-label="Connect Google Calendar"
+            aria-label={needsReconnect ? 'Reconnect Google Calendar' : 'Connect Google Calendar'}
           >
-            Connect
+            {needsReconnect ? 'Reconnect' : 'Connect'}
           </Button>
         )}
       </div>

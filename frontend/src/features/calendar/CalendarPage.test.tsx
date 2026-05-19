@@ -39,10 +39,12 @@ beforeEach(() => {
 describe('CalendarPage', () => {
   it('renders the "Calendar" heading', async () => {
     vi.mocked(getCalendarStatus).mockResolvedValue({
+      state: 'disconnected',
       connected: false,
       calendar_id: null,
       last_synced_at: null,
       synced_events_count: 0,
+      last_error: null,
     });
 
     renderPage();
@@ -52,10 +54,12 @@ describe('CalendarPage', () => {
 
   it('shows "Connect Google Calendar" link and hides Sync button when not connected', async () => {
     vi.mocked(getCalendarStatus).mockResolvedValue({
+      state: 'disconnected',
       connected: false,
       calendar_id: null,
       last_synced_at: null,
       synced_events_count: 0,
+      last_error: null,
     });
 
     renderPage();
@@ -68,10 +72,12 @@ describe('CalendarPage', () => {
 
   it('shows Sync button and hides connect link when connected', async () => {
     vi.mocked(getCalendarStatus).mockResolvedValue({
+      state: 'connected',
       connected: true,
       calendar_id: 'primary',
       last_synced_at: null,
       synced_events_count: 5,
+      last_error: null,
     });
 
     renderPage();

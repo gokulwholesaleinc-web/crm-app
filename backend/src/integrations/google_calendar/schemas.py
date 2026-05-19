@@ -1,8 +1,11 @@
 """Pydantic schemas for Google Calendar integration."""
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
+
+CalendarConnectionState = Literal["connected", "needs_reconnect", "disconnected"]
 
 
 class GoogleCalendarConnect(BaseModel):
@@ -35,8 +38,25 @@ class GoogleCalendarEventCreate(BaseModel):
 
 
 class CalendarSyncStatus(BaseModel):
-    """Status of calendar sync for a user."""
+    """Status of calendar sync for a user.
+
+    `state` distinguishes the three UX situations the frontend renders
+    differently:
+
+      - **connected** — credential row exists with is_active=True.
+      - **needs_reconnect** — credential row exists but is_active was
+        flipped to False because Google rejected our refresh token
+        (400 invalid_grant). User needs to re-authorize; their stored
+        sync history is preserved.
+      - **disconnected** — no credential row. Manual disconnect path,
+        or never connected.
+
+    `connected` remains for backwards compatibility (frontend still
+    branches on it for the basic Sync/Connect choice).
+    """
+    state: CalendarConnectionState = "disconnected"
     connected: bool
     calendar_id: str | None = None
     last_synced_at: datetime | None = None
     synced_events_count: int = 0
+    last_error: str | None = None

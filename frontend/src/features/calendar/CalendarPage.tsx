@@ -5,7 +5,8 @@ import { Button } from '../../components/ui/Button';
 import CalendarView from '../activities/components/CalendarView';
 
 function CalendarPage() {
-  const { connected, isLoadingStatus, sync, isSyncing } = useGoogleCalendarSync();
+  const { connected, state, isLoadingStatus, sync, isSyncing } = useGoogleCalendarSync();
+  const needsReconnect = state === 'needs_reconnect';
 
   return (
     <div className="space-y-4 sm:space-y-6" data-guide="calendar-page">
@@ -33,9 +34,15 @@ function CalendarPage() {
           ) : (
             <Link
               to="/settings#integrations"
-              className="text-sm text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 font-medium"
+              className={
+                needsReconnect
+                  ? 'text-sm font-medium text-amber-700 dark:text-amber-300 hover:text-amber-800 dark:hover:text-amber-200'
+                  : 'text-sm font-medium text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300'
+              }
             >
-              Connect Google Calendar in Settings →
+              {needsReconnect
+                ? 'Reconnect Google Calendar — token revoked →'
+                : 'Connect Google Calendar in Settings →'}
             </Link>
           ))}
         </div>
