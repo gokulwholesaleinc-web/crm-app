@@ -6,7 +6,11 @@ import CalendarView from '../activities/components/CalendarView';
 
 function CalendarPage() {
   const { connected, state, isLoadingStatus, sync, isSyncing } = useGoogleCalendarSync();
-  const needsReconnect = state === 'needs_reconnect';
+  // Only trust `needsReconnect` once the status query has loaded — the
+  // hook defaults to `'disconnected'` while loading, so without this
+  // gate a navigation back to /calendar from a cached state could
+  // briefly flash the wrong CTA.
+  const needsReconnect = !isLoadingStatus && state === 'needs_reconnect';
 
   return (
     <div className="space-y-4 sm:space-y-6" data-guide="calendar-page">

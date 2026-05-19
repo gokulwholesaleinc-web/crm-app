@@ -1,14 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { showSuccess, showError } from '../utils/toast';
+import { extractApiErrorDetail } from '../utils/errors';
 import { getCalendarStatus, syncCalendar } from '../api/integrations';
 import type { CalendarConnectionState, CalendarSyncStatus } from '../api/integrations';
 import type { ApiError } from '../types';
-
-function asApiError(err: unknown): ApiError | null {
-  if (typeof err !== 'object' || err === null) return null;
-  const candidate = err as Partial<ApiError>;
-  return typeof candidate.detail === 'string' ? (candidate as ApiError) : null;
-}
 
 export function useGoogleCalendarSync(): {
   status: CalendarSyncStatus | undefined;
@@ -33,21 +28,33 @@ export function useGoogleCalendarSync(): {
       showSuccess(`Synced ${data.synced} events from Google Calendar`);
     },
     onError: (err) => {
-      // 401 from /sync = backend marked is_active=false. Invalidate the
-      // status query so the UI flips from "Sync" to "Reconnect Google
-      // Calendar" immediately, and surface the server's specific detail
-      // instead of the previous generic "Failed to sync calendar"
-      // string that left the user wondering whether to retry or reauth.
-      const apiErr = asApiError(err);
-      if (apiErr?.status_code === 401) {
+      // Three distinct failure modes the user can recover from in
+      // different ways — surface them differently:
+      //
+      //   - 409 needs_reconnect — Google permanently revoked us. Flip
+      //     the status query so the UI shows "Reconnect Google
+      //     Calendar" instead of "Sync". (401 would trigger the
+      //     apiClient's global auth-unauthorized logout — we route
+      //     around it with 409 + X-Calendar-State header.)
+      //   - No status_code — network/CORS/offline. Tell the user to
+      //     check their connection so they don't waste time on a
+      //     "Failed to sync" message they'd otherwise interpret as a
+      //     backend bug.
+      //   - Other — bubble the server detail straight through.
+      const apiErr = err as Partial<ApiError> | null;
+      if (apiErr?.status_code === 409) {
         queryClient.invalidateQueries({ queryKey: ['integrations', 'google-calendar', 'status'] });
         showError(
-          apiErr.detail ||
+          extractApiErrorDetail(err) ||
             'Google revoked our access — reconnect Google Calendar in Settings.',
         );
         return;
       }
-      showError(apiErr?.detail || 'Failed to sync calendar');
+      if (apiErr?.status_code === undefined) {
+        showError('Network error reaching the CRM — check your connection and retry.');
+        return;
+      }
+      showError(extractApiErrorDetail(err) || 'Failed to sync calendar');
     },
   });
 

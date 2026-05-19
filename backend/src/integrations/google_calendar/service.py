@@ -31,27 +31,35 @@ GOOGLE_CALENDAR_PAGE_SIZE = 2500
 CALENDAR_SYNC_HORIZON_DAYS = 90
 CALENDAR_SYNC_LOCK_NAMESPACE = 100_001
 
-# Discriminator stored on the credential row so /status can distinguish
-# `needs_reconnect` (Google revoked us) from `disconnected` (user clicked
-# Disconnect or never connected). Mirrors the Gmail `GmailAuthError:`
-# convention. We don't add a column for it — when refresh fails with
-# invalid_grant we set is_active=False AND blank the tokens, which the
-# status endpoint reads as `needs_reconnect`.
+# Token-endpoint error codes that mean the refresh token is permanently
+# unusable. Per RFC 6749 + Google's OAuth docs, these are the only
+# `error` values where re-authorization is the recovery path. Anything
+# else (HTML body, empty body, 5xx misroute) is treated as transient
+# and bubbles as a generic failure so a Google blip doesn't force every
+# user to reconnect.
+_FATAL_OAUTH_ERROR_CODES = frozenset({
+    "invalid_grant",
+    "unauthorized_client",
+    "invalid_client",
+})
 
 
-class CalendarReauthRequiredError(Exception):
+class GoogleCalendarAuthError(Exception):
     """Google rejected our OAuth2 token; user must re-authorize.
 
     The 400 response from oauth2.googleapis.com/token with
-    `error=invalid_grant` happens when:
+    `error=invalid_grant` (and its siblings unauthorized_client /
+    invalid_client) happens when:
+
       - The user revoked our app's access in Google Account settings.
-      - The refresh token expired (e.g., 6 months unused, app in test
-        mode with 7-day refresh tokens).
+      - The refresh token expired (6 months unused, or 7 days in
+        test-mode apps).
       - Google rotated the refresh token and our stored one is stale.
 
-    In all three cases the only fix is the user re-running the OAuth
-    flow. Bubbling this as a typed error lets the router surface a
-    clear "Reconnect required" message instead of a generic 400.
+    In all three cases the only fix is re-running OAuth. Mirrors
+    Gmail's `GmailAuthError` (see ``src/integrations/gmail/client.py``)
+    so the router can return a typed reconnect signal instead of a
+    generic 400.
     """
 
 
@@ -99,12 +107,10 @@ class GoogleCalendarService:
         """Refresh an expired access token using the refresh token."""
         if not credential.refresh_token:
             # No refresh token on file ≡ Google won't give us a new
-            # access token; the user has to re-OAuth. Flip is_active so
-            # /status reports `needs_reconnect` (a row exists but is
-            # inactive — distinct from "disconnected" where no row).
-            credential.is_active = False
-            await self.db.flush()
-            raise CalendarReauthRequiredError(
+            # access token; the user has to re-OAuth. See _mark_revoked
+            # for why this commits explicitly.
+            await self._mark_revoked(credential, reason="no_refresh_token")
+            raise GoogleCalendarAuthError(
                 "No refresh token on file — please reconnect Google Calendar."
             )
 
@@ -119,30 +125,41 @@ class GoogleCalendarService:
                 "grant_type": "refresh_token",
             })
 
-        # Google returns 400 with `{"error": "invalid_grant"}` when our
-        # refresh token has been revoked, expired, or rotated. 401 is
-        # used for some auth misconfigurations. Either way the only fix
-        # is for the user to re-OAuth, so we mark the credential
-        # inactive (preserving the row so /status can report
-        # needs_reconnect) and surface a typed error to the router.
+        # Two failure paths to keep distinct:
+        #   1. Token PERMANENTLY revoked — invalid_grant / unauthorized_client
+        #      / invalid_client. Only fix is reauth, so we mark the row
+        #      needs_reconnect and raise the typed error.
+        #   2. TRANSIENT Google failure — HTML error page, empty body,
+        #      5xx misroute, captcha/rate-limit. Bubble as a normal error
+        #      so the user retries instead of being forced to reconnect a
+        #      working integration during a Google blip.
         if response.status_code in (400, 401):
             try:
                 error_code = response.json().get("error", "") or ""
             except ValueError:
                 error_code = ""
-            credential.is_active = False
-            credential.access_token = ""
-            await self.db.flush()
+            if error_code in _FATAL_OAUTH_ERROR_CODES:
+                await self._mark_revoked(credential, reason=error_code)
+                logger.warning(
+                    "Google Calendar refresh rejected for user_id=%s "
+                    "(status=%s, error=%s) — credential marked needs_reconnect",
+                    credential.user_id,
+                    response.status_code,
+                    error_code,
+                )
+                raise GoogleCalendarAuthError(
+                    f"Google rejected our refresh token ({error_code}). "
+                    "Please reconnect Google Calendar."
+                )
+            # Unknown 400/401 from Google: log loudly so it shows up in
+            # alerts, then fall through to raise_for_status() so the
+            # router converts it into a generic 400 the user can retry.
             logger.warning(
-                "Google Calendar refresh rejected for user_id=%s "
-                "(status=%s, error=%s) — credential marked needs_reconnect",
-                credential.user_id,
+                "Google Calendar refresh got %s with non-fatal error=%r "
+                "for user_id=%s; treating as transient",
                 response.status_code,
                 error_code,
-            )
-            raise CalendarReauthRequiredError(
-                f"Google rejected our refresh token ({error_code or response.status_code}). "
-                "Please reconnect Google Calendar."
+                credential.user_id,
             )
         response.raise_for_status()
         token_data = response.json()
@@ -154,6 +171,27 @@ class GoogleCalendarService:
             credential.token_expiry = datetime.now(UTC) + timedelta(seconds=token_data["expires_in"])
         await self.db.flush()
         return credential
+
+    async def _mark_revoked(self, credential: GoogleCalendarCredential, *, reason: str) -> None:
+        """Flip the credential to is_active=False and persist explicitly.
+
+        Routes that raise after this would otherwise see the mutation
+        rolled back: get_db() only commits on the success path of the
+        yield, and an HTTPException thrown back into the generator
+        skips the commit. Committing here keeps the needs_reconnect
+        state durable even when the caller's response is a 4xx.
+        """
+        credential.is_active = False
+        credential.access_token = ""
+        # No `last_error` column on the model yet; reason is logged so
+        # ops can correlate. /status synthesizes a user-readable string
+        # from is_active=False alone.
+        logger.info(
+            "Marking Google Calendar credential user_id=%s revoked: reason=%s",
+            credential.user_id,
+            reason,
+        )
+        await self.db.commit()
 
     async def get_credential(self, user_id: int) -> GoogleCalendarCredential | None:
         """Get the stored Google Calendar credential for a user."""
