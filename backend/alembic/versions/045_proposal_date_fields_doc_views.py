@@ -1,8 +1,11 @@
 """Proposal signing date placement and public document views.
 
-Revision ID: 045_proposal_date_fields_doc_views
+Revision ID: 045_proposal_date_placement
 Revises: 044_admin_audit_work_sessions
 Create Date: 2026-05-20
+
+Note: revision id kept under 32 chars to fit the legacy
+alembic_version.version_num column on production.
 """
 
 import sqlalchemy as sa
@@ -10,7 +13,7 @@ from sqlalchemy.dialects import postgresql
 
 from alembic import op
 
-revision = "045_proposal_date_fields_doc_views"
+revision = "045_proposal_date_placement"
 down_revision = "044_admin_audit_work_sessions"
 branch_labels = None
 depends_on = None
