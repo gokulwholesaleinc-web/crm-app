@@ -31,12 +31,19 @@ _ONE_PIXEL_PNG = bytes.fromhex(
 _SIG = "data:image/png;base64," + b64encode(_ONE_PIXEL_PNG).decode("ascii")
 
 
-def _sign(signer_name: str, signer_email: str, *, agreed: bool = True) -> dict:
+def _sign(
+    signer_name: str,
+    signer_email: str,
+    *,
+    agreed: bool = True,
+    signer_timezone: str | None = None,
+) -> dict:
     return {
         "signer_name": signer_name,
         "signer_email": signer_email,
         "signature_image": _SIG,
         "agreed_to_terms": agreed,
+        "signer_timezone": signer_timezone,
     }
 
 
@@ -89,7 +96,11 @@ class TestPublicProposalAccept:
         """signer_name + signer_email + signer_ip + signer_user_agent + signed_at all persisted."""
         response = await client.post(
             f"/api/proposals/public/{sent_proposal.public_token}/accept",
-            json=_sign("Jane Customer", test_contact.email),
+            json=_sign(
+                "Jane Customer",
+                test_contact.email,
+                signer_timezone="America/Chicago",
+            ),
             headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) SignTest/1.0"},
         )
         assert response.status_code == 200, response.text
@@ -101,6 +112,7 @@ class TestPublicProposalAccept:
         assert sent_proposal.signer_email == test_contact.email
         assert sent_proposal.signer_ip is not None
         assert sent_proposal.signer_user_agent == "Mozilla/5.0 (X11; Linux x86_64) SignTest/1.0"
+        assert sent_proposal.signer_timezone == "America/Chicago"
         assert sent_proposal.signed_at is not None
         assert sent_proposal.accepted_at is not None
 
@@ -164,6 +176,56 @@ class TestPublicProposalAccept:
             json=_sign("x", "x@x.com"),
         )
         assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_accept_tolerates_missing_date_placement(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        sent_proposal: Proposal,
+        test_contact: Contact,
+    ):
+        """Legacy proposals sent before date_placement existed must still accept.
+
+        Pre-PR proposals have signature_field_coords set but
+        date_field_coords NULL. The send gate (require_date=True) blocks
+        new sends without date placement, but the accept gate must NOT
+        block in-flight links — the customer can't go back and add the
+        coords. Regression test for trio CRITICAL #1.
+        """
+        sent_proposal.signature_field_coords = {
+            "page": 1, "x": 100, "y": 100, "w": 200, "h": 60,
+        }
+        sent_proposal.date_field_coords = None
+        await db_session.commit()
+
+        response = await client.post(
+            f"/api/proposals/public/{sent_proposal.public_token}/accept",
+            json=_sign("Jane Customer", test_contact.email),
+        )
+        assert response.status_code == 200, response.text
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("bad_tz", ["", "Bogus/Zone", "../etc/passwd", "UTC\x00"])
+    async def test_accept_tolerates_bad_signer_timezone(
+        self,
+        client: AsyncClient,
+        sent_proposal: Proposal,
+        test_contact: Contact,
+        bad_tz: str,
+    ):
+        """Malformed signer_timezone must fall back to UTC, not 500.
+
+        ZoneInfo raises ZoneInfoNotFoundError for unknown names and
+        ValueError for embedded nulls or path-like garbage. Both must be
+        caught so the accept transaction completes. Regression test for
+        trio CRITICAL #2.
+        """
+        response = await client.post(
+            f"/api/proposals/public/{sent_proposal.public_token}/accept",
+            json=_sign("Jane Customer", test_contact.email, signer_timezone=bad_tz),
+        )
+        assert response.status_code == 200, response.text
 
 
 class TestPublicProposalReject:

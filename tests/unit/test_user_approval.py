@@ -211,7 +211,11 @@ class TestAdminApprovalEndpoints:
 
     @pytest.mark.asyncio
     async def test_approve_user_sets_approved_and_role(
-        self, client: AsyncClient, db_session: AsyncSession, admin_hdrs: dict
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        admin_hdrs: dict,
+        seed_roles: list,
     ):
         """Approving a pending user sets is_approved=True and assigns role."""
         pending = User(

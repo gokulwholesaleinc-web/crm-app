@@ -35,6 +35,7 @@ describe('proposal signing document send guardrails', () => {
           file_size: 1000,
           content_type: 'application/pdf',
           signature_field_coords: null,
+          date_field_coords: null,
           display_order: 0,
           created_at: '2026-05-18T00:00:00Z',
           updated_at: '2026-05-18T00:00:00Z',
@@ -56,7 +57,7 @@ describe('proposal signing document send guardrails', () => {
     expect(onManageSigningDocuments).toHaveBeenCalledTimes(1);
   });
 
-  it('allows send when every signing document has placement', () => {
+  it('allows send when every signing document has signature and date placement', () => {
     const proposal = {
       ...baseProposal,
       signing_documents: [
@@ -67,6 +68,7 @@ describe('proposal signing document send guardrails', () => {
           file_size: 1000,
           content_type: 'application/pdf',
           signature_field_coords: { page: 1, x: 10, y: 10, w: 100, h: 40 },
+          date_field_coords: { page: 1, x: 130, y: 10, w: 80, h: 24 },
           display_order: 0,
           created_at: '2026-05-18T00:00:00Z',
           updated_at: '2026-05-18T00:00:00Z',
@@ -81,6 +83,6 @@ describe('proposal signing document send guardrails', () => {
     const item = checklist.find((entry) => entry.key === 'signing_documents');
 
     expect(item?.state).toBe(true);
-    expect(item?.label).toContain('Signing areas placed');
+    expect(item?.label).toContain('Signature and date areas placed');
   });
 });

@@ -158,11 +158,16 @@ export function useUpdateProposalSignatureCoords() {
     mutationFn: ({
       proposalId,
       coords,
+      dateCoords,
     }: {
       proposalId: number;
       coords: SignatureFieldCoords | null;
+      dateCoords?: SignatureFieldCoords | null;
     }) =>
-      proposalsApi.update(proposalId, { signature_field_coords: coords }),
+      proposalsApi.update(proposalId, {
+        signature_field_coords: coords,
+        date_field_coords: dateCoords,
+      }),
     onSuccess: (_data, { proposalId }) => {
       queryClient.invalidateQueries({ queryKey: proposalKeys.lists() });
       queryClient.invalidateQueries({ queryKey: proposalKeys.detail(proposalId) });

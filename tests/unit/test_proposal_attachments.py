@@ -5,9 +5,7 @@ Covers:
 - GET  /api/proposals/{id}/attachments
 - DELETE /api/proposals/{id}/attachments/{attachment_id}
 - GET  /api/proposals/public/{token}/attachments/{attachment_id}/download
-- accept_proposal_public no longer gates on attachment views (2026-05-14
-  removed the read-before-sign gate; T&C card inside the signing modal
-  replaces it)
+- accept_proposal_public gates on opening every public proposal document
 - send_signed_copy_to_client embedding attachment filenames in the email body
 
 No mocks — uses the real ASGI client + SQLite test DB. R2 is unconfigured so
@@ -28,7 +26,7 @@ from src.auth.models import User
 from src.contacts.models import Contact
 from src.email.models import EmailQueue
 from src.proposals.attachment_views import ProposalAttachmentView, _hash_token
-from src.proposals.models import Proposal
+from src.proposals.models import Proposal, ProposalSigningDocument, ProposalSigningDocumentView
 
 # Smallest valid PNG (1x1 transparent) — the Sign-to-Confirm payload
 # requires a drawn-signature image.
@@ -148,22 +146,18 @@ class TestStaffUpload:
 
 
 class TestSigningWithAttachments:
-    """The read-before-sign gate was removed 2026-05-14 (Lorenzo's
-    Sign-to-Confirm ask): the T&C card inside the signing modal now
-    replaces the forced PDF-open step. These tests assert that prior
-    behavior is gone and signing succeeds whether or not attachments
-    have been opened."""
+    """Public signing requires opening every proposal document first."""
 
     @pytest.mark.asyncio
-    async def test_unviewed_attachments_no_longer_block_accept(
+    async def test_unviewed_attachments_block_accept_until_opened(
         self,
         client: AsyncClient,
         auth_headers: dict,
         sent_proposal: Proposal,
         test_contact: Contact,
     ):
-        """Proposal with an unread attachment must still accept."""
-        await _upload_pdf_attachment(client, auth_headers, sent_proposal.id)
+        """Proposal with an unread attachment must not accept."""
+        att = await _upload_pdf_attachment(client, auth_headers, sent_proposal.id)
 
         response = await client.post(
             f"/api/proposals/public/{sent_proposal.public_token}/accept",
@@ -172,6 +166,98 @@ class TestSigningWithAttachments:
                 "signer_email": test_contact.email,
                 "signature_image": _SIG,
                 "agreed_to_terms": True,
+            },
+        )
+        assert response.status_code == 400
+        assert "open every" in response.json()["detail"].lower()
+
+        await client.get(
+            f"/api/proposals/public/{sent_proposal.public_token}"
+            f"/attachments/{att['id']}/download",
+            follow_redirects=False,
+        )
+
+        response = await client.post(
+            f"/api/proposals/public/{sent_proposal.public_token}/accept",
+            json={
+                "signer_name": "Customer",
+                "signer_email": test_contact.email,
+                "signature_image": _SIG,
+                "agreed_to_terms": True,
+            },
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["status"] == "accepted"
+
+    @pytest.mark.asyncio
+    async def test_unviewed_signing_documents_block_accept_until_opened(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        sent_proposal: Proposal,
+        test_user: User,
+        test_contact: Contact,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        document = ProposalSigningDocument(
+            proposal_id=sent_proposal.id,
+            original_filename="service-agreement.pdf",
+            file_size=1200,
+            content_type="application/pdf",
+            pdf_path="proposals/1/signing-documents/1/source.pdf",
+            signature_field_coords={"page": 1, "x": 10, "y": 10, "w": 100, "h": 40},
+            date_field_coords={"page": 1, "x": 140, "y": 10, "w": 80, "h": 24},
+            display_order=0,
+            created_by_id=test_user.id,
+        )
+        db_session.add(document)
+        await db_session.commit()
+        await db_session.refresh(document)
+
+        response = await client.post(
+            f"/api/proposals/public/{sent_proposal.public_token}/accept",
+            json={
+                "signer_name": "Customer",
+                "signer_email": test_contact.email,
+                "signature_image": _SIG,
+                "agreed_to_terms": True,
+            },
+        )
+        assert response.status_code == 400
+        assert "open every" in response.json()["detail"].lower()
+
+        async def fake_download(_: str) -> bytes:
+            return b"%PDF-1.4 fake signing document"
+
+        monkeypatch.setattr(
+            "src.attachments.object_storage.download_object_bytes",
+            fake_download,
+        )
+
+        download = await client.get(
+            f"/api/proposals/public/{sent_proposal.public_token}"
+            f"/signing-documents/{document.id}/download",
+            headers={"User-Agent": "SignDocView/1.0"},
+        )
+        assert download.status_code == 200, download.text
+
+        rows = await db_session.execute(
+            select(ProposalSigningDocumentView).where(
+                ProposalSigningDocumentView.document_id == document.id,
+            )
+        )
+        view = rows.scalar_one()
+        assert view.token_hash == _hash_token(sent_proposal.public_token)
+        assert view.user_agent == "SignDocView/1.0"
+
+        response = await client.post(
+            f"/api/proposals/public/{sent_proposal.public_token}/accept",
+            json={
+                "signer_name": "Customer",
+                "signer_email": test_contact.email,
+                "signature_image": _SIG,
+                "agreed_to_terms": True,
+                "signer_timezone": "America/Chicago",
             },
         )
         assert response.status_code == 200, response.text

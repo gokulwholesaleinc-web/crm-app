@@ -44,8 +44,12 @@ from src.events.service import PROPOSAL_ACCEPTED, PROPOSAL_REJECTED, PROPOSAL_SE
 from src.proposals.attachment_views import (
     ProposalAttachmentView,
     _hash_token,
+    get_unviewed_attachment_ids,
+    get_unviewed_signing_document_ids,
     record_attachment_view,
+    record_signing_document_view,
 )
+from src.proposals.models import ProposalSigningDocumentView
 from src.proposals.schemas import (
     CreateFromTemplateRequest,
     ProposalAcceptRequest,
@@ -57,6 +61,7 @@ from src.proposals.schemas import (
     ProposalRejectRequest,
     ProposalResponse,
     ProposalSendRequest,
+    ProposalSigningDocumentPublicItem,
     ProposalSigningDocumentResponse,
     ProposalSigningDocumentUpdate,
     ProposalTemplateCreate,
@@ -426,6 +431,58 @@ async def _signing_document_or_404(
     return document
 
 
+async def _unviewed_public_document_count(
+    db: DBSession,
+    *,
+    proposal_id: int,
+    token: str,
+) -> int:
+    attachment_ids = await get_unviewed_attachment_ids(
+        db,
+        proposal_id=proposal_id,
+        token=token,
+    )
+    signing_document_ids = await get_unviewed_signing_document_ids(
+        db,
+        proposal_id=proposal_id,
+        token=token,
+    )
+    return len(attachment_ids) + len(signing_document_ids)
+
+
+async def _attach_public_signing_documents(
+    db: DBSession,
+    response: ProposalPublicResponse,
+    proposal,
+    token: str,
+) -> None:
+    documents = list(proposal.signing_documents or [])
+    response.signing_document_count = len(documents)
+    response.has_master_contract = bool(
+        proposal.master_contract_pdf_path or documents
+    )
+    if not documents:
+        response.signing_documents = []
+        return
+
+    token_hash = _hash_token(token)
+    viewed_rows = await db.execute(
+        select(ProposalSigningDocumentView.document_id)
+        .where(ProposalSigningDocumentView.token_hash == token_hash)
+        .where(ProposalSigningDocumentView.document_id.in_([d.id for d in documents]))
+    )
+    viewed_ids = {r[0] for r in viewed_rows.all()}
+    response.signing_documents = [
+        ProposalSigningDocumentPublicItem(
+            id=d.id,
+            filename=d.original_filename,
+            file_size=d.file_size,
+            viewed=d.id in viewed_ids,
+        )
+        for d in documents
+    ]
+
+
 async def _check_proposal_reference_access(
     db: DBSession,
     proposal_data: ProposalCreate | ProposalUpdate,
@@ -600,9 +657,8 @@ async def download_public_proposal_attachment(
 
     Records the per-token view for audit purposes and redirects to a
     short-lived R2 presigned URL. Falls back to a direct file response
-    when object storage isn't configured (dev/test). The view rows no
-    longer gate signing — the Sign-to-Confirm modal's T&C card
-    replaced the forced PDF-open step on 2026-05-14.
+    when object storage isn't configured (dev/test). The public accept
+    endpoint requires a view row for every proposal document.
     """
     import hmac as _hmac
 
@@ -622,6 +678,21 @@ async def download_public_proposal_attachment(
         # distinguish "exists but not yours" from "doesn't exist".
         raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Attachment not found")
 
+    try:
+        download_url = await att_service.get_download_url(attachment)
+    except Exception as exc:
+        logger.info("R2 presign failed for attachment %s: %s", attachment.id, exc)
+        download_url = None
+
+    file_path = None
+    if not download_url:
+        file_path = att_service.get_file_path(attachment)
+        if not file_path or not file_path.exists():
+            raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="File not found")
+
+    # Record the view AFTER confirming the object can be delivered. If
+    # R2 is down and there's no local file, we shouldn't claim the
+    # signer viewed an attachment they couldn't actually open.
     ip_address = request.client.host if request.client else None
     user_agent = request.headers.get("user-agent")
     await record_attachment_view(
@@ -632,23 +703,99 @@ async def download_public_proposal_attachment(
         user_agent=user_agent,
     )
 
-    try:
-        download_url = await att_service.get_download_url(attachment)
-    except Exception as exc:
-        logger.info("R2 presign failed for attachment %s: %s", attachment.id, exc)
-        download_url = None
-
     if download_url:
         return RedirectResponse(url=download_url, status_code=307)
 
-    file_path = att_service.get_file_path(attachment)
-    if not file_path or not file_path.exists():
-        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="File not found")
-
+    assert file_path is not None  # narrowed above
     return FileResponse(
         path=str(file_path),
         filename=attachment.original_filename,
         media_type=attachment.mime_type,
+    )
+
+
+@router.get("/public/{token}/signing-documents/{document_id}/download")
+@limiter.limit("30/minute")
+async def download_public_proposal_signing_document(
+    token: str,
+    document_id: int,
+    request: Request,
+    db: DBSession,
+):
+    """Public source-PDF download for signing documents.
+
+    Opening this endpoint records the read-before-sign view row for the
+    public token. The accept endpoint enforces that every regular
+    attachment and every signing document has a matching view row.
+    """
+    import hmac as _hmac
+
+    from botocore.exceptions import ClientError
+
+    from src.attachments.object_storage import download_object_bytes
+
+    service = ProposalService(db)
+    proposal = await service.get_public_proposal(token)
+    if not proposal or not _hmac.compare_digest(proposal.public_token or "", token):
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Proposal not found")
+
+    document = await service.get_signing_document(proposal.id, document_id)
+    if document is None:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND,
+            detail="Signing document not found",
+        )
+
+    try:
+        content = await download_object_bytes(document.pdf_path)
+    except ClientError as exc:
+        response = getattr(exc, "response", None) or {}
+        err = response.get("Error", {}) if isinstance(response, dict) else {}
+        code = err.get("Code", "")
+        if code in ("NoSuchKey", "404", "NotFound"):
+            raise HTTPException(
+                status_code=HTTPStatus.NOT_FOUND,
+                detail="Signing document file missing from storage",
+            ) from exc
+        logger.exception(
+            "R2 ClientError fetching public signing document %s for proposal %s",
+            document_id,
+            proposal.id,
+        )
+        raise HTTPException(
+            status_code=HTTPStatus.SERVICE_UNAVAILABLE,
+            detail="File storage temporarily unavailable — try again later",
+        ) from exc
+    except Exception as exc:
+        logger.exception(
+            "Unexpected error fetching public signing document %s for proposal %s",
+            document_id,
+            proposal.id,
+        )
+        raise HTTPException(
+            status_code=HTTPStatus.SERVICE_UNAVAILABLE,
+            detail="File storage temporarily unavailable — try again later",
+        ) from exc
+
+    # Record the view AFTER the bytes are confirmed deliverable. If R2
+    # fails or the proposal is missing the underlying object, we don't
+    # want to claim the signer "viewed" a document they never received.
+    ip_address = get_client_ip(request)
+    user_agent = request.headers.get("user-agent")
+    await record_signing_document_view(
+        db,
+        document_id=document.id,
+        token=token,
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
+
+    return Response(
+        content=content,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="{document.original_filename}"',
+        },
     )
 
 
@@ -700,14 +847,10 @@ async def get_public_proposal(
         proposal.designated_signer_email
         or (proposal.contact.email if proposal.contact else None)
     )
-    signing_document_count = len(proposal.signing_documents or [])
-    response.signing_document_count = signing_document_count
-    response.has_master_contract = bool(
-        proposal.master_contract_pdf_path or signing_document_count
-    )
+    await _attach_public_signing_documents(db, response, proposal, token)
 
-    # Per-token attachment list — surfaced for review only; opening
-    # everything is no longer a precondition to signing.
+    # Per-token attachment list — opening every document is required before
+    # public signing, and the accept endpoint re-checks this server-side.
     att_service = AttachmentService(db)
     items, _total = await att_service.list_attachments("proposals", proposal.id)
     if items:
@@ -757,6 +900,20 @@ async def accept_proposal_public(
     if not proposal or not _hmac.compare_digest(proposal.public_token or "", token):
         raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Proposal not found")
 
+    unviewed_count = await _unviewed_public_document_count(
+        db,
+        proposal_id=proposal.id,
+        token=token,
+    )
+    if unviewed_count:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail=(
+                "Open every proposal document before signing "
+                f"({unviewed_count} remaining)"
+            ),
+        )
+
     signer_ip = get_client_ip(request)
     signer_user_agent = request.headers.get("user-agent")
     signature_bytes = _decode_signature_image(accept_data.signature_image)
@@ -769,6 +926,7 @@ async def accept_proposal_public(
             agreed_to_terms=accept_data.agreed_to_terms,
             signer_ip=signer_ip,
             signer_user_agent=signer_user_agent,
+            signer_timezone=accept_data.signer_timezone,
         )
 
     # proposal_signed notification + email is dispatched by ProposalService.accept_proposal_public
@@ -795,11 +953,7 @@ async def accept_proposal_public(
         proposal.designated_signer_email
         or (proposal.contact.email if proposal.contact else None)
     )
-    signing_document_count = len(proposal.signing_documents or [])
-    response.signing_document_count = signing_document_count
-    response.has_master_contract = bool(
-        proposal.master_contract_pdf_path or signing_document_count
-    )
+    await _attach_public_signing_documents(db, response, proposal, token)
     return response
 
 
@@ -943,8 +1097,8 @@ async def update_signing_document(
         document = await service.update_signing_document(
             proposal,
             document,
-            signature_field_coords=document_data.signature_field_coords,
             user_id=current_user.id,
+            **document_data.model_dump(exclude_unset=True),
         )
     return ProposalSigningDocumentResponse.model_validate(document)
 

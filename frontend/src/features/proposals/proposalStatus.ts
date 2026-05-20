@@ -166,14 +166,14 @@ export function buildProposalSendChecklist(
   const signingDocuments = proposal.signing_documents ?? [];
   if (signingDocuments.length > 0) {
     const missingPlacement = signingDocuments.filter(
-      (doc) => !doc.signature_field_coords,
+      (doc) => !doc.signature_field_coords || !doc.date_field_coords,
     );
     const firstMissingPlacement = missingPlacement[0];
     items.push({
       key: 'signing_documents',
       label:
         missingPlacement.length === 0
-          ? `Signing areas placed on ${signingDocuments.length} document${
+          ? `Signature and date areas placed on ${signingDocuments.length} document${
               signingDocuments.length === 1 ? '' : 's'
             }`
           : `${missingPlacement.length} signing document${
@@ -183,23 +183,26 @@ export function buildProposalSendChecklist(
       hint:
         !firstMissingPlacement
           ? undefined
-          : `Place a signing area on ${firstMissingPlacement.original_filename} before sending.`,
+          : `Place signature and date areas on ${firstMissingPlacement.original_filename} before sending.`,
       action:
         missingPlacement.length === 0 || !options.onManageSigningDocuments
           ? undefined
           : {
-              label: 'Place area',
+              label: 'Place areas',
               onClick: options.onManageSigningDocuments,
             },
     });
-  } else if (proposal.master_contract_pdf_path && !proposal.signature_field_coords) {
+  } else if (
+    proposal.master_contract_pdf_path &&
+    (!proposal.signature_field_coords || !proposal.date_field_coords)
+  ) {
     items.push({
       key: 'legacy_master_signature',
-      label: 'Master agreement needs signature placement',
+      label: 'Master agreement needs signature and date placement',
       state: false,
-      hint: 'Place a signing area on the uploaded master agreement before sending.',
+      hint: 'Place signature and date areas on the uploaded master agreement before sending.',
       action: options.onManageSigningDocuments
-        ? { label: 'Place area', onClick: options.onManageSigningDocuments }
+        ? { label: 'Place areas', onClick: options.onManageSigningDocuments }
         : undefined,
     });
   }
@@ -209,12 +212,12 @@ export function buildProposalSendChecklist(
 
 export function hasSigningDocumentSendBlocker(proposal: Proposal): boolean {
   const signingDocuments = proposal.signing_documents ?? [];
-  if (signingDocuments.some((doc) => !doc.signature_field_coords)) {
+  if (signingDocuments.some((doc) => !doc.signature_field_coords || !doc.date_field_coords)) {
     return true;
   }
   return Boolean(
     signingDocuments.length === 0 &&
       proposal.master_contract_pdf_path &&
-      !proposal.signature_field_coords,
+      (!proposal.signature_field_coords || !proposal.date_field_coords),
   );
 }

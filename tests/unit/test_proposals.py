@@ -738,7 +738,7 @@ class TestStatusTransitions:
         )
 
         assert response.status_code == 400
-        assert "Place a signing area" in response.json()["detail"]
+        assert "Place signature and date areas" in response.json()["detail"]
 
     @pytest.mark.asyncio
     async def test_send_allows_signing_documents_with_placement(
@@ -769,6 +769,7 @@ class TestStatusTransitions:
                 content_type="application/pdf",
                 pdf_path="proposals/1/signing-documents/1/source.pdf",
                 signature_field_coords={"page": 1, "x": 10, "y": 10, "w": 100, "h": 40},
+                date_field_coords={"page": 1, "x": 130, "y": 10, "w": 80, "h": 24},
                 display_order=0,
                 created_by_id=test_user.id,
             ),
@@ -779,6 +780,7 @@ class TestStatusTransitions:
                 content_type="application/pdf",
                 pdf_path="proposals/1/signing-documents/2/source.pdf",
                 signature_field_coords={"page": 1, "x": 20, "y": 20, "w": 100, "h": 40},
+                date_field_coords={"page": 1, "x": 140, "y": 20, "w": 80, "h": 24},
                 display_order=1,
                 created_by_id=test_user.id,
             ),

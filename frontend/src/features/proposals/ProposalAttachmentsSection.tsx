@@ -5,15 +5,20 @@ import type { ProposalAttachmentPublic } from '../../types';
 // so this component doesn't pull the authenticated axios instance into the
 // public proposal bundle — the public page deliberately uses a bare axios
 // to avoid evicting a staff Bearer session.
-function buildDownloadUrl(token: string, attachmentId: number): string {
+type ProposalDocumentKind = 'attachments' | 'signing-documents';
+
+function buildDownloadUrl(token: string, documentKind: ProposalDocumentKind, documentId: number): string {
   const baseUrl = import.meta.env.VITE_API_URL || '';
-  return `${baseUrl}/api/proposals/public/${token}/attachments/${attachmentId}/download`;
+  return `${baseUrl}/api/proposals/public/${token}/${documentKind}/${documentId}/download`;
 }
 
 interface ProposalAttachmentsSectionProps {
   attachments: ProposalAttachmentPublic[];
   token: string;
   accent: string;
+  documentKind?: ProposalDocumentKind;
+  title?: string;
+  description?: string;
   viewedIds: Set<number>;
   onViewed: (id: number) => void;
   /** Re-fetch the proposal so the server's authoritative `viewed` flags
@@ -31,6 +36,9 @@ export function ProposalAttachmentsSection({
   attachments,
   token,
   accent,
+  documentKind = 'attachments',
+  title = 'Attached Documents',
+  description = 'Please open and read each attached document before signing.',
   viewedIds,
   onViewed,
   onReconcile,
@@ -38,8 +46,17 @@ export function ProposalAttachmentsSection({
   if (attachments.length === 0) return null;
 
   const handleOpen = (id: number) => {
-    const url = buildDownloadUrl(token, id);
-    window.open(url, '_blank', 'noopener,noreferrer');
+    const url = buildDownloadUrl(token, documentKind, id);
+    // window.open returns null when a popup is blocked (CSP, in-app
+    // browsers, mobile Safari with popup-blocker on). Bailing out before
+    // we mark viewed prevents the gate from auto-passing on a doc the
+    // signer never actually saw — same silent-failure pattern PR #348
+    // caught for the View-PDF button on MSA cards.
+    const opened = window.open(url, '_blank', 'noopener,noreferrer');
+    if (!opened) {
+      window.alert('Your browser blocked the document popup. Please allow popups for this site and try again.');
+      return;
+    }
     // Optimistically mark viewed for instant UX feedback; the server
     // records the view as a side effect of the download endpoint hit.
     // If the download actually 5xx'd / rate-limited / failed, the
@@ -61,10 +78,10 @@ export function ProposalAttachmentsSection({
           aria-hidden="true"
         />
         <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 tracking-tight">
-          Attached Documents
+          {title}
         </h2>
         <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
-          Please open and read each attached document before signing.
+          {description}
         </p>
       </div>
 
@@ -83,7 +100,7 @@ export function ProposalAttachmentsSection({
                 />
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-gray-900 dark:text-gray-100 break-words">
-                    {attachment.original_filename}
+                    {attachment.original_filename ?? attachment.filename}
                   </p>
                   <p className="text-xs text-gray-500 dark:text-gray-400 tabular-nums">
                     {formatFileSize(attachment.file_size)}
@@ -104,7 +121,7 @@ export function ProposalAttachmentsSection({
                 <button
                   type="button"
                   onClick={() => handleOpen(attachment.id)}
-                  aria-label={`Open ${attachment.original_filename} in a new tab`}
+                  aria-label={`Open ${attachment.original_filename ?? attachment.filename} in a new tab`}
                   className="inline-flex items-center gap-1.5 rounded px-3 py-1.5 text-sm font-medium border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 transition-colors"
                   style={{ outlineColor: accent }}
                 >
