@@ -101,9 +101,12 @@ def _signed_date_label(signed_at: datetime, signer_timezone: str | None) -> str:
     """Format the signing date in the signer's local timezone."""
     local_dt = signed_at
     if signer_timezone:
+        # ZoneInfo also raises ValueError for malformed strings (embedded
+        # nulls, path-traversal attempts). Catch both so the outer accept
+        # path doesn't blow up the whole stamp on garbage tz input.
         try:
             local_dt = signed_at.astimezone(ZoneInfo(signer_timezone))
-        except ZoneInfoNotFoundError:
+        except (ZoneInfoNotFoundError, ValueError):
             logger.warning("Unknown signer timezone %r; using UTC for signed date", signer_timezone)
     return local_dt.strftime("%m-%d-%Y")
 
@@ -555,7 +558,11 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 f"This proposal expired on {proposal.valid_until.isoformat()} "
                 "and can no longer be accepted",
             )
-        await self.validate_signing_documents_ready(proposal)
+        # In-flight proposals (sent before this PR) have signature placement
+        # but no date placement. Don't block accept on missing date coords —
+        # the date stamp is fail-soft (UTC fallback in stamper). The send
+        # gate is the right place to enforce both.
+        await self.validate_signing_documents_ready(proposal, require_date=False)
 
         # Validate the submitted payload (consent + signature) BEFORE the
         # signer-email authz check so a customer who forgot to tick the

@@ -678,6 +678,21 @@ async def download_public_proposal_attachment(
         # distinguish "exists but not yours" from "doesn't exist".
         raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Attachment not found")
 
+    try:
+        download_url = await att_service.get_download_url(attachment)
+    except Exception as exc:
+        logger.info("R2 presign failed for attachment %s: %s", attachment.id, exc)
+        download_url = None
+
+    file_path = None
+    if not download_url:
+        file_path = att_service.get_file_path(attachment)
+        if not file_path or not file_path.exists():
+            raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="File not found")
+
+    # Record the view AFTER confirming the object can be delivered. If
+    # R2 is down and there's no local file, we shouldn't claim the
+    # signer viewed an attachment they couldn't actually open.
     ip_address = request.client.host if request.client else None
     user_agent = request.headers.get("user-agent")
     await record_attachment_view(
@@ -688,19 +703,10 @@ async def download_public_proposal_attachment(
         user_agent=user_agent,
     )
 
-    try:
-        download_url = await att_service.get_download_url(attachment)
-    except Exception as exc:
-        logger.info("R2 presign failed for attachment %s: %s", attachment.id, exc)
-        download_url = None
-
     if download_url:
         return RedirectResponse(url=download_url, status_code=307)
 
-    file_path = att_service.get_file_path(attachment)
-    if not file_path or not file_path.exists():
-        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="File not found")
-
+    assert file_path is not None  # narrowed above
     return FileResponse(
         path=str(file_path),
         filename=attachment.original_filename,
@@ -740,16 +746,6 @@ async def download_public_proposal_signing_document(
             detail="Signing document not found",
         )
 
-    ip_address = get_client_ip(request)
-    user_agent = request.headers.get("user-agent")
-    await record_signing_document_view(
-        db,
-        document_id=document.id,
-        token=token,
-        ip_address=ip_address,
-        user_agent=user_agent,
-    )
-
     try:
         content = await download_object_bytes(document.pdf_path)
     except ClientError as exc:
@@ -780,6 +776,19 @@ async def download_public_proposal_signing_document(
             status_code=HTTPStatus.SERVICE_UNAVAILABLE,
             detail="File storage temporarily unavailable — try again later",
         ) from exc
+
+    # Record the view AFTER the bytes are confirmed deliverable. If R2
+    # fails or the proposal is missing the underlying object, we don't
+    # want to claim the signer "viewed" a document they never received.
+    ip_address = get_client_ip(request)
+    user_agent = request.headers.get("user-agent")
+    await record_signing_document_view(
+        db,
+        document_id=document.id,
+        token=token,
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
 
     return Response(
         content=content,
@@ -1084,18 +1093,12 @@ async def update_signing_document(
     check_ownership(proposal, current_user, EntityNames.PROPOSAL)
     _ensure_unsigned(proposal)
     document = await _signing_document_or_404(service, proposal_id, document_id)
-    updates = document_data.model_dump(exclude_unset=True)
-    placement_updates = {}
-    if "signature_field_coords" in updates:
-        placement_updates["signature_field_coords"] = updates["signature_field_coords"]
-    if "date_field_coords" in updates:
-        placement_updates["date_field_coords"] = updates["date_field_coords"]
     with value_error_as_400():
         document = await service.update_signing_document(
             proposal,
             document,
             user_id=current_user.id,
-            **placement_updates,
+            **document_data.model_dump(exclude_unset=True),
         )
     return ProposalSigningDocumentResponse.model_validate(document)
 

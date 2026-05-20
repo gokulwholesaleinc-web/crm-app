@@ -291,11 +291,7 @@ export function SignatureFieldPicker({
 
   // --- Save / cancel ----------------------------------------------
 
-  const canSave = Boolean(
-    placements.signature &&
-      placements.date &&
-      !saving,
-  );
+  const canSave = Boolean(placements.signature && placements.date && !saving);
 
   const handleSave = async () => {
     if (!placements.signature || !placements.date) return;

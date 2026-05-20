@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import logging
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -35,6 +36,8 @@ from pypdf import PdfReader, PdfWriter
 from reportlab.lib.pagesizes import LETTER
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
+
+logger = logging.getLogger(__name__)
 
 # Auto-detect signature box: last page, bottom-right with a ~0.5"
 # inset. Sized to fit a typical drawn name (3" wide x 1" tall).
@@ -82,14 +85,19 @@ def stamp_master_with_signature(inputs: StampInputs) -> bytes:
         box=box,
     ))
     if inputs.date_coords and inputs.date_label:
-        date_page_idx, date_box = _resolve_target_box(reader, inputs.date_coords)
-        date_page = reader.pages[date_page_idx]
-        overlays.setdefault(date_page_idx, []).append(_build_date_overlay(
-            page_width=float(date_page.mediabox.width),
-            page_height=float(date_page.mediabox.height),
-            box=date_box,
-            date_label=inputs.date_label,
-        ))
+        # Skip the date stamp entirely if date_coords are malformed —
+        # otherwise the auto-box fallback puts the date on top of the
+        # signature (both default to bottom-right of last page).
+        date_resolved = _resolve_date_box(reader, inputs.date_coords)
+        if date_resolved is not None:
+            date_page_idx, date_box = date_resolved
+            date_page = reader.pages[date_page_idx]
+            overlays.setdefault(date_page_idx, []).append(_build_date_overlay(
+                page_width=float(date_page.mediabox.width),
+                page_height=float(date_page.mediabox.height),
+                box=date_box,
+                date_label=inputs.date_label,
+            ))
 
     writer = PdfWriter()
 
@@ -132,13 +140,49 @@ def _resolve_target_box(
         width = float(coords["width"])
         height = float(coords["height"])
     except (KeyError, TypeError, ValueError):
+        logger.warning("Malformed signature coords %r; using auto-box", coords)
         return _auto_box(reader, page)
 
     if width <= 0 or height <= 0:
+        logger.warning("Zero/negative signature dims %r; using auto-box", coords)
         return _auto_box(reader, page)
 
     # Clamp so a wildly out-of-bounds coords payload still produces a
     # usable signed PDF rather than a silently-cropped one.
+    x = max(0.0, min(x, page_w - 1.0))
+    y = max(0.0, min(y, page_h - 1.0))
+    width = min(width, page_w - x)
+    height = min(height, page_h - y)
+    return page, (x, y, width, height)
+
+
+def _resolve_date_box(
+    reader: PdfReader, coords: dict[str, Any],
+) -> tuple[int, tuple[float, float, float, float]] | None:
+    """Resolve date stamp coords, or return None to skip the date stamp.
+
+    Unlike the signature path, malformed date coords MUST NOT fall back
+    to the auto-box — that auto-box overlaps the signature and emits a
+    silently-corrupt PDF where the date sits on top of the signature.
+    """
+    page_count = len(reader.pages)
+    try:
+        page = int(coords.get("page", page_count - 1))
+        x = float(coords["x"])
+        y = float(coords["y"])
+        width = float(coords["width"])
+        height = float(coords["height"])
+    except (KeyError, TypeError, ValueError):
+        logger.warning("Malformed proposal date coords %r; skipping date stamp", coords)
+        return None
+    if width <= 0 or height <= 0:
+        logger.warning("Zero/negative date stamp dims %r; skipping date stamp", coords)
+        return None
+
+    page = max(0, min(page_count - 1, page))
+    target_page = reader.pages[page]
+    page_w = float(target_page.mediabox.width)
+    page_h = float(target_page.mediabox.height)
     x = max(0.0, min(x, page_w - 1.0))
     y = max(0.0, min(y, page_h - 1.0))
     width = min(width, page_w - x)

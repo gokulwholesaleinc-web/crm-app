@@ -46,7 +46,10 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockGet.mockReset();
   mockPost.mockReset();
-  vi.spyOn(window, 'open').mockImplementation(() => null);
+  // Return a truthy fake Window so the popup-blocked guard in
+  // ProposalAttachmentsSection doesn't bail out before marking viewed.
+  vi.spyOn(window, 'open').mockImplementation(() => ({} as Window));
+  vi.spyOn(window, 'alert').mockImplementation(() => {});
 });
 
 describe('PublicProposalView', () => {
@@ -186,6 +189,32 @@ describe('PublicProposalView', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Open agreement\.pdf/i }));
     expect(signButton).not.toBeDisabled();
+  });
+
+  it('does not mark a document viewed when the popup is blocked', async () => {
+    mockGet.mockResolvedValue({
+      data: {
+        ...baseProposal,
+        attachments: [
+          { id: 11, filename: 'scope.pdf', file_size: 1200, viewed: false },
+        ],
+        signing_documents: [],
+      },
+    });
+    // Simulate a popup-blocker by returning null from window.open.
+    (window.open as ReturnType<typeof vi.fn>).mockImplementation(() => null);
+    renderAt();
+    await waitFor(() => screen.getByRole('heading', { level: 1 }));
+
+    fireEvent.click(screen.getByRole('button', { name: /Open scope\.pdf/i }));
+
+    // The popup-blocked path alerts the user and refuses to optimistically
+    // mark viewed — gate must still show 1 remaining and Sign disabled.
+    expect(window.alert).toHaveBeenCalled();
+    expect(screen.getByText(/Open every document before signing\. 1 remaining/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', {
+      name: /Open the signing dialog to accept this proposal/i,
+    })).toBeDisabled();
   });
 
   it('keeps Sign to Accept enabled when server says all documents were opened', async () => {

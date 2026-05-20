@@ -354,7 +354,11 @@ function PublicProposalView() {
   const unopenedDocumentCount =
     attachments.filter((attachment) => !viewedIds.has(attachment.id)).length +
     signingDocuments.filter((document) => !viewedSigningDocumentIds.has(document.id)).length;
-  const allRequiredDocumentsOpened = unopenedDocumentCount === 0;
+  // Guard against future renders that might reach here with a null
+  // proposal (e.g. a transient fetch failure that clears `error` but
+  // leaves `proposal` null) — defaulted-empty arrays would otherwise
+  // collapse to "all opened" and silently let signing proceed.
+  const allRequiredDocumentsOpened = proposal != null && unopenedDocumentCount === 0;
 
   const validUntilDate = proposal.valid_until
     ? formatDate(proposal.valid_until, 'long')
