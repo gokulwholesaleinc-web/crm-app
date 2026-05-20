@@ -38,7 +38,10 @@ export function Layout({
   } as React.CSSProperties;
 
   return (
-    <div className="flex flex-col h-screen bg-brand-page overflow-hidden" style={sidebarStyle}>
+    <div
+      className="fixed inset-0 flex flex-col bg-brand-page overflow-hidden"
+      style={sidebarStyle}
+    >
       {/* Skip Link */}
       <a href="#main-content" className="skip-link">Skip to main content</a>
 
@@ -68,7 +71,9 @@ export function Layout({
         />
 
         {/* Main Content Area - takes full width on mobile.
-            ``min-h-0`` is critical: without it, the inner flex children
+            The fixed outer shell keeps private app pages from creating a
+            second body-level scroll surface. ``min-h-0`` is critical:
+            without it, the inner flex children
             (Header + <main>) refuse to shrink below their natural content
             height, so a page with tall content makes the column overflow
             its 100vh allotment and the user can scroll past the working
@@ -87,8 +92,8 @@ export function Layout({
             id="main-content"
             data-guide="main-content"
             className={clsx(
-              'flex-1 overflow-y-auto focus-visible:outline-none',
-              className
+              'flex-1 min-h-0 overflow-y-auto overscroll-contain focus-visible:outline-none',
+              className,
             )}
           >
             <div className="py-4 sm:py-6">

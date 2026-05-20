@@ -3,6 +3,7 @@
 import asyncio
 import hashlib
 import logging
+import math
 import re
 import secrets
 from datetime import UTC, datetime
@@ -86,6 +87,36 @@ def _single_coords_for_stamper(coords: dict) -> dict | None:
     }
 
 
+def _strict_coords_for_stamper(coords: object, *, index: int) -> dict:
+    if not isinstance(coords, dict):
+        raise ValueError(f"Malformed signature/date placement at index {index}")
+
+    try:
+        page = int(coords["page"])
+        x = float(coords["x"])
+        y = float(coords["y"])
+        width = float(coords["w"])
+        height = float(coords["h"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError(f"Malformed signature/date placement at index {index}") from exc
+
+    if (
+        page < 1
+        or not all(math.isfinite(value) for value in (x, y, width, height))
+        or width <= 0
+        or height <= 0
+    ):
+        raise ValueError(f"Malformed signature/date placement at index {index}")
+
+    return {
+        "page": page - 1,
+        "x": x,
+        "y": y,
+        "width": width,
+        "height": height,
+    }
+
+
 def _coords_for_stamper(
     coords: dict | list[dict] | None,
 ) -> dict | list[dict] | None:
@@ -98,23 +129,18 @@ def _coords_for_stamper(
     height}``; this is the single conversion point so neither layer
     has to know about the other's convention.
 
-    A NULL/empty payload returns ``None`` so the stamper falls through
-    to ``_auto_box``. Missing keys also return ``None`` to preserve
-    the existing "garbage → auto-box" safety net (the Pydantic
-    validator already 422s before reaching here, but defensive code
-    keeps the stamper's contract intact for any future caller).
+    A NULL/empty object payload returns ``None`` so the stamper falls
+    through to ``_auto_box`` for legacy single-box callers. Array
+    payloads are strict: saving multiple boxes means every entry must
+    be valid, otherwise the signed PDF would silently omit or move a
+    legally meaningful stamp.
     """
-    if not coords:
+    if coords is None or coords == {}:
         return None
     if isinstance(coords, list):
-        boxes = [
-            converted
-            for item in coords
-            if isinstance(item, dict)
-            for converted in [_single_coords_for_stamper(item)]
-            if converted is not None
-        ]
-        return boxes or None
+        if not coords:
+            raise ValueError("At least one signature/date placement is required")
+        return [_strict_coords_for_stamper(item, index=index) for index, item in enumerate(coords)]
     return _single_coords_for_stamper(coords)
 
 

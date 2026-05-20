@@ -20,7 +20,9 @@ export interface SignatureFieldCoords {
   h: number;
 }
 
-export type SignatureFieldCoordsValue = SignatureFieldCoords | SignatureFieldCoords[];
+export type SignatureFieldCoordsValue =
+  | SignatureFieldCoords
+  | SignatureFieldCoords[];
 
 export interface ProposalSigningDocument {
   id: number;
@@ -28,6 +30,8 @@ export interface ProposalSigningDocument {
   original_filename: string;
   file_size: number;
   content_type: string;
+  /** Legacy rows may contain one box; multi-placement rows use array order
+   * as stamping order. */
   signature_field_coords?: SignatureFieldCoordsValue | null;
   date_field_coords?: SignatureFieldCoordsValue | null;
   signed_pdf_path?: string | null;

@@ -397,6 +397,21 @@ class TestSignatureFieldCoordsValidation:
         )
         assert resp.status_code == 422, resp.text
 
+    async def test_patch_rejects_empty_coords_array(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+    ):
+        user = await _make_user(db_session)
+        proposal = await _make_draft_proposal(db_session, user)
+
+        resp = await client.patch(
+            f"/api/proposals/{proposal.id}",
+            json={"signature_field_coords": []},
+            headers=_auth_headers(user),
+        )
+        assert resp.status_code == 422, resp.text
+
     async def test_patch_rejects_too_many_coords(
         self,
         client: AsyncClient,
@@ -558,3 +573,19 @@ class TestStampUsesConfiguredBox:
         assert _coords_for_stamper({"foo": "bar"}) is None
         # Empty dict is falsy → also None.
         assert _coords_for_stamper({}) is None
+
+    def test_array_coords_are_strict(self):
+        valid = {"page": 1, "x": 100.0, "y": 250.0, "w": 200.0, "h": 60.0}
+        assert _coords_for_stamper([valid]) == [
+            {
+                "page": 0,
+                "x": 100.0,
+                "y": 250.0,
+                "width": 200.0,
+                "height": 60.0,
+            }
+        ]
+        with pytest.raises(ValueError, match="At least one"):
+            _coords_for_stamper([])
+        with pytest.raises(ValueError, match="index 1"):
+            _coords_for_stamper([valid, {"page": 1, "x": "nope"}])

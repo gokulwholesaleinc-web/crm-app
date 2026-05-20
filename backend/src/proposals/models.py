@@ -90,6 +90,7 @@ class ProposalSigningDocument(Base, AuditableMixin):
     )
     pdf_path: Mapped[str] = mapped_column(Text, nullable=False)
     # JSON object for legacy one-box rows; JSON array for multi-placement rows.
+    # Array order is stamping order.
     signature_field_coords: Mapped[dict | list[dict] | None] = mapped_column(_SignatureCoords)
     date_field_coords: Mapped[dict | list[dict] | None] = mapped_column(_SignatureCoords)
     signed_pdf_path: Mapped[str | None] = mapped_column(Text)

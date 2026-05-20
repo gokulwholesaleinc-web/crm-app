@@ -38,7 +38,7 @@ class SignatureFieldCoords(BaseModel):
 
 SignatureFieldPlacementList: TypeAlias = Annotated[
     list[SignatureFieldCoords],
-    Field(max_length=100),
+    Field(min_length=1, max_length=100),
 ]
 SignatureFieldPlacementValue: TypeAlias = SignatureFieldCoords | SignatureFieldPlacementList
 

@@ -14,7 +14,11 @@ import pytest
 from pypdf import PdfReader, PdfWriter
 from reportlab.pdfgen import canvas
 
-from src.proposals.pdf_stamper import StampInputs, stamp_master_with_signature
+from src.proposals.pdf_stamper import (
+    StampInputs,
+    _resolve_signature_boxes,
+    stamp_master_with_signature,
+)
 
 # Minimal 1x1 RGB PNG. The previous RGBA constant decoded under older
 # Pillow but raises "broken data stream" on the version pinned in CI,
@@ -92,6 +96,29 @@ class TestStampMasterWithSignature:
         )
         assert PdfReader(io.BytesIO(out)).pages
 
+    def test_empty_signature_coord_list_is_rejected(self):
+        with pytest.raises(ValueError, match="signature coords list is empty"):
+            stamp_master_with_signature(_inputs(coords=[]))
+
+    def test_malformed_coord_list_dedupes_auto_box(self):
+        reader = PdfReader(io.BytesIO(_make_master_pdf(page_count=2)))
+        boxes = _resolve_signature_boxes(
+            reader,
+            [
+                {"page": 0, "x": "nope"},
+                {"page": 0, "x": "still-nope"},
+            ],
+        )
+        assert len(boxes) == 1
+
+    def test_out_of_range_signature_page_logs_clamp(self, caplog):
+        reader = PdfReader(io.BytesIO(_make_master_pdf(page_count=2)))
+        _resolve_signature_boxes(
+            reader,
+            [{"page": 99, "x": 72, "y": 120, "width": 120, "height": 48}],
+        )
+        assert "outside PDF page range" in caplog.text
+
     def test_audit_page_contains_signer_metadata(self):
         out = stamp_master_with_signature(_inputs())
         reader = PdfReader(io.BytesIO(out))
@@ -121,6 +148,19 @@ class TestStampMasterWithSignature:
             (page.extract_text() or "") for page in PdfReader(io.BytesIO(out_with_date)).pages[:-1]
         )
         assert "05-14-2026" in date_text
+
+    def test_empty_date_coord_list_skips_stamp(self):
+        out = stamp_master_with_signature(
+            _inputs(
+                coords={"page": 0, "x": 72, "y": 120, "width": 120, "height": 48},
+                date_coords=[],
+                date_label="05-14-2026",
+            ),
+        )
+        date_text = "\n".join(
+            (page.extract_text() or "") for page in PdfReader(io.BytesIO(out)).pages[:-1]
+        )
+        assert "05-14-2026" not in date_text
 
     def test_multiple_signature_and_date_boxes_render(self):
         out = stamp_master_with_signature(

@@ -443,7 +443,7 @@ export function SignatureFieldPicker({
                   const isDate = kind === 'date';
                   return (
                     <div
-                      key={`${kind}-${index ?? 'draft'}-${box.leftPx}-${box.topPx}`}
+                      key={`${kind}-${index ?? 'draft'}`}
                       className={`absolute pointer-events-none border-2 ${
                         isDate
                           ? 'border-emerald-500 bg-emerald-500/15'

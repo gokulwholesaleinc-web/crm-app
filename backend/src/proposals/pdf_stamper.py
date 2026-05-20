@@ -12,7 +12,8 @@ Inputs
   ``None`` triggers auto-detect to the last page bottom-right. A single
   coords payload that's missing ``x/y/width/height`` (or has invalid
   values) falls back to the bottom-right auto-box on the *requested*
-  ``page`` rather than the last page.
+  ``page`` rather than the last page. Multi-placement fallbacks are
+  de-duped so multiple malformed entries do not stack the same auto-box.
 * ``signer_*`` + ``signed_at`` + ``proposal_number``: rendered into
   the appended audit page so a printed copy is self-contained.
 
@@ -122,12 +123,27 @@ def _resolve_signature_boxes(
     reader: PdfReader,
     coords: dict[str, Any] | list[dict[str, Any]] | None,
 ) -> list[tuple[int, tuple[float, float, float, float]]]:
-    if not coords:
+    if coords is None or coords == {}:
         return [_auto_box(reader, len(reader.pages) - 1)]
     if isinstance(coords, list):
+        if not coords:
+            raise ValueError("signature coords list is empty")
         boxes = [_resolve_target_box(reader, item) for item in coords]
-        return boxes or [_auto_box(reader, len(reader.pages) - 1)]
+        return _dedupe_boxes(boxes)
     return [_resolve_target_box(reader, coords)]
+
+
+def _dedupe_boxes(
+    boxes: list[tuple[int, tuple[float, float, float, float]]],
+) -> list[tuple[int, tuple[float, float, float, float]]]:
+    unique: list[tuple[int, tuple[float, float, float, float]]] = []
+    seen: set[tuple[int, tuple[float, float, float, float]]] = set()
+    for box in boxes:
+        if box in seen:
+            continue
+        seen.add(box)
+        unique.append(box)
+    return unique
 
 
 def _resolve_target_box(
@@ -141,8 +157,17 @@ def _resolve_target_box(
     try:
         page = int(coords.get("page", page_count - 1))
     except (TypeError, ValueError):
+        logger.warning("Malformed signature coords page %r; using last page", coords)
         page = page_count - 1
+    requested_page = page
     page = max(0, min(page_count - 1, page))
+    if page != requested_page:
+        logger.warning(
+            "Signature coords page %s outside PDF page range 0-%s; clamped to %s",
+            requested_page,
+            page_count - 1,
+            page,
+        )
 
     target_page = reader.pages[page]
     page_w = float(target_page.mediabox.width)
@@ -178,7 +203,7 @@ def _resolve_date_boxes(
         boxes = [
             box for item in coords for box in [_resolve_date_box(reader, item)] if box is not None
         ]
-        return boxes or None
+        return _dedupe_boxes(boxes) or None
     box = _resolve_date_box(reader, coords)
     return None if box is None else [box]
 
@@ -207,7 +232,15 @@ def _resolve_date_box(
         logger.warning("Zero/negative date stamp dims %r; skipping date stamp", coords)
         return None
 
+    requested_page = page
     page = max(0, min(page_count - 1, page))
+    if page != requested_page:
+        logger.warning(
+            "Date coords page %s outside PDF page range 0-%s; clamped to %s",
+            requested_page,
+            page_count - 1,
+            page,
+        )
     target_page = reader.pages[page]
     page_w = float(target_page.mediabox.width)
     page_h = float(target_page.mediabox.height)

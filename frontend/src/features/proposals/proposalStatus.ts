@@ -201,7 +201,7 @@ export function buildProposalSendChecklist(
       !hasSignaturePlacements(proposal.date_field_coords))
   ) {
     items.push({
-      key: 'legacy_master_signature',
+      key: 'master_contract_signature',
       label: 'Master agreement needs signature and date placement',
       state: false,
       hint: 'Place signature and date areas on the uploaded master agreement before sending.',

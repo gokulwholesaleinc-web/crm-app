@@ -1,16 +1,54 @@
-import type { SignatureFieldCoords, SignatureFieldCoordsValue } from '../../types';
+import type {
+  SignatureFieldCoords,
+  SignatureFieldCoordsValue,
+} from '../../types';
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+export function isSignatureFieldCoords(
+  value: unknown,
+): value is SignatureFieldCoords {
+  if (!isRecord(value)) return false;
+  const { page, x, y, w, h } = value;
+  return (
+    typeof page === 'number' &&
+    Number.isInteger(page) &&
+    page >= 1 &&
+    typeof x === 'number' &&
+    Number.isFinite(x) &&
+    x >= 0 &&
+    typeof y === 'number' &&
+    Number.isFinite(y) &&
+    y >= 0 &&
+    typeof w === 'number' &&
+    Number.isFinite(w) &&
+    w > 0 &&
+    typeof h === 'number' &&
+    Number.isFinite(h) &&
+    h > 0
+  );
+}
 
 export function normalizeSignaturePlacements(
   value: SignatureFieldCoordsValue | null | undefined,
 ): SignatureFieldCoords[] {
   if (!value) return [];
-  return Array.isArray(value) ? value : [value];
+  return Array.isArray(value)
+    ? value.filter(isSignatureFieldCoords)
+    : isSignatureFieldCoords(value)
+      ? [value]
+      : [];
 }
 
 export function hasSignaturePlacements(
   value: SignatureFieldCoordsValue | null | undefined,
 ): boolean {
-  return normalizeSignaturePlacements(value).length > 0;
+  if (!value) return false;
+  return Array.isArray(value)
+    ? value.some(isSignatureFieldCoords)
+    : isSignatureFieldCoords(value);
 }
 
 export function formatSignaturePlacementSummary(
@@ -20,7 +58,9 @@ export function formatSignaturePlacementSummary(
 ): string {
   const placements = normalizeSignaturePlacements(value);
   if (placements.length === 0) return `no ${pluralLabel}`;
-  const pages = Array.from(new Set(placements.map((placement) => placement.page)))
+  const pages = Array.from(
+    new Set(placements.map((placement) => placement.page)),
+  )
     .sort((a, b) => a - b)
     .join(', ');
   return `${placements.length} ${placements.length === 1 ? singularLabel : pluralLabel} on page${
