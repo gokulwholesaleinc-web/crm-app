@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from html import escape
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import httpx
 from botocore.exceptions import ClientError
@@ -53,6 +54,13 @@ logger = logging.getLogger(__name__)
 _TEMPLATE_VAR_PATTERN = re.compile(r"\{\{(\w+)\}\}")
 
 
+class _UnsetType:
+    """Sentinel for distinguishing omitted PATCH fields from explicit nulls."""
+
+
+_UNSET = _UnsetType()
+
+
 def _coords_for_stamper(coords: dict | None) -> dict | None:
     """Translate the user-facing ``SignatureFieldCoords`` shape into
     the dict ``pdf_stamper`` consumes.
@@ -87,6 +95,17 @@ def _coords_for_stamper(coords: dict | None) -> dict | None:
         "width": coords.get("w"),
         "height": coords.get("h"),
     }
+
+
+def _signed_date_label(signed_at: datetime, signer_timezone: str | None) -> str:
+    """Format the signing date in the signer's local timezone."""
+    local_dt = signed_at
+    if signer_timezone:
+        try:
+            local_dt = signed_at.astimezone(ZoneInfo(signer_timezone))
+        except ZoneInfoNotFoundError:
+            logger.warning("Unknown signer timezone %r; using UTC for signed date", signer_timezone)
+    return local_dt.strftime("%m-%d-%Y")
 
 
 PROPOSAL_SORTABLE_FIELDS: dict[str, Any] = {
@@ -373,14 +392,18 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         proposal: Proposal,
         document: ProposalSigningDocument,
         *,
-        signature_field_coords: SignatureFieldCoords | dict | None,
+        signature_field_coords: SignatureFieldCoords | dict | None | _UnsetType = _UNSET,
+        date_field_coords: SignatureFieldCoords | dict | None | _UnsetType = _UNSET,
         user_id: int,
     ) -> ProposalSigningDocument:
         if proposal.signed_at is not None:
             raise ValueError(
                 "Cannot modify signing documents on a signed proposal — clone it instead",
             )
-        document.signature_field_coords = _coords_to_dict(signature_field_coords)
+        if not isinstance(signature_field_coords, _UnsetType):
+            document.signature_field_coords = _coords_to_dict(signature_field_coords)
+        if not isinstance(date_field_coords, _UnsetType):
+            document.date_field_coords = _coords_to_dict(date_field_coords)
         document.updated_by_id = user_id
         await self.db.flush()
         await self.db.refresh(document)
@@ -403,28 +426,44 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         for key in object_keys:
             await delete_object(key)
 
-    async def validate_signing_documents_ready(self, proposal: Proposal) -> None:
-        """Block send/sign when an uploaded signing PDF has no box."""
+    async def validate_signing_documents_ready(
+        self,
+        proposal: Proposal,
+        *,
+        require_date: bool = True,
+    ) -> None:
+        """Block send/sign when an uploaded signing PDF has incomplete placement."""
         documents = await self.list_signing_documents(proposal.id)
         incomplete = [
             doc.original_filename
             for doc in documents
-            if not doc.pdf_path or not doc.signature_field_coords
+            if (
+                not doc.pdf_path
+                or not doc.signature_field_coords
+                or (require_date and not doc.date_field_coords)
+            )
         ]
         if incomplete:
             names = ", ".join(incomplete[:3])
             if len(incomplete) > 3:
                 names = f"{names}, +{len(incomplete) - 3} more"
             raise ValueError(
-                "Place a signing area on every signing document before sending "
+                "Place signature and date areas on every signing document before sending "
                 f"({names})",
             )
 
         # Compatibility path for pre-multi-doc rows or old clients still
         # using /master-contract. New documents are validated above.
-        if not documents and proposal.master_contract_pdf_path and not proposal.signature_field_coords:
+        if (
+            not documents
+            and proposal.master_contract_pdf_path
+            and (
+                not proposal.signature_field_coords
+                or (require_date and not proposal.date_field_coords)
+            )
+        ):
             raise ValueError(
-                "Place a signing area on the master service agreement before sending",
+                "Place signature and date areas on the master service agreement before sending",
             )
 
     async def create(self, data: ProposalCreate, user_id: int) -> Proposal:
@@ -485,6 +524,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         agreed_to_terms: bool,
         signer_ip: str | None = None,
         signer_user_agent: str | None = None,
+        signer_timezone: str | None = None,
     ) -> Proposal:
         """Accept a proposal via the public Sign-to-Confirm modal.
 
@@ -549,6 +589,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 signer_email=normalized_signer_email,
                 signer_ip=signer_ip,
                 signer_user_agent=signer_user_agent,
+                signer_timezone=signer_timezone,
                 signed_at=now,
                 signature_image=signature_image,
             )
@@ -570,6 +611,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
             signer_ip=signer_ip,
             signer_user_agent=signer_user_agent,
             signed_at=now,
+            signer_timezone=signer_timezone,
         )
 
         # Mail the signer a signed PDF copy for their records.
@@ -609,6 +651,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         signer_ip: str | None,
         signer_user_agent: str | None,
         signed_at: datetime,
+        signer_timezone: str | None,
     ) -> None:
         documents = await self.list_signing_documents(proposal.id)
         if not documents:
@@ -617,6 +660,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 signer_ip=signer_ip,
                 signer_user_agent=signer_user_agent,
                 signed_at=signed_at,
+                signer_timezone=signer_timezone,
             )
             return
         if proposal.signature_image is None:
@@ -633,6 +677,8 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                         master_pdf=master_bytes,
                         signature_png=proposal.signature_image,
                         coords=_coords_for_stamper(document.signature_field_coords),
+                        date_coords=_coords_for_stamper(document.date_field_coords),
+                        date_label=_signed_date_label(signed_at, signer_timezone),
                         signer_name=proposal.signer_name or "",
                         signer_email=proposal.signer_email or "",
                         signer_ip=signer_ip,
@@ -709,6 +755,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         signer_ip: str | None,
         signer_user_agent: str | None,
         signed_at: datetime,
+        signer_timezone: str | None,
     ) -> None:
         """Stamp the drawn signature onto the master PDF + append an
         audit page, then upload the composite to R2 and persist the
@@ -732,6 +779,8 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                     master_pdf=master_bytes,
                     signature_png=proposal.signature_image,
                     coords=_coords_for_stamper(proposal.signature_field_coords),
+                    date_coords=_coords_for_stamper(proposal.date_field_coords),
+                    date_label=_signed_date_label(signed_at, signer_timezone),
                     signer_name=proposal.signer_name or "",
                     signer_email=proposal.signer_email or "",
                     signer_ip=signer_ip,
@@ -829,12 +878,13 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 "Proposal has no recorded signed_at timestamp",
             )
 
-        await self.validate_signing_documents_ready(proposal)
+        await self.validate_signing_documents_ready(proposal, require_date=False)
         await self._maybe_stamp_signing_documents(
             proposal,
             signer_ip=proposal.signer_ip,
             signer_user_agent=proposal.signer_user_agent,
             signed_at=proposal.signed_at,
+            signer_timezone=proposal.signer_timezone,
         )
         await self.db.refresh(proposal)
         return proposal

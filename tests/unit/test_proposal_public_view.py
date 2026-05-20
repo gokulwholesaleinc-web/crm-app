@@ -31,12 +31,19 @@ _ONE_PIXEL_PNG = bytes.fromhex(
 _SIG = "data:image/png;base64," + b64encode(_ONE_PIXEL_PNG).decode("ascii")
 
 
-def _sign(signer_name: str, signer_email: str, *, agreed: bool = True) -> dict:
+def _sign(
+    signer_name: str,
+    signer_email: str,
+    *,
+    agreed: bool = True,
+    signer_timezone: str | None = None,
+) -> dict:
     return {
         "signer_name": signer_name,
         "signer_email": signer_email,
         "signature_image": _SIG,
         "agreed_to_terms": agreed,
+        "signer_timezone": signer_timezone,
     }
 
 
@@ -89,7 +96,11 @@ class TestPublicProposalAccept:
         """signer_name + signer_email + signer_ip + signer_user_agent + signed_at all persisted."""
         response = await client.post(
             f"/api/proposals/public/{sent_proposal.public_token}/accept",
-            json=_sign("Jane Customer", test_contact.email),
+            json=_sign(
+                "Jane Customer",
+                test_contact.email,
+                signer_timezone="America/Chicago",
+            ),
             headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) SignTest/1.0"},
         )
         assert response.status_code == 200, response.text
@@ -101,6 +112,7 @@ class TestPublicProposalAccept:
         assert sent_proposal.signer_email == test_contact.email
         assert sent_proposal.signer_ip is not None
         assert sent_proposal.signer_user_agent == "Mozilla/5.0 (X11; Linux x86_64) SignTest/1.0"
+        assert sent_proposal.signer_timezone == "America/Chicago"
         assert sent_proposal.signed_at is not None
         assert sent_proposal.accepted_at is not None
 

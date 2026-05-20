@@ -1,11 +1,11 @@
-"""Per-token attachment-view ledger that gates the public accept flow.
+"""Per-token document-view ledgers that gate the public accept flow.
 
 A proposal can carry one or more PDF attachments (insurance certificates,
-SOWs, NDAs). The signer must open every attachment from the public link
-before they're allowed to accept. ``proposal_attachment_views`` records
-which attachments have been opened *for this token* — using the SHA-256
-hash of the public token rather than the raw token so the ledger is
-useless if the row is leaked.
+SOWs, NDAs) plus one or more signable PDFs. The signer must open every
+document from the public link before they're allowed to accept. The view
+tables record which documents have been opened *for this token* — using
+the SHA-256 hash of the public token rather than the raw token so the
+ledger is useless if a row is leaked.
 """
 
 from __future__ import annotations
@@ -30,6 +30,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from src.attachments.models import Attachment
 from src.database import Base
+from src.proposals.models import ProposalSigningDocument, ProposalSigningDocumentView
 
 
 def _hash_token(token: str) -> str:
@@ -133,3 +134,51 @@ async def get_unviewed_attachment_ids(
     )
     viewed_ids = {r[0] for r in viewed.all()}
     return [aid for aid in attachment_ids if aid not in viewed_ids]
+
+
+async def record_signing_document_view(
+    db: AsyncSession,
+    *,
+    document_id: int,
+    token: str,
+    ip_address: str | None = None,
+    user_agent: str | None = None,
+) -> None:
+    """Idempotently record a public-link view for a signable PDF."""
+    token_hash = _hash_token(token)
+    view = ProposalSigningDocumentView(
+        document_id=document_id,
+        token_hash=token_hash,
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
+    try:
+        async with db.begin_nested():
+            db.add(view)
+    except IntegrityError:
+        pass
+
+
+async def get_unviewed_signing_document_ids(
+    db: AsyncSession,
+    *,
+    proposal_id: int,
+    token: str,
+) -> list[int]:
+    """Return signable PDF ids not opened under this public token."""
+    token_hash = _hash_token(token)
+    rows = await db.execute(
+        select(ProposalSigningDocument.id)
+        .where(ProposalSigningDocument.proposal_id == proposal_id)
+    )
+    document_ids = [r[0] for r in rows.all()]
+    if not document_ids:
+        return []
+
+    viewed = await db.execute(
+        select(ProposalSigningDocumentView.document_id)
+        .where(ProposalSigningDocumentView.token_hash == token_hash)
+        .where(ProposalSigningDocumentView.document_id.in_(document_ids))
+    )
+    viewed_ids = {r[0] for r in viewed.all()}
+    return [doc_id for doc_id in document_ids if doc_id not in viewed_ids]

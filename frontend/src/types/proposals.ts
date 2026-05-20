@@ -27,6 +27,7 @@ export interface ProposalSigningDocument {
   file_size: number;
   content_type: string;
   signature_field_coords?: SignatureFieldCoords | null;
+  date_field_coords?: SignatureFieldCoords | null;
   signed_pdf_path?: string | null;
   signed_pdf_error?: string | null;
   display_order: number;
@@ -67,6 +68,9 @@ export interface ProposalBase extends ProposalBillingFields {
   /** Saved signature-box placement on the master contract. NULL =
    * stamper falls back to the auto-box on the last page. */
   signature_field_coords?: SignatureFieldCoords | null;
+  /** Saved date placement on the master contract. The signer date is
+   * stamped in MM-DD-YYYY using the signer's local timezone. */
+  date_field_coords?: SignatureFieldCoords | null;
 }
 
 export interface ProposalCreate extends ProposalBase {}
@@ -95,6 +99,9 @@ export interface ProposalUpdate {
   /** Visual signature-box placement on the master contract. Pass an
    * object to set, ``null`` to clear back to the auto-box default. */
   signature_field_coords?: SignatureFieldCoords | null;
+  /** Visual date placement on the master contract. Pass an object to set,
+   * ``null`` to clear. */
+  date_field_coords?: SignatureFieldCoords | null;
 }
 
 export interface ProposalView {
@@ -214,7 +221,8 @@ export interface ProposalAttachment {
 
 export interface ProposalAttachmentPublic {
   id: number;
-  original_filename: string;
+  filename: string;
+  original_filename?: string;
   file_size: number;
   viewed: boolean;
 }

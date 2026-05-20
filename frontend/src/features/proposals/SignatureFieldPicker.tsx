@@ -3,6 +3,8 @@ import {
   ArrowLeftIcon,
   ArrowRightIcon,
   ArrowPathIcon,
+  CalendarDaysIcon,
+  PencilSquareIcon,
 } from '@heroicons/react/24/outline';
 import { GlobalWorkerOptions, getDocument } from 'pdfjs-dist';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
@@ -17,13 +19,21 @@ GlobalWorkerOptions.workerSrc = pdfWorker;
 
 const RENDER_SCALE = 1.5;
 
+type PlacementKind = 'signature' | 'date';
+
+export interface SignatureFieldPlacements {
+  signatureFieldCoords: SignatureFieldCoords;
+  dateFieldCoords: SignatureFieldCoords;
+}
+
 interface SignatureFieldPickerProps {
   isOpen: boolean;
   onClose: () => void;
   /** Object URL or remote URL pointing at the master contract PDF bytes. */
   masterPdfUrl: string;
   currentCoords: SignatureFieldCoords | null;
-  onSave: (coords: SignatureFieldCoords) => Promise<void>;
+  currentDateCoords: SignatureFieldCoords | null;
+  onSave: (placements: SignatureFieldPlacements) => Promise<void>;
 }
 
 interface DrawnBox {
@@ -81,11 +91,16 @@ function pdfCoordsToBox(
   };
 }
 
+function placementLabel(kind: PlacementKind): string {
+  return kind === 'signature' ? 'Signature' : 'Date';
+}
+
 export function SignatureFieldPicker({
   isOpen,
   onClose,
   masterPdfUrl,
   currentCoords,
+  currentDateCoords,
   onSave,
 }: SignatureFieldPickerProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -97,17 +112,22 @@ export function SignatureFieldPicker({
   const [pageCount, setPageCount] = useState(0);
   const [pageIdx, setPageIdx] = useState(0);
   const [canvasSize, setCanvasSize] = useState<{ w: number; h: number } | null>(null);
-  const [box, setBox] = useState<DrawnBox | null>(null);
+  const [placements, setPlacements] = useState<{
+    signature: SignatureFieldCoords | null;
+    date: SignatureFieldCoords | null;
+  }>({ signature: currentCoords, date: currentDateCoords });
+  const [activeKind, setActiveKind] = useState<PlacementKind>('signature');
+  const [draftBox, setDraftBox] = useState<DrawnBox | null>(null);
   const [isLoadingDoc, setIsLoadingDoc] = useState(false);
   const [docError, setDocError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   // Held in a ref (not the dep array) so the doc-load effect doesn't
-  // re-fire when ``useProposal``'s 20 s polling produces a fresh
-  // ``currentCoords`` object on each refetch — a user mid-drag would
-  // otherwise watch their box reset every poll cycle.
-  const initialCoordsRef = useRef(currentCoords);
-  initialCoordsRef.current = currentCoords;
+  // re-fire when ``useProposal``'s 20 s polling produces fresh placement
+  // objects on each refetch — a user mid-drag would otherwise watch their
+  // boxes reset every poll cycle.
+  const initialCoordsRef = useRef({ currentCoords, currentDateCoords });
+  initialCoordsRef.current = { currentCoords, currentDateCoords };
 
   // (Re)load the document each time the modal opens with a fresh URL.
   useEffect(() => {
@@ -115,8 +135,12 @@ export function SignatureFieldPicker({
     let cancelled = false;
     setIsLoadingDoc(true);
     setDocError(null);
-    setBox(null);
+    setDraftBox(null);
     setCanvasSize(null);
+    setPlacements({
+      signature: initialCoordsRef.current.currentCoords,
+      date: initialCoordsRef.current.currentDateCoords,
+    });
 
     const loadingTask = getDocument(masterPdfUrl);
     loadingTask.promise
@@ -127,7 +151,9 @@ export function SignatureFieldPicker({
         }
         docRef.current = doc;
         setPageCount(doc.numPages);
-        const seed = initialCoordsRef.current;
+        const seed =
+          initialCoordsRef.current.currentCoords ??
+          initialCoordsRef.current.currentDateCoords;
         const initialIdx = seed
           ? clamp(seed.page - 1, 0, doc.numPages - 1)
           : 0;
@@ -183,24 +209,16 @@ export function SignatureFieldPicker({
         try {
           await task.promise;
         } catch (err) {
-          // pdf.js throws ``RenderingCancelledException`` when we
-          // cancel an in-flight render to draw a different page —
-          // that's expected. Any other error (corrupt PDF, OOM,
-          // worker crash) must surface, not silently leave a blank
-          // canvas + a Save button the user can never enable.
+          // pdf.js throws ``RenderingCancelledException`` when we cancel
+          // an in-flight render to draw a different page. Any other error
+          // must surface instead of leaving a blank canvas.
           const name = (err as { name?: string } | undefined)?.name;
           if (name === 'RenderingCancelledException') return;
           throw err;
         }
         if (cancelled) return;
         setCanvasSize({ w: viewport.width, h: viewport.height });
-
-        // Pre-fill the saved box only when we land on its page.
-        if (currentCoords && currentCoords.page - 1 === pageIdx) {
-          setBox(pdfCoordsToBox(currentCoords, viewport.height));
-        } else {
-          setBox(null);
-        }
+        setDraftBox(null);
       } catch (err) {
         if (cancelled) return;
         setDocError(
@@ -214,7 +232,7 @@ export function SignatureFieldPicker({
     return () => {
       cancelled = true;
     };
-  }, [pageIdx, isLoadingDoc, currentCoords]);
+  }, [pageIdx, isLoadingDoc]);
 
   // --- Drag handlers ----------------------------------------------
 
@@ -233,7 +251,7 @@ export function SignatureFieldPicker({
     overlayRef.current?.setPointerCapture(e.pointerId);
     const p = localPoint(e);
     dragOriginRef.current = p;
-    setBox({
+    setDraftBox({
       pageIdx,
       leftPx: p.x,
       topPx: p.y,
@@ -250,27 +268,42 @@ export function SignatureFieldPicker({
     const topPx = Math.min(origin.y, p.y);
     const widthPx = Math.abs(p.x - origin.x);
     const heightPx = Math.abs(p.y - origin.y);
-    setBox({ pageIdx, leftPx, topPx, widthPx, heightPx });
+    setDraftBox({ pageIdx, leftPx, topPx, widthPx, heightPx });
   };
 
   const handlePointerUp = (e: React.PointerEvent) => {
     overlayRef.current?.releasePointerCapture(e.pointerId);
     dragOriginRef.current = null;
+    if (!draftBox || !canvasSize || draftBox.widthPx <= 4 || draftBox.heightPx <= 4) {
+      setDraftBox(null);
+      return;
+    }
+    const pdfBox = boxToPdfCoords(draftBox, canvasSize.h);
+    setPlacements((curr) => ({
+      ...curr,
+      [activeKind]: {
+        page: draftBox.pageIdx + 1,
+        ...pdfBox,
+      },
+    }));
+    setDraftBox(null);
   };
 
   // --- Save / cancel ----------------------------------------------
 
-  const canSave =
-    !!box && !!canvasSize && box.widthPx > 4 && box.heightPx > 4 && !saving;
+  const canSave = Boolean(
+    placements.signature &&
+      placements.date &&
+      !saving,
+  );
 
   const handleSave = async () => {
-    if (!box || !canvasSize) return;
+    if (!placements.signature || !placements.date) return;
     setSaving(true);
     try {
-      const pdfBox = boxToPdfCoords(box, canvasSize.h);
       await onSave({
-        page: box.pageIdx + 1,
-        ...pdfBox,
+        signatureFieldCoords: placements.signature,
+        dateFieldCoords: placements.date,
       });
       onClose();
     } finally {
@@ -281,17 +314,33 @@ export function SignatureFieldPicker({
   const goPrev = () => setPageIdx((i) => Math.max(0, i - 1));
   const goNext = () => setPageIdx((i) => Math.min(pageCount - 1, i + 1));
 
+  const visibleBoxes: Array<{
+    kind: PlacementKind;
+    box: DrawnBox;
+  }> = [];
+  if (canvasSize) {
+    for (const kind of ['signature', 'date'] as const) {
+      const coords = placements[kind];
+      if (coords && coords.page - 1 === pageIdx) {
+        visibleBoxes.push({ kind, box: pdfCoordsToBox(coords, canvasSize.h) });
+      }
+    }
+  }
+  if (draftBox && draftBox.pageIdx === pageIdx) {
+    visibleBoxes.push({ kind: activeKind, box: draftBox });
+  }
+
   return (
     <Modal
       isOpen={isOpen}
       onClose={saving ? () => {} : onClose}
-      title="Place signature box"
-      description="Click and drag on the page to outline where the signer's signature should land."
+      title="Place signature and date"
+      description="Choose a field, then click and drag on the PDF page to outline where it should land."
       size="full"
       closeOnOverlayClick={!saving}
     >
       <div className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <Button
               type="button"
@@ -320,16 +369,30 @@ export function SignatureFieldPicker({
               <ArrowRightIcon className="h-4 w-4" aria-hidden="true" />
             </Button>
           </div>
-          {!currentCoords && (
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              No box placed — signature will land in the auto-box (bottom of last page).
-            </p>
-          )}
-          {currentCoords && (
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              Saved on page {currentCoords.page}.
-            </p>
-          )}
+
+          <div className="flex flex-wrap items-center gap-2">
+            <PlacementToggle
+              kind="signature"
+              activeKind={activeKind}
+              placed={Boolean(placements.signature)}
+              onClick={setActiveKind}
+            />
+            <PlacementToggle
+              kind="date"
+              activeKind={activeKind}
+              placed={Boolean(placements.date)}
+              onClick={setActiveKind}
+            />
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
+          <span>
+            Signature {placements.signature ? `page ${placements.signature.page}` : 'not placed'}
+          </span>
+          <span>
+            Date {placements.date ? `page ${placements.date.page}` : 'not placed'}
+          </span>
         </div>
 
         <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40 p-3 overflow-auto max-h-[70vh]">
@@ -352,7 +415,7 @@ export function SignatureFieldPicker({
             <div className="relative inline-block">
               <canvas
                 ref={canvasRef}
-                aria-label="Master contract page — click and drag to draw a signature box"
+                aria-label="Master contract page — click and drag to draw the active field"
                 className="block bg-white shadow-sm"
               />
               <div
@@ -364,18 +427,34 @@ export function SignatureFieldPicker({
                 className="absolute inset-0 cursor-crosshair touch-none"
                 style={{ touchAction: 'none' }}
               >
-                {box && box.pageIdx === pageIdx && (
-                  <div
-                    className="absolute border-2 border-primary-500 bg-primary-500/15 pointer-events-none"
-                    style={{
-                      left: `${box.leftPx}px`,
-                      top: `${box.topPx}px`,
-                      width: `${box.widthPx}px`,
-                      height: `${box.heightPx}px`,
-                    }}
-                    aria-hidden="true"
-                  />
-                )}
+                {visibleBoxes.map(({ kind, box }, index) => {
+                  const isDate = kind === 'date';
+                  return (
+                    <div
+                      key={`${kind}-${index}`}
+                      className={`absolute pointer-events-none border-2 ${
+                        isDate
+                          ? 'border-emerald-500 bg-emerald-500/15'
+                          : 'border-primary-500 bg-primary-500/15'
+                      }`}
+                      style={{
+                        left: `${box.leftPx}px`,
+                        top: `${box.topPx}px`,
+                        width: `${box.widthPx}px`,
+                        height: `${box.heightPx}px`,
+                      }}
+                      aria-hidden="true"
+                    >
+                      <span
+                        className={`absolute -top-5 left-0 rounded px-1.5 py-0.5 text-[10px] font-medium text-white ${
+                          isDate ? 'bg-emerald-600' : 'bg-primary-600'
+                        }`}
+                      >
+                        {placementLabel(kind)}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -402,5 +481,40 @@ export function SignatureFieldPicker({
         </ModalFooter>
       </div>
     </Modal>
+  );
+}
+
+interface PlacementToggleProps {
+  kind: PlacementKind;
+  activeKind: PlacementKind;
+  placed: boolean;
+  onClick: (kind: PlacementKind) => void;
+}
+
+function PlacementToggle({
+  kind,
+  activeKind,
+  placed,
+  onClick,
+}: PlacementToggleProps) {
+  const isActive = kind === activeKind;
+  const Icon = kind === 'signature' ? PencilSquareIcon : CalendarDaysIcon;
+  return (
+    <button
+      type="button"
+      onClick={() => onClick(kind)}
+      className={`inline-flex items-center gap-1.5 rounded border px-3 py-1.5 text-sm font-medium transition-colors ${
+        isActive
+          ? 'border-primary-500 bg-primary-50 text-primary-700 dark:border-primary-400 dark:bg-primary-950/30 dark:text-primary-300'
+          : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700'
+      }`}
+      aria-pressed={isActive}
+    >
+      <Icon className="h-4 w-4" aria-hidden="true" />
+      {placementLabel(kind)}
+      <span className={placed ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-300'}>
+        {placed ? 'set' : 'needed'}
+      </span>
+    </button>
   );
 }

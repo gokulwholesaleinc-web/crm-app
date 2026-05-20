@@ -45,6 +45,7 @@ class ProposalSigningDocumentResponse(BaseModel):
     file_size: int
     content_type: str
     signature_field_coords: SignatureFieldCoords | None = None
+    date_field_coords: SignatureFieldCoords | None = None
     signed_pdf_path: str | None = None
     signed_pdf_error: str | None = None
     display_order: int
@@ -56,6 +57,7 @@ class ProposalSigningDocumentResponse(BaseModel):
 
 class ProposalSigningDocumentUpdate(BaseModel):
     signature_field_coords: SignatureFieldCoords | None = None
+    date_field_coords: SignatureFieldCoords | None = None
 
 
 class ProposalBillingMixin(BaseModel):
@@ -146,6 +148,7 @@ class ProposalUpdate(BaseModel):
     # ``exclude_unset=True`` in the service layer means an absent field
     # leaves the existing value alone.
     signature_field_coords: SignatureFieldCoords | None = None
+    date_field_coords: SignatureFieldCoords | None = None
 
     @model_validator(mode="after")
     def _check_billing_consistency(self) -> "ProposalUpdate":
@@ -190,6 +193,7 @@ class ProposalAcceptRequest(BaseModel):
     signer_email: EmailStr
     signature_image: str = Field(min_length=1, max_length=400_000)
     agreed_to_terms: bool
+    signer_timezone: str | None = Field(default=None, max_length=100)
 
 
 class ProposalRejectRequest(BaseModel):
@@ -254,6 +258,7 @@ class ProposalResponse(ProposalBase):
     # when the stamper should auto-detect (bottom-right of last page).
     # Surfaced so the picker UI can re-open with the saved box drawn.
     signature_field_coords: SignatureFieldCoords | None = None
+    date_field_coords: SignatureFieldCoords | None = None
     signing_documents: list[ProposalSigningDocumentResponse] = []
     terms_and_conditions: str | None = None
     created_at: datetime
@@ -303,6 +308,17 @@ class ProposalAttachmentPublicItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ProposalSigningDocumentPublicItem(BaseModel):
+    """One signable PDF exposed on the public proposal view."""
+
+    id: int
+    filename: str
+    file_size: int
+    viewed: bool = False
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class ProposalBranding(BaseModel):
     """Tenant branding data for public proposal view."""
     company_name: str | None = None
@@ -344,10 +360,8 @@ class ProposalPublicResponse(BaseModel):
     company: CompanyBrief | None = None
     contact: ContactBrief | None = None
     branding: ProposalBranding | None = None
-    # Public-side attachment list. Surfaced for review; opening
-    # everything is no longer a precondition to signing (Lorenzo's
-    # 2026-05-14 ask — the T&C card inside the signing modal replaces
-    # the forced-PDF-open gate).
+    # Public-side attachment list. Customers must open every proposal
+    # document before the public accept endpoint allows signing.
     attachments: list[ProposalAttachmentPublicItem] = []
     # Resolved T&C body for the Sign-to-Confirm modal — proposal
     # override if set, else tenant default. NULL = no T&C card.
@@ -358,6 +372,10 @@ class ProposalPublicResponse(BaseModel):
     # the master PDF and returns a downloadable countersigned copy.
     has_master_contract: bool = False
     signing_document_count: int = 0
+    signing_documents: list[ProposalSigningDocumentPublicItem] = Field(
+        default_factory=list,
+        validation_alias=AliasChoices("public_signing_documents"),
+    )
 
     model_config = ConfigDict(from_attributes=True)
 

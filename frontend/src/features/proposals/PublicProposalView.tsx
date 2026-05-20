@@ -57,6 +57,7 @@ interface PublicProposal {
   contact: { id: number; full_name: string } | null;
   branding: ProposalBranding | null;
   attachments?: ProposalAttachmentPublic[];
+  signing_documents?: ProposalAttachmentPublic[];
   // Sign-to-Confirm modal inputs — resolved server-side so the modal
   // doesn't have to chain another fetch on open.
   terms_and_conditions: string | null;
@@ -95,7 +96,7 @@ function PublicProposalView() {
   // a transition — the next polled refetch may also flip `viewed`, but
   // local state is the source of truth for the gate.
   const [viewedIds, setViewedIds] = useState<Set<number>>(() => new Set());
-  const seededViewedIdsRef = useRef(false);
+  const [viewedSigningDocumentIds, setViewedSigningDocumentIds] = useState<Set<number>>(() => new Set());
   const signSectionElRef = useRef<HTMLElement | null>(null);
   const signObserverRef = useRef<IntersectionObserver | null>(null);
   const esignConsentRef = useRef<HTMLDetailsElement | null>(null);
@@ -164,19 +165,20 @@ function PublicProposalView() {
     fetchProposal();
   }, [fetchProposal]);
 
-  // One-shot seed of viewedIds from the server-side `viewed` flag the
-  // first time the proposal lands. Guarded by a ref so the periodic poll
-  // (which replaces `proposal` with a fresh response) never overwrites
-  // the customer's locally-clicked attachments.
+  // Reconcile local "opened" state from the server-side view ledger each
+  // time the public proposal is fetched. Opens are still marked
+  // optimistically for instant feedback, but this authoritative pass
+  // clears a blocked-popup or failed-download false positive before sign.
   useEffect(() => {
-    if (!proposal || seededViewedIdsRef.current) return;
-    seededViewedIdsRef.current = true;
+    if (!proposal) return;
     const initial = (proposal.attachments ?? [])
       .filter((a) => a.viewed)
       .map((a) => a.id);
-    if (initial.length > 0) {
-      setViewedIds(new Set(initial));
-    }
+    const initialSigningDocuments = (proposal.signing_documents ?? [])
+      .filter((d) => d.viewed)
+      .map((d) => d.id);
+    setViewedIds(new Set(initial));
+    setViewedSigningDocumentIds(new Set(initialSigningDocuments));
   }, [proposal]);
 
   // The signing modal links to #esign-consent in a new tab; the footer
@@ -227,6 +229,7 @@ function PublicProposalView() {
             signer_email: email,
             signature_image: signatureDataUrl,
             agreed_to_terms: agreedToTerms,
+            signer_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
           },
         );
         setProposal(response.data);
@@ -316,15 +319,24 @@ function PublicProposalView() {
     new Date(proposal.valid_until) < new Date();
 
   const attachments = proposal.attachments ?? [];
+  const signingDocuments = proposal.signing_documents ?? [];
 
   const handleAttachmentViewed = (id: number) => {
     // startTransition so the section re-render is treated as
-    // non-urgent (the new-tab open is the urgent feedback). The
-    // viewedIds set is no longer a sign gate; it just marks which
-    // attachments the customer has already opened so the UI can dim
-    // their "Open" affordance.
+    // non-urgent (the new-tab open is the urgent feedback).
     startTransition(() => {
       setViewedIds((curr) => {
+        if (curr.has(id)) return curr;
+        const next = new Set(curr);
+        next.add(id);
+        return next;
+      });
+    });
+  };
+
+  const handleSigningDocumentViewed = (id: number) => {
+    startTransition(() => {
+      setViewedSigningDocumentIds((curr) => {
         if (curr.has(id)) return curr;
         const next = new Set(curr);
         next.add(id);
@@ -339,6 +351,10 @@ function PublicProposalView() {
     !actionDone;
 
   const recipientEmail = proposal.designated_signer_email ?? '';
+  const unopenedDocumentCount =
+    attachments.filter((attachment) => !viewedIds.has(attachment.id)).length +
+    signingDocuments.filter((document) => !viewedSigningDocumentIds.has(document.id)).length;
+  const allRequiredDocumentsOpened = unopenedDocumentCount === 0;
 
   const validUntilDate = proposal.valid_until
     ? formatDate(proposal.valid_until, 'long')
@@ -476,6 +492,20 @@ function PublicProposalView() {
           />
         )}
 
+        {token && (
+          <ProposalAttachmentsSection
+            attachments={signingDocuments}
+            token={token}
+            accent={secondary}
+            documentKind="signing-documents"
+            title="Signing Documents"
+            description="Open each agreement document before signing. Your signature and date will be applied after acceptance."
+            viewedIds={viewedSigningDocumentIds}
+            onViewed={handleSigningDocumentViewed}
+            onReconcile={fetchProposal}
+          />
+        )}
+
         {/* Pricing — highlighted block, business-standard */}
         {hasPricingBlock && (
           <section className="mt-10 sm:mt-12">
@@ -552,15 +582,28 @@ function PublicProposalView() {
               </p>
             )}
 
+            {!allRequiredDocumentsOpened && (
+              <p
+                role="status"
+                className="mb-4 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2"
+              >
+                Open every document before signing. {unopenedDocumentCount} remaining.
+              </p>
+            )}
+
             <div className="flex flex-col sm:flex-row gap-3">
               <button
                 type="button"
                 aria-label="Open the signing dialog to accept this proposal"
                 onClick={() => {
                   setSignError(null);
+                  if (!allRequiredDocumentsOpened) {
+                    setSignError(`Open every document before signing (${unopenedDocumentCount} remaining).`);
+                    return;
+                  }
                   setSignModalOpen(true);
                 }}
-                disabled={actionPending}
+                disabled={actionPending || !allRequiredDocumentsOpened}
                 className="inline-flex items-center justify-center gap-2 rounded px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50 transition-opacity"
                 style={{ backgroundColor: accent, outlineColor: accent }}
               >

@@ -15,6 +15,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -87,6 +88,7 @@ class ProposalSigningDocument(Base, AuditableMixin):
     )
     pdf_path: Mapped[str] = mapped_column(Text, nullable=False)
     signature_field_coords: Mapped[dict | None] = mapped_column(_SignatureCoords)
+    date_field_coords: Mapped[dict | None] = mapped_column(_SignatureCoords)
     signed_pdf_path: Mapped[str | None] = mapped_column(Text)
     signed_pdf_error: Mapped[str | None] = mapped_column(Text)
     display_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
@@ -103,6 +105,37 @@ class ProposalSigningDocument(Base, AuditableMixin):
             "display_order",
             "id",
         ),
+    )
+
+
+class ProposalSigningDocumentView(Base):
+    """Per-public-token view row for signable PDFs."""
+
+    __tablename__ = "proposal_signing_document_views"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    document_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("proposal_signing_documents.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    viewed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    ip_address: Mapped[str | None] = mapped_column(String(45))
+    user_agent: Mapped[str | None] = mapped_column(Text)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "document_id",
+            "token_hash",
+            name="uq_proposal_signing_document_views_doc_token",
+        ),
+        Index("ix_proposal_signing_document_views_token_hash", "token_hash"),
+        Index("ix_proposal_signing_document_views_document", "document_id"),
     )
 
 
@@ -201,6 +234,7 @@ class Proposal(Base, AuditableMixin):
     signer_email: Mapped[str | None] = mapped_column(String(255))
     signer_ip: Mapped[str | None] = mapped_column(String(45))
     signer_user_agent: Mapped[str | None] = mapped_column(Text)
+    signer_timezone: Mapped[str | None] = mapped_column(String(100))
     signed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     rejection_reason: Mapped[str | None] = mapped_column(Text)
     # Optional override for who may sign. NULL falls back to contact.email.
@@ -221,6 +255,8 @@ class Proposal(Base, AuditableMixin):
     # width:float, height:float}`` in PDF points (origin = bottom-left).
     # NULL = auto-detect (last page, bottom-right).
     signature_field_coords: Mapped[dict | None] = mapped_column(_SignatureCoords)
+    # Where in the master PDF to stamp the signer's local date in MM-DD-YYYY.
+    date_field_coords: Mapped[dict | None] = mapped_column(_SignatureCoords)
     # R2 key of the stamped + audit-appended signed PDF.
     signed_pdf_path: Mapped[str | None] = mapped_column(Text)
     # Most-recent stamp/upload failure from ``_maybe_stamp_master_pdf``.

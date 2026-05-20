@@ -343,11 +343,14 @@ export const uploadProposalSigningDocument = async (
 export const updateProposalSigningDocument = async (
   proposalId: number,
   documentId: number,
-  signatureFieldCoords: SignatureFieldCoords | null,
+  placements: {
+    signature_field_coords?: SignatureFieldCoords | null;
+    date_field_coords?: SignatureFieldCoords | null;
+  },
 ): Promise<ProposalSigningDocument> => {
   const response = await apiClient.patch<ProposalSigningDocument>(
     `${PROPOSALS_BASE}/${proposalId}/signing-documents/${documentId}`,
-    { signature_field_coords: signatureFieldCoords },
+    placements,
   );
   return response.data;
 };

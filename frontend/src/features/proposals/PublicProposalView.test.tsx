@@ -42,9 +42,11 @@ const baseProposal = {
 };
 
 beforeEach(() => {
+  vi.restoreAllMocks();
   vi.clearAllMocks();
   mockGet.mockReset();
   mockPost.mockReset();
+  vi.spyOn(window, 'open').mockImplementation(() => null);
 });
 
 describe('PublicProposalView', () => {
@@ -156,6 +158,54 @@ describe('PublicProposalView', () => {
     expect(
       screen.getByRole('button', { name: /Decline this proposal/i }),
     ).toBeInTheDocument();
+  });
+
+  it('requires opening public documents before enabling Sign to Accept', async () => {
+    mockGet.mockResolvedValue({
+      data: {
+        ...baseProposal,
+        attachments: [
+          { id: 11, filename: 'scope.pdf', file_size: 1200, viewed: false },
+        ],
+        signing_documents: [
+          { id: 22, filename: 'agreement.pdf', file_size: 2200, viewed: false },
+        ],
+      },
+    });
+    renderAt();
+    await waitFor(() => screen.getByRole('heading', { level: 1 }));
+
+    const signButton = screen.getByRole('button', {
+      name: /Open the signing dialog to accept this proposal/i,
+    });
+    expect(signButton).toBeDisabled();
+    expect(screen.getByText(/Open every document before signing\. 2 remaining/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Open scope\.pdf/i }));
+    expect(screen.getByText(/1 remaining/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Open agreement\.pdf/i }));
+    expect(signButton).not.toBeDisabled();
+  });
+
+  it('keeps Sign to Accept enabled when server says all documents were opened', async () => {
+    mockGet.mockResolvedValue({
+      data: {
+        ...baseProposal,
+        attachments: [
+          { id: 11, filename: 'scope.pdf', file_size: 1200, viewed: true },
+        ],
+        signing_documents: [
+          { id: 22, filename: 'agreement.pdf', file_size: 2200, viewed: true },
+        ],
+      },
+    });
+    renderAt();
+    await waitFor(() => screen.getByRole('heading', { level: 1 }));
+
+    expect(
+      screen.getByRole('button', { name: /Open the signing dialog to accept this proposal/i }),
+    ).not.toBeDisabled();
   });
 
   // Note: "Sign to Accept" opens SignToConfirmModal — its own test

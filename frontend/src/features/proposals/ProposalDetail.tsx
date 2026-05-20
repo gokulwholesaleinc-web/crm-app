@@ -37,6 +37,7 @@ import { ProposalAuditCard } from './ProposalAuditCard';
 const SignatureFieldPicker = lazy(() =>
   import('./SignatureFieldPicker').then((m) => ({ default: m.SignatureFieldPicker })),
 );
+import type { SignatureFieldPlacements } from './SignatureFieldPicker';
 import { ProposalForm } from './ProposalForm';
 import { StatusTimeline } from '../../components/shared/StatusTimeline';
 import { SendChecklist } from '../../components/shared/SendChecklist';
@@ -308,7 +309,7 @@ function ProposalDetailPage() {
   const sendDisabledTitle = !proposalRecipient
     ? 'Set a designated signer email or attach a contact with an email before sending'
     : signingDocsBlockSend
-      ? 'Place a signing area on every uploaded signing document before sending'
+      ? 'Place signature and date areas on every uploaded signing document before sending'
       : undefined;
   const canAcceptReject = proposal.status === 'sent' || proposal.status === 'viewed';
   const canEdit = ['draft', 'sent', 'viewed'].includes(proposal.status ?? '');
@@ -728,6 +729,7 @@ function ProposalDetailPage() {
                   <SignaturePlacementCard
                     proposalId={proposal.id}
                     currentCoords={proposal.signature_field_coords ?? null}
+                    currentDateCoords={proposal.date_field_coords ?? null}
                     isLocked={Boolean(proposal.signed_at)}
                   />
                 </div>
@@ -1091,7 +1093,9 @@ function SigningDocumentsCard({
     }
   }, [pdfUrl]);
 
-  const incompleteDocs = documents.filter((doc) => !doc.signature_field_coords);
+  const incompleteDocs = documents.filter(
+    (doc) => !doc.signature_field_coords || !doc.date_field_coords,
+  );
 
   const validateFiles = (files: File[]): string | null => {
     const invalid = files.find((file) => file.type && file.type !== 'application/pdf');
@@ -1190,14 +1194,17 @@ function SigningDocumentsCard({
     }
   };
 
-  const savePlacement = async (coords: SignatureFieldCoords) => {
+  const savePlacement = async (placements: SignatureFieldPlacements) => {
     if (!placingDoc) return;
     try {
-      await updateProposalSigningDocument(proposalId, placingDoc.id, coords);
-      showSuccess('Signing area saved');
+      await updateProposalSigningDocument(proposalId, placingDoc.id, {
+        signature_field_coords: placements.signatureFieldCoords,
+        date_field_coords: placements.dateFieldCoords,
+      });
+      showSuccess('Signature and date areas saved');
       onChanged();
     } catch (err) {
-      showError(extractApiErrorDetail(err) ?? 'Failed to save signing area');
+      showError(extractApiErrorDetail(err) ?? 'Failed to save signing areas');
       throw err;
     }
   };
@@ -1228,7 +1235,7 @@ function SigningDocumentsCard({
       </div>
       <ol className="mt-3 space-y-1 text-xs text-gray-600 dark:text-gray-300">
         <li>1. Upload every PDF that needs the client&rsquo;s signature.</li>
-        <li>2. Open each PDF and draw the signing area where signature and date should land.</li>
+        <li>2. Open each PDF and draw where the signature and date should land.</li>
         <li>3. Send unlocks only when every uploaded signing document is ready.</li>
       </ol>
 
@@ -1285,7 +1292,7 @@ function SigningDocumentsCard({
         <div className="mt-4 flex items-start gap-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
           <ExclamationTriangleIcon className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden="true" />
           <p>
-            Place a signing area on {incompleteDocs[0]?.original_filename ?? 'the first document'}
+            Place signature and date areas on {incompleteDocs[0]?.original_filename ?? 'the first document'}
             {incompleteDocs.length > 1 ? ` and ${incompleteDocs.length - 1} more` : ''} before sending.
           </p>
         </div>
@@ -1308,7 +1315,7 @@ function SigningDocumentsCard({
       ) : (
         <ul className="mt-4 divide-y divide-gray-200 dark:divide-gray-700 border border-gray-200 dark:border-gray-700 rounded">
           {documents.map((document) => {
-            const ready = Boolean(document.signature_field_coords);
+            const ready = Boolean(document.signature_field_coords && document.date_field_coords);
             return (
               <li key={document.id} className="px-3 py-3">
                 <div className="flex items-start justify-between gap-3">
@@ -1318,9 +1325,9 @@ function SigningDocumentsCard({
                     </p>
                     <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400 tabular-nums">
                       {formatFileSize(document.file_size)}
-                      {document.signature_field_coords
-                        ? ` · signing area page ${document.signature_field_coords.page}`
-                        : ' · needs signing area'}
+                      {ready
+                        ? ` · signature page ${document.signature_field_coords?.page}, date page ${document.date_field_coords?.page}`
+                        : ' · needs signature and date areas'}
                     </p>
                     {document.signed_pdf_error && (
                       <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
@@ -1335,7 +1342,7 @@ function SigningDocumentsCard({
                         : 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300'
                     }`}
                   >
-                    {ready ? 'Ready' : 'Needs area'}
+                    {ready ? 'Ready' : 'Needs areas'}
                   </span>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
@@ -1357,7 +1364,7 @@ function SigningDocumentsCard({
                     disabled={isLocked}
                     isLoading={viewingId === `${document.id}-place`}
                   >
-                    {ready ? 'Edit area' : 'Place area'}
+                    {ready ? 'Edit areas' : 'Place areas'}
                   </Button>
                   {document.signed_pdf_path && (
                     <Button
@@ -1394,6 +1401,7 @@ function SigningDocumentsCard({
             onClose={closePicker}
             masterPdfUrl={pdfUrl}
             currentCoords={placingDoc.signature_field_coords ?? null}
+            currentDateCoords={placingDoc.date_field_coords ?? null}
             onSave={savePlacement}
           />
         </Suspense>
@@ -1637,6 +1645,7 @@ function MasterContractCard({
 interface SignaturePlacementCardProps {
   proposalId: number;
   currentCoords: SignatureFieldCoords | null;
+  currentDateCoords: SignatureFieldCoords | null;
   isLocked: boolean;
 }
 
@@ -1650,6 +1659,7 @@ interface SignaturePlacementCardProps {
 function SignaturePlacementCard({
   proposalId,
   currentCoords,
+  currentDateCoords,
   isLocked,
 }: SignaturePlacementCardProps) {
   const [isPickerOpen, setIsPickerOpen] = useState(false);
@@ -1690,12 +1700,16 @@ function SignaturePlacementCard({
     }
   };
 
-  const handleSave = async (coords: SignatureFieldCoords) => {
+  const handleSave = async (placements: SignatureFieldPlacements) => {
     try {
-      await updateCoordsMutation.mutateAsync({ proposalId, coords });
-      showSuccess('Signature box saved');
+      await updateCoordsMutation.mutateAsync({
+        proposalId,
+        coords: placements.signatureFieldCoords,
+        dateCoords: placements.dateFieldCoords,
+      });
+      showSuccess('Signature and date boxes saved');
     } catch (err) {
-      showError(extractApiErrorDetail(err) ?? 'Failed to save signature box');
+      showError(extractApiErrorDetail(err) ?? 'Failed to save signature and date boxes');
       throw err;
     }
   };
@@ -1707,8 +1721,12 @@ function SignaturePlacementCard({
       </h2>
       <p className="text-sm text-gray-700 dark:text-gray-300">
         {currentCoords
-          ? `Box placed on page ${currentCoords.page}.`
-          : 'No box placed — signature will land in the auto-box (bottom of last page).'}
+          ? `Signature placed on page ${currentCoords.page}.`
+          : 'No signature box placed.'}
+        {' '}
+        {currentDateCoords
+          ? `Date placed on page ${currentDateCoords.page}.`
+          : 'No date box placed.'}
       </p>
       <div className="mt-3">
         <Button
@@ -1719,7 +1737,7 @@ function SignaturePlacementCard({
           disabled={isLocked}
           isLoading={loadingPdf}
         >
-          {currentCoords ? 'Edit placement' : 'Place signature'}
+          {currentCoords && currentDateCoords ? 'Edit placements' : 'Place signature and date'}
         </Button>
         {isLocked && (
           <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
@@ -1734,6 +1752,7 @@ function SignaturePlacementCard({
             onClose={handleClose}
             masterPdfUrl={pdfUrl}
             currentCoords={currentCoords}
+            currentDateCoords={currentDateCoords}
             onSave={handleSave}
           />
         </Suspense>
