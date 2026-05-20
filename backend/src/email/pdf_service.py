@@ -195,7 +195,7 @@ class BrandedPDFGenerator:
 
         Expected proposal_data keys:
             proposal_title, client_name, date, sections
-            (list of {title, content}), total, currency, terms
+            (list of {title, content}), terms
         """
         primary = escape(branding.get("primary_color", "#6366f1"))
         secondary = escape(branding.get("secondary_color", "#8b5cf6"))
@@ -203,8 +203,6 @@ class BrandedPDFGenerator:
         title = escape(str(proposal_data.get("proposal_title", "Proposal")))
         client = escape(str(proposal_data.get("client_name", "")))
         date_str = escape(str(proposal_data.get("date", "")))
-        currency = escape(str(proposal_data.get("currency", "USD")))
-        total = escape(str(proposal_data.get("total", "")))
         logo_url = branding.get("logo_url", "")
 
         logo = ""
@@ -253,16 +251,6 @@ class BrandedPDFGenerator:
                 f'</div>'
             )
 
-        # Investment
-        investment = ""
-        if total:
-            investment = (
-                f'<div style="margin:24px 0;padding:16px;background:#f0fdf4;border-radius:6px;text-align:center;">'
-                f'<p style="margin:0;font-size:13px;color:#6b7280;">Total Investment</p>'
-                f'<p style="margin:4px 0 0;font-size:28px;font-weight:700;color:#111827;">{currency} {total}</p>'
-                f'</div>'
-            )
-
         terms = escape(str(proposal_data.get("terms", "")))
         terms_block = (
             f'<div style="margin-top:24px;padding:12px;background:#f9fafb;border-radius:4px;font-size:12px;color:#6b7280;">'
@@ -270,7 +258,7 @@ class BrandedPDFGenerator:
             if terms else ""
         )
 
-        html = cover + toc + sections_html + investment + terms_block + self._footer_html(branding, page_numbers=True)
+        html = cover + toc + sections_html + terms_block + self._footer_html(branding, page_numbers=True)
         return self._wrap_document(html, title).encode("utf-8")
 
     # ------------------------------------------------------------------

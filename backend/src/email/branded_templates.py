@@ -785,14 +785,12 @@ def render_proposal_email(branding: dict, proposal_data: dict) -> tuple[str, str
     """Returns (subject, html_body) for proposal emails.
 
     Expected proposal_data keys:
-        proposal_title, client_name, summary, total, currency, view_url (optional)
+        proposal_title, client_name, summary, view_url (optional)
     """
     company = escape(branding.get("company_name", "CRM"))
     title = escape(str(proposal_data.get("proposal_title", "Proposal")))
     client = escape(str(proposal_data.get("client_name", "")))
     summary = escape(str(proposal_data.get("summary", "")))
-    total = escape(str(proposal_data.get("total", "")))
-    currency = escape(str(proposal_data.get("currency", "USD")))
 
     body_html = f"""\
 <p>Hi {client},</p>
@@ -801,7 +799,6 @@ def render_proposal_email(branding: dict, proposal_data: dict) -> tuple[str, str
   <p style="margin:0 0 8px;font-size:14px;color:#6b7280;">Summary</p>
   <p style="margin:0;font-size:15px;">{summary}</p>
 </div>
-<p style="font-size:16px;font-weight:700;">Proposed investment: {currency} {total}</p>
 <p>Ready to move forward? Click the button below to review and accept.</p>"""
 
     subject = f"Proposal: {title} from {company}"
@@ -1328,7 +1325,7 @@ def render_proposal_signed_email(
 {''.join(rows)}
 </tbody>
 </table>
-<p style="color:#6b7280;font-size:13px;">If billing is configured the next step (Stripe invoice or checkout) is automatically queued.</p>"""
+<p style="color:#6b7280;font-size:13px;">The signed proposal is attached for your records.</p>"""
 
     subject = f"Proposal signed — {data.get('proposal_title') or 'Proposal'}"
     html = render_branded_email(

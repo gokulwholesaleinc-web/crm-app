@@ -78,8 +78,6 @@ function installEntityHandlers() {
   );
 }
 
-const amountInput = () => screen.getByRole('spinbutton', { name: /^Amount$/i });
-
 function renderCreateForm(props: Partial<ComponentProps<typeof ProposalForm>> = {}) {
   return renderWithProviders(
     <ProposalForm {...baseProps} {...props} />,
@@ -119,8 +117,8 @@ describe('ProposalForm local drafts', () => {
     fireEvent.change(screen.getByLabelText(/Title/i), {
       target: { value: 'Website redesign proposal' },
     });
-    fireEvent.change(amountInput(), {
-      target: { value: '12000' },
+    fireEvent.change(screen.getByLabelText(/Pricing Notes/i), {
+      target: { value: 'Package options and assumptions' },
     });
 
     act(() => {
@@ -136,10 +134,7 @@ describe('ProposalForm local drafts', () => {
         formData: {
           title: 'Website redesign proposal',
           contactId: 1,
-        },
-        billing: {
-          amount: '12000',
-          currency: 'USD',
+          pricingSection: 'Package options and assumptions',
         },
       },
     });
@@ -160,13 +155,6 @@ describe('ProposalForm local drafts', () => {
         validUntil: '',
         termsAndConditions: '',
       },
-      billing: {
-        payment_type: 'one_time',
-        recurring_interval: null,
-        recurring_interval_count: null,
-        amount: '4500',
-        currency: 'USD',
-      },
     });
 
     renderCreateForm();
@@ -175,7 +163,7 @@ describe('ProposalForm local drafts', () => {
     fireEvent.click(screen.getByRole('button', { name: /Resume/i }));
 
     expect(screen.getByLabelText(/Title/i)).toHaveValue('Recovered proposal');
-    expect(amountInput()).toHaveValue(4500);
+    expect(screen.getByLabelText(/Content/i)).toHaveValue('Saved body');
   });
 
   it('does not render the signing-documents picker in the create modal', () => {
@@ -199,13 +187,6 @@ describe('ProposalForm local drafts', () => {
         terms: '',
         validUntil: '',
         termsAndConditions: '',
-      },
-      billing: {
-        payment_type: 'one_time',
-        recurring_interval: null,
-        recurring_interval_count: null,
-        amount: '4500',
-        currency: 'USD',
       },
     });
 
@@ -298,13 +279,6 @@ describe('ProposalForm local drafts', () => {
         terms: '',
         validUntil: '',
         termsAndConditions: '',
-      },
-      billing: {
-        payment_type: 'one_time',
-        recurring_interval: null,
-        recurring_interval_count: null,
-        amount: '4500',
-        currency: 'USD',
       },
     });
     window.localStorage.setItem('unrelated-key', 'keep');
@@ -408,13 +382,6 @@ describe('ProposalForm local drafts', () => {
         validUntil: '',
         termsAndConditions: '',
       },
-      billing: {
-        payment_type: 'one_time',
-        recurring_interval: null,
-        recurring_interval_count: null,
-        amount: '',
-        currency: 'USD',
-      },
     });
 
     renderWithProviders(
@@ -424,9 +391,6 @@ describe('ProposalForm local drafts', () => {
         initialData={{
           title: 'Server proposal',
           contact_id: 1,
-          payment_type: 'one_time',
-          amount: '99',
-          currency: 'USD',
         }}
       />,
     );

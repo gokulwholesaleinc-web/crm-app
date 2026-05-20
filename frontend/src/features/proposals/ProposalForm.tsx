@@ -3,7 +3,6 @@ import { useSearchParams } from 'react-router-dom';
 import { Button, SearchableSelect } from '../../components/ui';
 import { MissingRelationDialog } from '../../components/shared/MissingRelationDialog';
 import { useMissingRelationConfirm } from '../../hooks/useMissingRelationConfirm';
-import BillingTermsField, { type BillingTermsValue } from '../../components/forms/BillingTermsField';
 import { useContacts } from '../../hooks/useContacts';
 import { useCompanies } from '../../hooks/useCompanies';
 import { useFormSubmitShortcut } from '../../hooks/useSubmitShortcut';
@@ -77,18 +76,7 @@ export function ProposalForm({
     termsAndConditions: initialData?.terms_and_conditions ?? '',
   });
 
-  const buildInitialBilling = (): BillingTermsValue => ({
-    payment_type: initialData?.payment_type ?? 'one_time',
-    recurring_interval: initialData?.recurring_interval ?? null,
-    recurring_interval_count: initialData?.recurring_interval_count ?? null,
-    amount: initialData?.amount != null ? String(initialData.amount) : '',
-    currency: initialData?.currency ?? 'USD',
-  });
-
   const [formData, setFormData] = useState<ProposalFormDraftFields>(buildInitialFormData);
-
-  // Billing terms (pre-cast amount to string for the controlled input).
-  const [billing, setBilling] = useState<BillingTermsValue>(buildInitialBilling);
 
   // `touched` flips true on first edit; drives the beforeunload warning.
   // ProposalForm uses `useState` so we can't lean on react-hook-form's
@@ -140,8 +128,8 @@ export function ProposalForm({
   };
 
   const currentDraftValue = useMemo<ProposalFormDraftValue>(
-    () => ({ formData, billing }),
-    [billing, formData],
+    () => ({ formData }),
+    [formData],
   );
 
   useEffect(() => {
@@ -189,7 +177,6 @@ export function ProposalForm({
   const handleResumeDraft = () => {
     if (!draftPrompt) return;
     setFormData(draftPrompt.value.formData);
-    setBilling(draftPrompt.value.billing);
     setLastSavedAt(draftPrompt.updatedAt);
     setDraftPrompt(null);
     markTouched();
@@ -251,7 +238,6 @@ export function ProposalForm({
     e.preventDefault();
     if (formDisabled) return;
 
-    const amountTrimmed = billing.amount.trim();
     const data: ProposalCreate = {
       title: formData.title,
       content: formData.content || null,
@@ -264,11 +250,6 @@ export function ProposalForm({
       status: 'draft',
       contact_id: formData.contactId,
       company_id: formData.companyId,
-      payment_type: billing.payment_type,
-      recurring_interval: billing.recurring_interval,
-      recurring_interval_count: billing.recurring_interval_count,
-      amount: amountTrimmed === '' ? null : amountTrimmed,
-      currency: billing.currency,
       terms_and_conditions: formData.termsAndConditions.trim() || null,
     };
 
@@ -284,11 +265,6 @@ export function ProposalForm({
     } catch {
       // Parent submitters own the toast/error text. Keep the local draft.
     }
-  };
-
-  const handleBillingChange = (next: BillingTermsValue) => {
-    setBilling(next);
-    markTouched({ discardPrompt: true });
   };
 
   return (
@@ -424,25 +400,6 @@ export function ProposalForm({
             onChange={(e) => updateField('scopeOfWork', e.target.value)}
             className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
             placeholder="Scope of work details..."
-          />
-        </div>
-
-        <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4 bg-gray-50 dark:bg-gray-800/40 space-y-4">
-          <div>
-            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-              Reference pricing
-            </h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-              Used in the proposal body for the customer's reference. Billing is
-              created manually in the Payments module after the customer signs —
-              this never auto-charges.
-            </p>
-          </div>
-          <BillingTermsField
-            value={billing}
-            onChange={handleBillingChange}
-            disabled={formDisabled}
-            amountHelpText="Total amount (one-time) or per-period amount (subscription). For display only."
           />
         </div>
 

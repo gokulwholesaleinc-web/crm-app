@@ -187,7 +187,7 @@ class Proposal(Base, AuditableMixin):
     # `awaiting_payment` is the brief window between e-sign and Stripe
     # webhook confirming payment; it lets the UI show "Invoice sent,
     # waiting on payment" instead of just "Accepted" for deals that have
-    # billing wired up. `paid` is terminal.
+    # payment wired up. `paid` is terminal.
     status: Mapped[str] = mapped_column(String(20), default="draft", nullable=False)
 
     # Content sections
@@ -201,16 +201,14 @@ class Proposal(Base, AuditableMixin):
     # Validity
     valid_until: Mapped[date | None] = mapped_column(Date)
 
-    # Structured pricing. Used when the rep clicks Retry Billing or
-    # Resend Payment Link — acceptance itself no longer auto-spawns
-    # Stripe (Lorenzo 2026-05-14). `pricing_section` (free-text, below)
-    # remains for human-readable detail but is not used for billing
-    # math.
+    # Legacy structured payment fields. Payments are now created from the
+    # Payments module; these remain for old records and explicit retry paths.
+    # `pricing_section` (free-text, below) remains for human-readable detail.
     #   payment_type: 'one_time' | 'subscription'
     #   recurring_interval: 'month' | 'year' (only when subscription)
     #   recurring_interval_count: 1 = monthly/yearly, 3 = quarterly,
     #                             6 = bi-yearly, etc.
-    #   amount: total in currency major units (e.g. 500.00 USD)
+    #   amount: total in currency major units
     payment_type: Mapped[str] = mapped_column(
         String(20), default="one_time", nullable=False
     )

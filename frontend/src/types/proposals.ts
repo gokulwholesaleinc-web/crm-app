@@ -36,12 +36,12 @@ export interface ProposalSigningDocument {
 }
 
 export interface ProposalBillingFields {
-  payment_type: PaymentType;
+  payment_type?: PaymentType;
   /** Stripe-native unit. 'month' + count=3 = quarterly, count=6 = bi-yearly. */
   recurring_interval?: RecurringInterval | null;
   recurring_interval_count?: number | null;
   amount?: string | number | null;
-  currency: string;
+  currency?: string;
 }
 
 export interface ProposalBase extends ProposalBillingFields {

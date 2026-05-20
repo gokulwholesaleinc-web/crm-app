@@ -5,7 +5,6 @@ import axios from 'axios';
 import { sanitizeHexColor, withAlpha } from '../../utils/colorValidation';
 import { useForceLightMode } from '../../hooks/useForceLightMode';
 import { formatDate } from '../../utils/formatters';
-import { cadenceLabel, formatProposalMoney } from './billing';
 import { setPublicPageMeta } from './publicMeta';
 import { ProposalAttachmentsSection } from './ProposalAttachmentsSection';
 import type { ProposalAttachmentPublic } from '../../types';
@@ -48,11 +47,6 @@ interface PublicProposal {
   terms: string | null;
   valid_until: string | null;
   status: string;
-  payment_type: 'one_time' | 'subscription';
-  recurring_interval: 'month' | 'year' | null;
-  recurring_interval_count: number | null;
-  amount: string | number | null;
-  currency: string;
   company: { id: number; name: string } | null;
   contact: { id: number; full_name: string } | null;
   branding: ProposalBranding | null;
@@ -364,11 +358,7 @@ function PublicProposalView() {
     ? formatDate(proposal.valid_until, 'long')
     : null;
 
-  const formattedAmount = formatProposalMoney(proposal.amount, proposal.currency);
-  const cadence = proposal.payment_type === 'subscription'
-    ? cadenceLabel(proposal.recurring_interval, proposal.recurring_interval_count)
-    : null;
-  const hasPricingBlock = Boolean(formattedAmount || proposal.pricing_section);
+  const hasPricingNotes = Boolean(proposal.pricing_section);
 
   const statusPill = actionDone ?? (
     proposal.status === 'accepted' ? 'accepted'
@@ -510,52 +500,24 @@ function PublicProposalView() {
           />
         )}
 
-        {/* Pricing — highlighted block, business-standard */}
-        {hasPricingBlock && (
+        {hasPricingNotes && (
           <section className="mt-10 sm:mt-12">
             <PlainSectionHeader
-              title={proposal.payment_type === 'subscription' ? 'Engagement & Fees' : 'Fees'}
+              title="Pricing Notes"
               accent={primary}
             />
-
-            {formattedAmount && (
-              <div
-                className="rounded-lg border p-5 mb-4 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3"
-                style={{ borderColor: withAlpha(secondary, '40'), backgroundColor: withAlpha(secondary, '14') }}
-              >
-                <div>
-                  <div className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">
-                    {proposal.payment_type === 'subscription' ? 'Recurring fee' : 'Total'}
-                  </div>
-                  <div
-                    className="text-3xl sm:text-4xl font-semibold text-gray-900 dark:text-gray-100 tabular-nums"
-                    style={{ letterSpacing: '-0.01em' }}
-                  >
-                    {formattedAmount}
-                  </div>
-                </div>
-                {cadence && (
-                  <div className="text-sm text-gray-600 dark:text-gray-300">
-                    billed <span className="font-medium text-gray-900 dark:text-gray-100">{cadence.toLowerCase()}</span>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {proposal.pricing_section && (
-              <div className="prose-body">
-                <p className="whitespace-pre-wrap text-pretty break-words">
-                  {proposal.pricing_section}
-                </p>
-              </div>
-            )}
+            <div className="prose-body">
+              <p className="whitespace-pre-wrap text-pretty break-words">
+                {proposal.pricing_section}
+              </p>
+            </div>
           </section>
         )}
 
         {/* Content fallback */}
         {proposal.content &&
           contentSections.length === 0 &&
-          !hasPricingBlock && (
+          !hasPricingNotes && (
             <section className="mt-10 sm:mt-12">
               <PlainSectionHeader title="Proposal" accent={primary} />
               <div className="prose-body">

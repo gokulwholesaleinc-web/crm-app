@@ -277,7 +277,7 @@ class ProposalResponse(ProposalBase):
     # Per-view audit trail: every public-link GET appends a row with
     # IP + user-agent + timestamp. Surfaced on the detail response so
     # the CRM can show "viewed 12 times from 3 IPs" + the raw log for
-    # forensics / billing disputes.
+    # forensics, dispute resolution, and legal discovery.
     views: list[ProposalViewResponse] = []
 
     model_config = ConfigDict(from_attributes=True)
@@ -346,17 +346,6 @@ class ProposalPublicResponse(BaseModel):
     terms: str | None = None
     valid_until: date | None = None
     status: str
-    payment_type: PaymentType = "one_time"
-    recurring_interval: RecurringInterval | None = None
-    recurring_interval_count: int | None = None
-    amount: Decimal | None = None
-    currency: str = "USD"
-    # Payment URL is only populated after the client accepts and the
-    # backend spawns a Stripe Invoice / Checkout Session. Surfaced here
-    # so the public page can render a "Complete payment" CTA without a
-    # second network round-trip.
-    stripe_payment_url: str | None = None
-    paid_at: datetime | None = None
     company: CompanyBrief | None = None
     contact: ContactBrief | None = None
     branding: ProposalBranding | None = None

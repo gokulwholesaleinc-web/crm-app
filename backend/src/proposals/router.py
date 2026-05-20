@@ -1625,9 +1625,9 @@ async def duplicate_proposal(
 ):
     """Clone a proposal as a new draft.
 
-    Copies core content + billing fields, appends " (copy)" to the title,
-    and clears all e-sign / Stripe / sent timestamps. The clone is owned
-    by the requesting user.
+    Copies core proposal content, appends " (copy)" to the title, and clears
+    all e-sign / Stripe / sent timestamps. The clone is owned by the requesting
+    user.
     """
     service = ProposalService(db)
     proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
@@ -1650,11 +1650,6 @@ async def duplicate_proposal(
         contact_id=proposal.contact_id,
         company_id=proposal.company_id,
         quote_id=proposal.quote_id,
-        payment_type=proposal.payment_type,
-        recurring_interval=proposal.recurring_interval,
-        recurring_interval_count=proposal.recurring_interval_count,
-        amount=proposal.amount,
-        currency=proposal.currency,
         designated_signer_email=proposal.designated_signer_email,
         status="draft",
     )

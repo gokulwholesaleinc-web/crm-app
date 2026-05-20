@@ -6,7 +6,7 @@ import type { Proposal } from '../../types';
  * + the public-link view log. Everything shown here is already
  * captured in the DB (Proposal.signer_* fields + ProposalView rows) —
  * this component just exposes it so the CRM user has a paper trail
- * for billing disputes, dispute resolution, and legal discovery.
+ * for dispute resolution and legal discovery.
  */
 
 interface ProposalAuditCardProps {

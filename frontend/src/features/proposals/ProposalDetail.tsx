@@ -581,7 +581,7 @@ function ProposalDetailPage() {
         {/* Main Content — each section is inline-editable via pencil
             icon; the original "open the entire edit modal to tweak two
             sentences in Scope" friction is gone. The modal still owns
-            related-record reassignment + billing changes. */}
+            related-record reassignment and valid_until. */}
         <div className="lg:col-span-2 space-y-6" data-guide="proposal-detail-sections">
           {!hasAnyContent && canEdit && (
             <div className="rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600 bg-gray-50/50 dark:bg-gray-800/40 p-8 text-center" data-guide="proposal-detail-empty-state">
@@ -625,7 +625,7 @@ function ProposalDetailPage() {
               value={proposal.pricing_section ?? null}
               onSave={(v) => handleSectionSave('pricing_section', v)}
               canEdit={canEdit}
-              placeholder="Line-item breakdown, assumptions, anything beyond the structured amount on the right."
+              placeholder="Line-item breakdowns, assumptions, or other pricing context."
             />
           </div>
           <div data-guide="proposal-detail-timeline">
@@ -732,8 +732,7 @@ function ProposalDetailPage() {
           </div>
 
           {/* E-sign + view audit trail. Signer name/email/IP/UA +
-              timestamp on accept, plus the full public-link view log
-              for forensics and billing disputes. */}
+              timestamp on accept, plus the full public-link view log. */}
           <div data-guide="proposal-detail-audit">
             <ProposalAuditCard proposal={proposal} />
           </div>
@@ -819,7 +818,7 @@ function ProposalDetailPage() {
       </div>
 
       {/* Edit Proposal Modal — reuses ProposalForm so edit exposes every
-          field create does (related records, billing, valid_until, etc.).
+          field create does (related records, valid_until, etc.).
           `key` forces a remount per proposal version so the form picks
           up server-side mutations (e.g. signed_at landing). */}
       <Modal
@@ -842,11 +841,6 @@ function ProposalDetailPage() {
             valid_until: proposal.valid_until ?? null,
             contact_id: proposal.contact?.id ?? null,
             company_id: proposal.company?.id ?? null,
-            payment_type: proposal.payment_type,
-            recurring_interval: proposal.recurring_interval,
-            recurring_interval_count: proposal.recurring_interval_count,
-            amount: proposal.amount,
-            currency: proposal.currency,
             terms_and_conditions: proposal.terms_and_conditions ?? null,
           }}
           proposalId={proposal.id}

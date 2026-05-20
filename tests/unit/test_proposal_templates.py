@@ -600,6 +600,9 @@ class TestPublicViewBranding:
         assert data["timeline"] == "Q1 2026"
         assert data["terms"] == "Standard terms apply"
         assert data["cover_letter"] is not None
+        assert "amount" not in data
+        assert "currency" not in data
+        assert "stripe_payment_url" not in data
 
     @pytest.mark.asyncio
     async def test_public_view_branding_has_footer_text(

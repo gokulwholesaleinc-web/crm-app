@@ -1,5 +1,4 @@
 import { safeStorage } from '../../utils/safeStorage';
-import type { BillingTermsValue } from '../../components/forms/BillingTermsField';
 
 const VERSION = 'v1';
 const KEY_PREFIX = 'crm_proposal_draft:';
@@ -22,7 +21,6 @@ export interface ProposalFormDraftFields {
 
 export interface ProposalFormDraftValue {
   formData: ProposalFormDraftFields;
-  billing: BillingTermsValue;
 }
 
 export interface ProposalFormDraftRecord {
@@ -72,36 +70,11 @@ function sanitizeFormData(raw: unknown): ProposalFormDraftFields | null {
   };
 }
 
-function sanitizeBilling(raw: unknown): BillingTermsValue | null {
-  if (!isPlainObject(raw)) return null;
-  const paymentType = raw.payment_type === 'subscription' ? 'subscription' : 'one_time';
-  const interval =
-    raw.recurring_interval === 'month' || raw.recurring_interval === 'year'
-      ? raw.recurring_interval
-      : null;
-  const intervalCount =
-    typeof raw.recurring_interval_count === 'number' &&
-    Number.isFinite(raw.recurring_interval_count)
-      ? raw.recurring_interval_count
-      : null;
-  return {
-    payment_type: paymentType,
-    recurring_interval: interval,
-    recurring_interval_count: intervalCount,
-    amount:
-      typeof raw.amount === 'string' || typeof raw.amount === 'number'
-        ? String(raw.amount)
-        : '',
-    currency: typeof raw.currency === 'string' && raw.currency ? raw.currency : 'USD',
-  };
-}
-
 function sanitizeDraftValue(raw: unknown): ProposalFormDraftValue | null {
   if (!isPlainObject(raw)) return null;
   const formData = sanitizeFormData(raw.formData);
-  const billing = sanitizeBilling(raw.billing);
-  if (!formData || !billing) return null;
-  return { formData, billing };
+  if (!formData) return null;
+  return { formData };
 }
 
 function sanitizeRecord(raw: unknown): ProposalFormDraftRecord | null {
@@ -171,16 +144,11 @@ export function isProposalFormDraftEmpty(value: ProposalFormDraftValue): boolean
     value.formData.terms,
     value.formData.validUntil,
     value.formData.termsAndConditions,
-    value.billing.amount,
   ];
   return (
     textValues.every((entry) => String(entry ?? '').trim() === '') &&
     value.formData.contactId == null &&
-    value.formData.companyId == null &&
-    value.billing.payment_type === 'one_time' &&
-    value.billing.recurring_interval == null &&
-    value.billing.recurring_interval_count == null &&
-    (value.billing.currency || 'USD') === 'USD'
+    value.formData.companyId == null
   );
 }
 

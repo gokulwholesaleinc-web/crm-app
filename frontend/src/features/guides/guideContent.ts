@@ -275,7 +275,7 @@ export const GUIDE_REGISTRY: readonly Guide[] = [
     steps: [
       {
         title: 'Create the proposal',
-        body: 'Start from a blank proposal or template. Pricing is reference-only; billing is created manually after the customer signs.',
+        body: 'Start from a blank proposal or template. Add proposal sections, optional pricing notes, and signing PDFs.',
         action: 'click Create Proposal, then fill the proposal body and optional signing PDFs.',
         selector: target('proposals-header'),
       },

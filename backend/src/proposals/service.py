@@ -6,7 +6,6 @@ import logging
 import re
 import secrets
 from datetime import UTC, datetime
-from decimal import Decimal
 from html import escape
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -1012,8 +1011,6 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
             "proposal_title": proposal.title,
             "client_name": contact.first_name if hasattr(contact, "first_name") else str(contact),
             "summary": proposal.executive_summary or proposal.content or "",
-            "total": proposal.pricing_section or "",
-            "currency": "USD",
             "view_url": view_url,
         }
         subject, html_body = render_proposal_email(branding, proposal_data)
@@ -1140,53 +1137,6 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 f'<span class="tabular">{escape(date_str)}</span></p>'
             )
 
-        # ---------- Structured pricing block ----------
-        pricing_block_html = ""
-        cadence_label_map = {
-            ("month", 1): "Monthly",
-            ("month", 3): "Quarterly",
-            ("month", 6): "Bi-yearly",
-            ("year", 1): "Yearly",
-        }
-        amount = getattr(proposal, "amount", None)
-        currency = (getattr(proposal, "currency", None) or "USD").upper()
-        is_subscription_pricing = False
-        if amount is not None:
-            try:
-                amount_val = Decimal(str(amount))
-            except (ArithmeticError, ValueError, TypeError):
-                amount_val = None  # type: ignore[assignment]
-            if amount_val is not None and amount_val > 0:
-                symbol = {"USD": "$", "EUR": "€", "GBP": "£", "CAD": "$", "AUD": "$"}.get(currency, "")
-                num_str = f"{amount_val:,.2f}"
-                display_amount = f"{symbol}{num_str}" if symbol else f"{currency} {num_str}"
-
-                payment_type = getattr(proposal, "payment_type", "one_time")
-                interval = getattr(proposal, "recurring_interval", None)
-                interval_count = getattr(proposal, "recurring_interval_count", None) or 1
-                is_subscription_pricing = payment_type == "subscription" and bool(interval)
-                cadence_text = ""
-                if is_subscription_pricing and interval:
-                    cadence_text = cadence_label_map.get(
-                        (interval, interval_count),
-                        f"Every {interval_count} {interval}{'s' if interval_count > 1 else ''}",
-                    )
-
-                label = "Recurring fee" if is_subscription_pricing else "Total"
-                cadence_cell = (
-                    f'<td class="pricing-cadence">billed {escape(cadence_text.lower())}</td>'
-                    if cadence_text else ""
-                )
-                pricing_block_html = f"""
-<table class="pricing-block" cellpadding="0" cellspacing="0"><tr>
-  <td>
-    <div class="pricing-label">{escape(label)}</div>
-    <div class="pricing-amount tabular">{escape(display_amount)}</div>
-  </td>
-  {cadence_cell}
-</tr></table>
-"""
-
         # ---------- Content sections ----------
         section_data = [
             ("Executive Summary", proposal.executive_summary),
@@ -1213,20 +1163,19 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 f'<p class="doc-prose">{escape(content)}</p>',
             )
 
-        # Pricing section — standard heading + pricing block + optional notes
+        # Pricing notes stay as authored text; proposal amount/currency fields
+        # are no longer rendered on customer-facing proposal artifacts.
         pricing_free_text = proposal.pricing_section
-        if pricing_block_html or pricing_free_text:
-            title_text = "Engagement & Fees" if is_subscription_pricing else "Fees"
-            body = pricing_block_html
-            if pricing_free_text:
-                body += f'<p class="doc-prose">{escape(pricing_free_text)}</p>'
-            sections_html += _section(escape(title_text), body)
+        if pricing_free_text:
+            sections_html += _section(
+                "Pricing Notes",
+                f'<p class="doc-prose">{escape(pricing_free_text)}</p>',
+            )
 
         # Fallback `content` block if nothing structured was filled in
         if (
             proposal.content
             and not populated_content
-            and not pricing_block_html
             and not pricing_free_text
         ):
             sections_html += _section(
@@ -1419,38 +1368,6 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
     margin: 0 0 10pt;
     white-space: pre-wrap;
     max-width: 44em;
-  }}
-
-  /* ---------- Pricing block (simple bordered table) ---------- */
-  .pricing-block {{
-    width: 100%;
-    max-width: 40em;
-    border: 0.75pt solid {accent}40;
-    background: {accent}0a;
-    margin: 8pt 0 14pt;
-  }}
-  .pricing-block td {{
-    padding: 12pt 16pt;
-    vertical-align: middle;
-  }}
-  .pricing-label {{
-    font-size: 8.5pt;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: #6b7280;
-    margin-bottom: 4pt;
-  }}
-  .pricing-amount {{
-    font-size: 22pt;
-    font-weight: 600;
-    color: #0f172a;
-    letter-spacing: -0.01em;
-    line-height: 1.1;
-  }}
-  .pricing-cadence {{
-    text-align: right;
-    font-size: 10pt;
-    color: #4b5563;
   }}
 
   /* ---------- Signatory section ---------- */

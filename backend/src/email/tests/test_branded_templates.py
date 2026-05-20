@@ -524,28 +524,37 @@ class TestProposalEmailTone:
     def test_hi_greeting(self):
         _, html = render_proposal_email(
             _default_branding(),
-            {"proposal_title": "Q3 Campaign", "client_name": "Alex", "summary": "s", "total": "5000", "currency": "USD"},
+            {"proposal_title": "Q3 Campaign", "client_name": "Alex", "summary": "s"},
         )
         assert "Hi Alex" in html
 
     def test_no_dear_greeting(self):
         _, html = render_proposal_email(
             _default_branding(),
-            {"proposal_title": "Q3 Campaign", "client_name": "Alex", "summary": "s", "total": "5000", "currency": "USD"},
+            {"proposal_title": "Q3 Campaign", "client_name": "Alex", "summary": "s"},
         )
         assert "Dear Alex" not in html
 
     def test_ready_to_move_forward_copy(self):
         _, html = render_proposal_email(
             _default_branding(),
-            {"proposal_title": "Q3 Campaign", "client_name": "Alex", "summary": "s", "total": "5000", "currency": "USD"},
+            {"proposal_title": "Q3 Campaign", "client_name": "Alex", "summary": "s"},
         )
         assert "Ready to move forward" in html
+
+    def test_no_proposed_investment_amount(self):
+        _, html = render_proposal_email(
+            _default_branding(),
+            {"proposal_title": "Q3 Campaign", "client_name": "Alex", "summary": "s", "total": "5000", "currency": "USD"},
+        )
+        assert "Proposed investment" not in html
+        assert "5000" not in html
+        assert "USD" not in html
 
     def test_no_we_look_forward(self):
         _, html = render_proposal_email(
             _default_branding(),
-            {"proposal_title": "Q3 Campaign", "client_name": "Alex", "summary": "s", "total": "5000", "currency": "USD"},
+            {"proposal_title": "Q3 Campaign", "client_name": "Alex", "summary": "s"},
         )
         assert "We look forward to discussing" not in html
 

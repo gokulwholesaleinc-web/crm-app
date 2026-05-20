@@ -159,8 +159,8 @@ export const SECTIONS: Section[] = [
               <em> Create Proposal</em>.
             </Step>
             <Step n={2}>
-              Fill in the sections, pick the contact and company, add reference pricing if useful,
-              and optionally upload one or more signable PDFs. Reference pricing never auto-charges.
+              Fill in the sections, pick the contact and company, add pricing notes if useful,
+              and optionally upload one or more signable PDFs.
             </Step>
             <Step n={3}>
               Open the proposal detail page and place a signing area on every uploaded signing PDF.

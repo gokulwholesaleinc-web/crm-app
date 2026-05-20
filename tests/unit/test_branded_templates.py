@@ -60,8 +60,6 @@ SAMPLE_PROPOSAL = {
     "proposal_title": "CRM Implementation Plan",
     "client_name": "Jane Doe",
     "summary": "Comprehensive CRM rollout for 50 users including training and data migration.",
-    "total": "85,000.00",
-    "currency": "USD",
     "view_url": "https://app.acme.com/proposals/P-001",
 }
 
@@ -300,14 +298,15 @@ class TestRenderProposalEmail:
     """Tests for proposal-specific branded email rendering."""
 
     def test_renders_proposal_correctly(self):
-        """Should render proposal title, client name, summary, and total in the email."""
+        """Should render proposal title, client name, and summary in the email."""
         subject, html = render_proposal_email(SAMPLE_BRANDING, SAMPLE_PROPOSAL)
 
         assert "CRM Implementation Plan" in subject
         assert "Acme Corp" in subject
         assert "Jane Doe" in html
         assert "Comprehensive CRM rollout" in html
-        assert "85,000.00" in html
+        assert "Proposed investment" not in html
+        assert "USD" not in html
 
     def test_proposal_has_view_button(self):
         """Should include a View Proposal button linking to the proposal URL."""
@@ -437,8 +436,6 @@ class TestBrandedPDFGenerator:
                 {"title": "Executive Summary", "content": "Overview of our approach."},
                 {"title": "Pricing", "content": "Competitive rates."},
             ],
-            "total": "120,000.00",
-            "currency": "USD",
             "terms": "Payment on milestones",
         }
 
@@ -450,7 +447,9 @@ class TestBrandedPDFGenerator:
         assert "Bob Corp" in html
         assert "Executive Summary" in html
         assert "Pricing" in html
-        assert "120,000.00" in html
+        assert "Total Investment" not in html
+        assert "120,000.00" not in html
+        assert "USD" not in html
         assert "Table of Contents" in html
         assert "Acme Corp" in html
 
@@ -958,6 +957,8 @@ class TestProposalSignedEmail:
         assert "Q3 Engagement" in html
         assert "Jane Cooper" in html
         assert "https://crm.example.com/proposals/9" in html
+        assert "billing" not in html.lower()
+        assert "USD" not in html
         assert NOTIF_BRANDING["primary_color"] in html
 
 
@@ -1180,4 +1181,3 @@ class TestSubjectInlineLabel:
         idx_label = html.index("Subject:")
         idx_value = html.index("Hello from client")
         assert "</p>" not in html[idx_label:idx_value]
-
