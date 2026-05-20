@@ -15,7 +15,7 @@ import type {
   CreateFromTemplateRequest,
   ProposalAttachment,
   ProposalSigningDocument,
-  SignatureFieldCoords,
+  SignatureFieldCoordsValue,
 } from '../types';
 
 const PROPOSALS_BASE = '/api/proposals';
@@ -344,8 +344,8 @@ export const updateProposalSigningDocument = async (
   proposalId: number,
   documentId: number,
   placements: {
-    signature_field_coords?: SignatureFieldCoords | null;
-    date_field_coords?: SignatureFieldCoords | null;
+    signature_field_coords?: SignatureFieldCoordsValue | null;
+    date_field_coords?: SignatureFieldCoordsValue | null;
   },
 ): Promise<ProposalSigningDocument> => {
   const response = await apiClient.patch<ProposalSigningDocument>(

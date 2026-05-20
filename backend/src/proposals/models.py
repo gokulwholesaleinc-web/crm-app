@@ -26,8 +26,8 @@ from sqlalchemy.types import TypeDecorator
 class _SignatureCoords(TypeDecorator):
     """JSONB on Postgres, JSON on SQLite (test DB).
 
-    Stores ``{page, x, y, width, height}`` for stamping the signature
-    image onto ``master_contract_pdf_path``. NULL = auto-detect.
+    Stores one ``{page, x, y, w, h}`` object for legacy rows or an array
+    of those objects for multi-placement rows. NULL = auto-detect.
     """
 
     impl = JSON
@@ -37,6 +37,7 @@ class _SignatureCoords(TypeDecorator):
         if dialect.name == "postgresql":
             return dialect.type_descriptor(JSONB())
         return dialect.type_descriptor(JSON())
+
 
 from src.core.mixins.auditable import AuditableMixin
 from src.database import Base
@@ -70,6 +71,7 @@ if TYPE_CHECKING:
 
 class ProposalSigningDocument(Base, AuditableMixin):
     """PDF attached to a proposal that must receive the signer signature."""
+
     __tablename__ = "proposal_signing_documents"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -87,8 +89,9 @@ class ProposalSigningDocument(Base, AuditableMixin):
         nullable=False,
     )
     pdf_path: Mapped[str] = mapped_column(Text, nullable=False)
-    signature_field_coords: Mapped[dict | None] = mapped_column(_SignatureCoords)
-    date_field_coords: Mapped[dict | None] = mapped_column(_SignatureCoords)
+    # JSON object for legacy one-box rows; JSON array for multi-placement rows.
+    signature_field_coords: Mapped[dict | list[dict] | None] = mapped_column(_SignatureCoords)
+    date_field_coords: Mapped[dict | list[dict] | None] = mapped_column(_SignatureCoords)
     signed_pdf_path: Mapped[str | None] = mapped_column(Text)
     signed_pdf_error: Mapped[str | None] = mapped_column(Text)
     display_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
@@ -141,6 +144,7 @@ class ProposalSigningDocumentView(Base):
 
 class Proposal(Base, AuditableMixin):
     """Proposal model for CRM sales documents."""
+
     __tablename__ = "proposals"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -208,9 +212,7 @@ class Proposal(Base, AuditableMixin):
     #   recurring_interval_count: 1 = monthly/yearly, 3 = quarterly,
     #                             6 = bi-yearly, etc.
     #   amount: total in currency major units
-    payment_type: Mapped[str] = mapped_column(
-        String(20), default="one_time", nullable=False
-    )
+    payment_type: Mapped[str] = mapped_column(String(20), default="one_time", nullable=False)
     recurring_interval: Mapped[str | None] = mapped_column(String(20))
     recurring_interval_count: Mapped[int | None] = mapped_column(Integer)
     amount: Mapped[float | None] = mapped_column(Numeric(12, 2))
@@ -248,12 +250,13 @@ class Proposal(Base, AuditableMixin):
     # at ``signed_pdf_path``. NULL = signature image + audit log alone,
     # which is ESIGN-Act-compliant on its own.
     master_contract_pdf_path: Mapped[str | None] = mapped_column(Text)
-    # Where in the master PDF to stamp: ``{page:int, x:float, y:float,
-    # width:float, height:float}`` in PDF points (origin = bottom-left).
-    # NULL = auto-detect (last page, bottom-right).
-    signature_field_coords: Mapped[dict | None] = mapped_column(_SignatureCoords)
+    # Where in the master PDF to stamp. Legacy rows use one ``{page,
+    # x, y, w, h}`` object; new rows use an array of those objects.
+    # NULL = auto-detect one signature box (last page, bottom-right).
+    signature_field_coords: Mapped[dict | list[dict] | None] = mapped_column(_SignatureCoords)
     # Where in the master PDF to stamp the signer's local date in MM-DD-YYYY.
-    date_field_coords: Mapped[dict | None] = mapped_column(_SignatureCoords)
+    # Legacy rows use one object; new rows use an array.
+    date_field_coords: Mapped[dict | list[dict] | None] = mapped_column(_SignatureCoords)
     # R2 key of the stamped + audit-appended signed PDF.
     signed_pdf_path: Mapped[str | None] = mapped_column(Text)
     # Most-recent stamp/upload failure from ``_maybe_stamp_master_pdf``.
@@ -271,12 +274,8 @@ class Proposal(Base, AuditableMixin):
     # remain for existing awaiting-payment/paid proposal links and old retry
     # paths that need to recover a previously issued payment URL.
     stripe_invoice_id: Mapped[str | None] = mapped_column(String(255), index=True)
-    stripe_subscription_id: Mapped[str | None] = mapped_column(
-        String(255), index=True
-    )
-    stripe_checkout_session_id: Mapped[str | None] = mapped_column(
-        String(255), index=True
-    )
+    stripe_subscription_id: Mapped[str | None] = mapped_column(String(255), index=True)
+    stripe_checkout_session_id: Mapped[str | None] = mapped_column(String(255), index=True)
     stripe_payment_url: Mapped[str | None] = mapped_column(Text)
     invoice_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -334,6 +333,7 @@ class Proposal(Base, AuditableMixin):
 
 class ProposalTemplate(Base, AuditableMixin):
     """Reusable proposal templates with merge variable placeholders."""
+
     __tablename__ = "proposal_templates"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -350,6 +350,7 @@ class ProposalTemplate(Base, AuditableMixin):
 
 class ProposalView(Base):
     """Tracks individual views of a proposal."""
+
     __tablename__ = "proposal_views"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -359,9 +360,7 @@ class ProposalView(Base):
         nullable=False,
         index=True,
     )
-    viewed_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    viewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     ip_address: Mapped[str | None] = mapped_column(String(45))
     user_agent: Mapped[str | None] = mapped_column(Text)
 

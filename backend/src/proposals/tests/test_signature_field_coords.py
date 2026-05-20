@@ -225,10 +225,7 @@ _CM_RE = re.compile(rb"([\d.]+)\s+0\s+0\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+cm")
 
 
 class TestSignatureFieldCoordsRoundtrip:
-
-    async def test_patch_persists_valid_coords(
-        self, client: AsyncClient, db_session: AsyncSession
-    ):
+    async def test_patch_persists_valid_coords(self, client: AsyncClient, db_session: AsyncSession):
         user = await _make_user(db_session)
         proposal = await _make_draft_proposal(db_session, user)
         coords = {"page": 1, "x": 100.5, "y": 200.0, "w": 216.0, "h": 72.0}
@@ -251,6 +248,45 @@ class TestSignatureFieldCoordsRoundtrip:
 
         await db_session.refresh(proposal)
         assert proposal.signature_field_coords == coords
+
+    async def test_patch_persists_multiple_coords(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
+        user = await _make_user(db_session)
+        proposal = await _make_draft_proposal(db_session, user)
+        signature_coords = [
+            {"page": 1, "x": 100.5, "y": 200.0, "w": 216.0, "h": 72.0},
+            {"page": 1, "x": 120.0, "y": 80.0, "w": 160.0, "h": 48.0},
+        ]
+        date_coords = [
+            {"page": 1, "x": 340.0, "y": 200.0, "w": 90.0, "h": 24.0},
+            {"page": 1, "x": 340.0, "y": 80.0, "w": 90.0, "h": 24.0},
+        ]
+
+        resp = await client.patch(
+            f"/api/proposals/{proposal.id}",
+            json={
+                "signature_field_coords": signature_coords,
+                "date_field_coords": date_coords,
+            },
+            headers=_auth_headers(user),
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["signature_field_coords"] == signature_coords
+        assert body["date_field_coords"] == date_coords
+
+        await db_session.refresh(proposal)
+        assert proposal.signature_field_coords == signature_coords
+        assert proposal.date_field_coords == date_coords
+
+        trimmed_resp = await client.patch(
+            f"/api/proposals/{proposal.id}",
+            json={"signature_field_coords": signature_coords[:1]},
+            headers=_auth_headers(user),
+        )
+        assert trimmed_resp.status_code == 200, trimmed_resp.text
+        assert trimmed_resp.json()["signature_field_coords"] == signature_coords[:1]
 
     async def test_patch_null_coords_clears_back_to_auto_box(
         self, client: AsyncClient, db_session: AsyncSession
@@ -341,6 +377,45 @@ class TestSignatureFieldCoordsValidation:
         )
         assert resp.status_code == 422, resp.text
 
+    async def test_patch_rejects_invalid_coords_inside_array(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+    ):
+        user = await _make_user(db_session)
+        proposal = await _make_draft_proposal(db_session, user)
+
+        resp = await client.patch(
+            f"/api/proposals/{proposal.id}",
+            json={
+                "signature_field_coords": [
+                    {"page": 1, "x": 10, "y": 10, "w": 100, "h": 50},
+                    {"page": 1, "x": 10, "y": 10, "w": 0, "h": 50},
+                ],
+            },
+            headers=_auth_headers(user),
+        )
+        assert resp.status_code == 422, resp.text
+
+    async def test_patch_rejects_too_many_coords(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+    ):
+        user = await _make_user(db_session)
+        proposal = await _make_draft_proposal(db_session, user)
+
+        resp = await client.patch(
+            f"/api/proposals/{proposal.id}",
+            json={
+                "signature_field_coords": [
+                    {"page": 1, "x": float(i), "y": 10, "w": 100, "h": 50} for i in range(101)
+                ],
+            },
+            headers=_auth_headers(user),
+        )
+        assert resp.status_code == 422, resp.text
+
 
 class TestSignatureFieldCoordsRejectsInfNaN:
     """``Field(gt=0)`` short-circuits ``inf > 0`` to ``True`` and NaN
@@ -413,9 +488,7 @@ class TestStampUsesConfiguredBox:
     def test_resolve_target_box_uses_converted_coords(self):
         master = _make_master_pdf(page_count=2)
         reader = PdfReader(io.BytesIO(master))
-        translated = _coords_for_stamper(
-            {"page": 2, "x": 100.0, "y": 250.0, "w": 200.0, "h": 60.0}
-        )
+        translated = _coords_for_stamper({"page": 2, "x": 100.0, "y": 250.0, "w": 200.0, "h": 60.0})
         target_page_idx, box = _resolve_target_box(reader, translated)
         assert target_page_idx == 1
         assert box == (100.0, 250.0, 200.0, 60.0)
@@ -456,9 +529,7 @@ class TestStampUsesConfiguredBox:
             if abs(tx - 100.0) < 1.0 and abs(ty - 250.0) < 1.0:
                 placement = (w, h, tx, ty)
                 break
-        assert placement is not None, (
-            f"no cm matrix at requested origin in {matches!r}"
-        )
+        assert placement is not None, f"no cm matrix at requested origin in {matches!r}"
         w, h, tx, ty = placement
         # Origin must be exact (sub-pixel).
         assert abs(tx - 100.0) < 1.0
@@ -477,9 +548,9 @@ class TestStampUsesConfiguredBox:
         assert len(reader.pages) == 3
         # Auto-box lands on the LAST master page (index 1 of 2-page master).
         last_master_bytes = _page_content_bytes(reader.pages[1])
-        assert _CM_RE.search(last_master_bytes), (
-            "auto-box still needs a cm operator on the last master page"
-        )
+        assert _CM_RE.search(
+            last_master_bytes
+        ), "auto-box still needs a cm operator on the last master page"
 
     def test_garbage_dict_returns_none(self):
         """Missing required keys → ``None`` so the stamper falls through

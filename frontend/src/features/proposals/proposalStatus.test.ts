@@ -85,4 +85,43 @@ describe('proposal signing document send guardrails', () => {
     expect(item?.state).toBe(true);
     expect(item?.label).toContain('Signature and date areas placed');
   });
+
+  it('allows multiple placements but treats empty placement arrays as missing', () => {
+    const readyProposal = {
+      ...baseProposal,
+      signing_documents: [
+        {
+          id: 10,
+          proposal_id: 1,
+          original_filename: 'MSA.pdf',
+          file_size: 1000,
+          content_type: 'application/pdf',
+          signature_field_coords: [
+            { page: 1, x: 10, y: 10, w: 100, h: 40 },
+            { page: 1, x: 10, y: 80, w: 100, h: 40 },
+          ],
+          date_field_coords: [
+            { page: 1, x: 130, y: 10, w: 80, h: 24 },
+            { page: 1, x: 130, y: 80, w: 80, h: 24 },
+          ],
+          display_order: 0,
+          created_at: '2026-05-18T00:00:00Z',
+          updated_at: '2026-05-18T00:00:00Z',
+        },
+      ],
+    } as Proposal;
+    const emptyProposal = {
+      ...readyProposal,
+      signing_documents: [
+        {
+          ...readyProposal.signing_documents![0],
+          signature_field_coords: [],
+          date_field_coords: [],
+        },
+      ],
+    } as Proposal;
+
+    expect(hasSigningDocumentSendBlocker(readyProposal)).toBe(false);
+    expect(hasSigningDocumentSendBlocker(emptyProposal)).toBe(true);
+  });
 });

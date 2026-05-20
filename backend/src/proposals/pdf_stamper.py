@@ -6,13 +6,13 @@ Inputs
 * ``master_pdf``: raw bytes of the original PDF uploaded by the rep
   (persisted at ``proposals.master_contract_pdf_path``).
 * ``signature_png``: raw PNG bytes of the drawn signature.
-* ``coords``: optional ``{page, x, y, width, height}`` JSON pointing
-  at the slot in ``master_pdf`` where the signature image should land
-  (PDF points; origin = bottom-left). ``None`` triggers auto-detect
-  to the last page bottom-right. A coords payload that's missing
-  ``x/y/width/height`` (or has invalid values) falls back to the
-  bottom-right auto-box on the *requested* ``page`` rather than the
-  last page.
+* ``coords``: optional ``{page, x, y, width, height}`` JSON, or a list
+  of those JSON objects, pointing at the slots in ``master_pdf`` where
+  the signature image should land (PDF points; origin = bottom-left).
+  ``None`` triggers auto-detect to the last page bottom-right. A single
+  coords payload that's missing ``x/y/width/height`` (or has invalid
+  values) falls back to the bottom-right auto-box on the *requested*
+  ``page`` rather than the last page.
 * ``signer_*`` + ``signed_at`` + ``proposal_number``: rendered into
   the appended audit page so a printed copy is self-contained.
 
@@ -50,14 +50,14 @@ _AUTO_HEIGHT_PT = 72.0
 class StampInputs:
     master_pdf: bytes
     signature_png: bytes
-    coords: dict[str, Any] | None
+    coords: dict[str, Any] | list[dict[str, Any]] | None
     signer_name: str
     signer_email: str
     signer_ip: str | None
     signer_user_agent: str | None
     signed_at: datetime
     proposal_number: str
-    date_coords: dict[str, Any] | None = None
+    date_coords: dict[str, Any] | list[dict[str, Any]] | None = None
     date_label: str | None = None
 
 
@@ -72,32 +72,33 @@ def stamp_master_with_signature(inputs: StampInputs) -> bytes:
     if len(reader.pages) == 0:
         raise ValueError("master_pdf has zero pages")
 
-    target_page_idx, box = _resolve_target_box(reader, inputs.coords)
-    target_page = reader.pages[target_page_idx]
-    page_width = float(target_page.mediabox.width)
-    page_height = float(target_page.mediabox.height)
-
     overlays: dict[int, list[bytes]] = {}
-    overlays.setdefault(target_page_idx, []).append(_build_signature_overlay(
-        page_width=page_width,
-        page_height=page_height,
-        signature_png=inputs.signature_png,
-        box=box,
-    ))
+    for target_page_idx, box in _resolve_signature_boxes(reader, inputs.coords):
+        target_page = reader.pages[target_page_idx]
+        overlays.setdefault(target_page_idx, []).append(
+            _build_signature_overlay(
+                page_width=float(target_page.mediabox.width),
+                page_height=float(target_page.mediabox.height),
+                signature_png=inputs.signature_png,
+                box=box,
+            )
+        )
     if inputs.date_coords and inputs.date_label:
         # Skip the date stamp entirely if date_coords are malformed —
         # otherwise the auto-box fallback puts the date on top of the
         # signature (both default to bottom-right of last page).
-        date_resolved = _resolve_date_box(reader, inputs.date_coords)
+        date_resolved = _resolve_date_boxes(reader, inputs.date_coords)
         if date_resolved is not None:
-            date_page_idx, date_box = date_resolved
-            date_page = reader.pages[date_page_idx]
-            overlays.setdefault(date_page_idx, []).append(_build_date_overlay(
-                page_width=float(date_page.mediabox.width),
-                page_height=float(date_page.mediabox.height),
-                box=date_box,
-                date_label=inputs.date_label,
-            ))
+            for date_page_idx, date_box in date_resolved:
+                date_page = reader.pages[date_page_idx]
+                overlays.setdefault(date_page_idx, []).append(
+                    _build_date_overlay(
+                        page_width=float(date_page.mediabox.width),
+                        page_height=float(date_page.mediabox.height),
+                        box=date_box,
+                        date_label=inputs.date_label,
+                    )
+                )
 
     writer = PdfWriter()
 
@@ -117,8 +118,21 @@ def stamp_master_with_signature(inputs: StampInputs) -> bytes:
     return out.getvalue()
 
 
+def _resolve_signature_boxes(
+    reader: PdfReader,
+    coords: dict[str, Any] | list[dict[str, Any]] | None,
+) -> list[tuple[int, tuple[float, float, float, float]]]:
+    if not coords:
+        return [_auto_box(reader, len(reader.pages) - 1)]
+    if isinstance(coords, list):
+        boxes = [_resolve_target_box(reader, item) for item in coords]
+        return boxes or [_auto_box(reader, len(reader.pages) - 1)]
+    return [_resolve_target_box(reader, coords)]
+
+
 def _resolve_target_box(
-    reader: PdfReader, coords: dict[str, Any] | None,
+    reader: PdfReader,
+    coords: dict[str, Any] | None,
 ) -> tuple[int, tuple[float, float, float, float]]:
     page_count = len(reader.pages)
     if not coords:
@@ -156,10 +170,24 @@ def _resolve_target_box(
     return page, (x, y, width, height)
 
 
+def _resolve_date_boxes(
+    reader: PdfReader,
+    coords: dict[str, Any] | list[dict[str, Any]],
+) -> list[tuple[int, tuple[float, float, float, float]]] | None:
+    if isinstance(coords, list):
+        boxes = [
+            box for item in coords for box in [_resolve_date_box(reader, item)] if box is not None
+        ]
+        return boxes or None
+    box = _resolve_date_box(reader, coords)
+    return None if box is None else [box]
+
+
 def _resolve_date_box(
-    reader: PdfReader, coords: dict[str, Any],
+    reader: PdfReader,
+    coords: dict[str, Any],
 ) -> tuple[int, tuple[float, float, float, float]] | None:
-    """Resolve date stamp coords, or return None to skip the date stamp.
+    """Resolve one date stamp coord, or return None to skip that date stamp.
 
     Unlike the signature path, malformed date coords MUST NOT fall back
     to the auto-box — that auto-box overlaps the signature and emits a
@@ -191,7 +219,8 @@ def _resolve_date_box(
 
 
 def _auto_box(
-    reader: PdfReader, page_index: int,
+    reader: PdfReader,
+    page_index: int,
 ) -> tuple[int, tuple[float, float, float, float]]:
     page = reader.pages[page_index]
     page_w = float(page.mediabox.width)

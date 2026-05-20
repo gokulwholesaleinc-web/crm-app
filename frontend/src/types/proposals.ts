@@ -20,14 +20,16 @@ export interface SignatureFieldCoords {
   h: number;
 }
 
+export type SignatureFieldCoordsValue = SignatureFieldCoords | SignatureFieldCoords[];
+
 export interface ProposalSigningDocument {
   id: number;
   proposal_id: number;
   original_filename: string;
   file_size: number;
   content_type: string;
-  signature_field_coords?: SignatureFieldCoords | null;
-  date_field_coords?: SignatureFieldCoords | null;
+  signature_field_coords?: SignatureFieldCoordsValue | null;
+  date_field_coords?: SignatureFieldCoordsValue | null;
   signed_pdf_path?: string | null;
   signed_pdf_error?: string | null;
   display_order: number;
@@ -66,11 +68,12 @@ export interface ProposalBase {
    * Sign-to-Confirm modal. NULL falls back to the tenant default. */
   terms_and_conditions?: string | null;
   /** Saved signature-box placement on the master contract. NULL =
-   * stamper falls back to the auto-box on the last page. */
-  signature_field_coords?: SignatureFieldCoords | null;
+   * stamper falls back to the auto-box on the last page. Legacy rows may
+   * contain one box; new saves contain a list. */
+  signature_field_coords?: SignatureFieldCoordsValue | null;
   /** Saved date placement on the master contract. The signer date is
    * stamped in MM-DD-YYYY using the signer's local timezone. */
-  date_field_coords?: SignatureFieldCoords | null;
+  date_field_coords?: SignatureFieldCoordsValue | null;
 }
 
 export interface ProposalCreate extends ProposalBase {}
@@ -92,11 +95,11 @@ export interface ProposalUpdate {
   owner_id?: number | null;
   terms_and_conditions?: string | null;
   /** Visual signature-box placement on the master contract. Pass an
-   * object to set, ``null`` to clear back to the auto-box default. */
-  signature_field_coords?: SignatureFieldCoords | null;
+   * object/list to set, ``null`` to clear back to the auto-box default. */
+  signature_field_coords?: SignatureFieldCoordsValue | null;
   /** Visual date placement on the master contract. Pass an object to set,
    * ``null`` to clear. */
-  date_field_coords?: SignatureFieldCoords | null;
+  date_field_coords?: SignatureFieldCoordsValue | null;
 }
 
 export interface ProposalView {

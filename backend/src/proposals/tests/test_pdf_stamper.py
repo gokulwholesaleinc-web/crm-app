@@ -40,8 +40,8 @@ def _make_master_pdf(page_count: int = 2) -> bytes:
 def _inputs(
     *,
     master_pdf: bytes | None = None,
-    coords: dict | None = None,
-    date_coords: dict | None = None,
+    coords: dict | list[dict] | None = None,
+    date_coords: dict | list[dict] | None = None,
     date_label: str | None = None,
     signature_png: bytes | None = None,
 ) -> StampInputs:
@@ -103,7 +103,10 @@ class TestStampMasterWithSignature:
 
     def test_date_label_only_renders_when_date_coords_are_supplied(self):
         out_without_date = stamp_master_with_signature(_inputs())
-        no_date_text = "\n".join((page.extract_text() or "") for page in PdfReader(io.BytesIO(out_without_date)).pages[:-1])
+        no_date_text = "\n".join(
+            (page.extract_text() or "")
+            for page in PdfReader(io.BytesIO(out_without_date)).pages[:-1]
+        )
         assert "Signed 2026-05-14" not in no_date_text
         assert "05-14-2026" not in no_date_text
 
@@ -114,8 +117,28 @@ class TestStampMasterWithSignature:
                 date_label="05-14-2026",
             ),
         )
-        date_text = "\n".join((page.extract_text() or "") for page in PdfReader(io.BytesIO(out_with_date)).pages[:-1])
+        date_text = "\n".join(
+            (page.extract_text() or "") for page in PdfReader(io.BytesIO(out_with_date)).pages[:-1]
+        )
         assert "05-14-2026" in date_text
+
+    def test_multiple_signature_and_date_boxes_render(self):
+        out = stamp_master_with_signature(
+            _inputs(
+                coords=[
+                    {"page": 0, "x": 72, "y": 120, "width": 120, "height": 48},
+                    {"page": 0, "x": 72, "y": 220, "width": 120, "height": 48},
+                ],
+                date_coords=[
+                    {"page": 0, "x": 240, "y": 120, "width": 90, "height": 24},
+                    {"page": 0, "x": 240, "y": 220, "width": 90, "height": 24},
+                ],
+                date_label="05-14-2026",
+            ),
+        )
+        reader = PdfReader(io.BytesIO(out))
+        date_text = "\n".join((page.extract_text() or "") for page in reader.pages[:-1])
+        assert date_text.count("05-14-2026") == 2
 
     def test_audit_page_includes_master_sha256_prefix(self):
         master = _make_master_pdf()

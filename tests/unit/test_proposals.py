@@ -28,6 +28,7 @@ from src.proposals.models import Proposal, ProposalSigningDocument, ProposalView
 # Fixtures
 # =============================================================================
 
+
 @pytest.fixture
 async def test_proposal(db_session: AsyncSession, test_user: User) -> Proposal:
     """Create a test proposal."""
@@ -70,6 +71,7 @@ async def sent_proposal(db_session: AsyncSession, test_user: User) -> Proposal:
 # =============================================================================
 # Proposal CRUD Tests
 # =============================================================================
+
 
 class TestProposalsList:
     """Tests for proposals list endpoint."""
@@ -117,6 +119,7 @@ class TestProposalsList:
         """The QuoteDetail page surfaces "Related Proposals" by querying
         ?quote_id={id}. Backend must filter on Proposal.quote_id."""
         from src.quotes.models import Quote
+
         quote = Quote(
             quote_number="QT-PROP-FILTER-1",
             title="Filter quote",
@@ -137,20 +140,23 @@ class TestProposalsList:
             proposal_number="PR-LINK-1",
             title="Linked",
             status="draft",
-            owner_id=test_user.id, created_by_id=test_user.id,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
             quote_id=quote.id,
         )
         unrelated = Proposal(
             proposal_number="PR-UNREL-1",
             title="Unrelated",
             status="draft",
-            owner_id=test_user.id, created_by_id=test_user.id,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
         )
         db_session.add_all([linked, unrelated])
         await db_session.commit()
 
         response = await client.get(
-            f"/api/proposals?quote_id={quote.id}", headers=auth_headers,
+            f"/api/proposals?quote_id={quote.id}",
+            headers=auth_headers,
         )
         assert response.status_code == 200
         ids = [p["id"] for p in response.json()["items"]]
@@ -383,6 +389,7 @@ class TestAutoNumbering:
         """
         from datetime import UTC as _UTC
         from datetime import datetime as _dt
+
         year = _dt.now(_UTC).year
         for seq in (1, 2, 3):
             db_session.add(
@@ -598,9 +605,7 @@ class TestProposalsDelete:
 
         assert response.status_code == 204
 
-        result = await db_session.execute(
-            select(Proposal).where(Proposal.id == pid)
-        )
+        result = await db_session.execute(select(Proposal).where(Proposal.id == pid))
         assert result.scalar_one_or_none() is None
 
     @pytest.mark.asyncio
@@ -662,6 +667,7 @@ class TestProposalsDelete:
 # Status Transition Tests
 # =============================================================================
 
+
 class TestStatusTransitions:
     """Tests for proposal status transition endpoints."""
 
@@ -720,15 +726,62 @@ class TestStatusTransitions:
         )
         db_session.add(proposal)
         await db_session.flush()
-        db_session.add(ProposalSigningDocument(
-            proposal_id=proposal.id,
-            original_filename="MSA.pdf",
-            file_size=1200,
-            content_type="application/pdf",
-            pdf_path="proposals/1/signing-documents/1/source.pdf",
-            display_order=0,
+        db_session.add(
+            ProposalSigningDocument(
+                proposal_id=proposal.id,
+                original_filename="MSA.pdf",
+                file_size=1200,
+                content_type="application/pdf",
+                pdf_path="proposals/1/signing-documents/1/source.pdf",
+                display_order=0,
+                created_by_id=test_user.id,
+            )
+        )
+        await db_session.commit()
+
+        response = await client.post(
+            f"/api/proposals/{proposal.id}/send",
+            headers=auth_headers,
+            json={"attach_pdf": False},
+        )
+
+        assert response.status_code == 400
+        assert "Place signature and date areas" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_send_blocks_signing_document_with_empty_placement_arrays(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_contact: Contact,
+    ):
+        """Deleting every placed box should save, but still block send."""
+        proposal = Proposal(
+            proposal_number="PR-2026-SEND-DOC-EMPTY",
+            title="Empty Signing Docs",
+            content="Content here",
+            status="draft",
+            contact_id=test_contact.id,
+            owner_id=test_user.id,
             created_by_id=test_user.id,
-        ))
+        )
+        db_session.add(proposal)
+        await db_session.flush()
+        db_session.add(
+            ProposalSigningDocument(
+                proposal_id=proposal.id,
+                original_filename="MSA.pdf",
+                file_size=1200,
+                content_type="application/pdf",
+                pdf_path="proposals/1/signing-documents/1/source.pdf",
+                signature_field_coords=[],
+                date_field_coords=[],
+                display_order=0,
+                created_by_id=test_user.id,
+            )
+        )
         await db_session.commit()
 
         response = await client.post(
@@ -761,30 +814,32 @@ class TestStatusTransitions:
         )
         db_session.add(proposal)
         await db_session.flush()
-        db_session.add_all([
-            ProposalSigningDocument(
-                proposal_id=proposal.id,
-                original_filename="MSA.pdf",
-                file_size=1200,
-                content_type="application/pdf",
-                pdf_path="proposals/1/signing-documents/1/source.pdf",
-                signature_field_coords={"page": 1, "x": 10, "y": 10, "w": 100, "h": 40},
-                date_field_coords={"page": 1, "x": 130, "y": 10, "w": 80, "h": 24},
-                display_order=0,
-                created_by_id=test_user.id,
-            ),
-            ProposalSigningDocument(
-                proposal_id=proposal.id,
-                original_filename="Order Form.pdf",
-                file_size=800,
-                content_type="application/pdf",
-                pdf_path="proposals/1/signing-documents/2/source.pdf",
-                signature_field_coords={"page": 1, "x": 20, "y": 20, "w": 100, "h": 40},
-                date_field_coords={"page": 1, "x": 140, "y": 20, "w": 80, "h": 24},
-                display_order=1,
-                created_by_id=test_user.id,
-            ),
-        ])
+        db_session.add_all(
+            [
+                ProposalSigningDocument(
+                    proposal_id=proposal.id,
+                    original_filename="MSA.pdf",
+                    file_size=1200,
+                    content_type="application/pdf",
+                    pdf_path="proposals/1/signing-documents/1/source.pdf",
+                    signature_field_coords={"page": 1, "x": 10, "y": 10, "w": 100, "h": 40},
+                    date_field_coords={"page": 1, "x": 130, "y": 10, "w": 80, "h": 24},
+                    display_order=0,
+                    created_by_id=test_user.id,
+                ),
+                ProposalSigningDocument(
+                    proposal_id=proposal.id,
+                    original_filename="Order Form.pdf",
+                    file_size=800,
+                    content_type="application/pdf",
+                    pdf_path="proposals/1/signing-documents/2/source.pdf",
+                    signature_field_coords={"page": 1, "x": 20, "y": 20, "w": 100, "h": 40},
+                    date_field_coords={"page": 1, "x": 140, "y": 20, "w": 80, "h": 24},
+                    display_order=1,
+                    created_by_id=test_user.id,
+                ),
+            ]
+        )
         await db_session.commit()
 
         response = await client.post(
@@ -1015,6 +1070,7 @@ class TestStatusTransitions:
 # Public View Tests
 # =============================================================================
 
+
 class TestPublicView:
     """Tests for public proposal view endpoint."""
 
@@ -1144,6 +1200,7 @@ class TestPublicView:
 # Data Isolation Tests
 # =============================================================================
 
+
 class TestDataIsolation:
     """Tests for data isolation between users."""
 
@@ -1198,13 +1255,12 @@ class TestDataIsolation:
 # Unauthorized Access Tests
 # =============================================================================
 
+
 class TestProposalsUnauthorized:
     """Tests for unauthorized access to proposals endpoints."""
 
     @pytest.mark.asyncio
-    async def test_list_proposals_unauthorized(
-        self, client: AsyncClient, db_session: AsyncSession
-    ):
+    async def test_list_proposals_unauthorized(self, client: AsyncClient, db_session: AsyncSession):
         """Test listing proposals without auth fails."""
         response = await client.get("/api/proposals")
         assert response.status_code == 401
@@ -1266,6 +1322,7 @@ class TestProposalsUnauthorized:
         """Test sending proposal without auth fails."""
         response = await client.post(f"/api/proposals/{test_proposal.id}/send")
         assert response.status_code == 401
+
 
 class TestClosedLostGuard:
     """Creating a proposal against a Closed-Lost opportunity must 400."""

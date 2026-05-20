@@ -47,7 +47,12 @@ from src.proposals.models import (
     ProposalView,
 )
 from src.proposals.pdf_stamper import StampInputs, stamp_master_with_signature
-from src.proposals.schemas import ProposalCreate, ProposalUpdate, SignatureFieldCoords
+from src.proposals.schemas import (
+    ProposalCreate,
+    ProposalUpdate,
+    SignatureFieldCoords,
+    SignatureFieldPlacementValue,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +66,29 @@ class _UnsetType:
 _UNSET = _UnsetType()
 
 
-def _coords_for_stamper(coords: dict | None) -> dict | None:
+def _single_coords_for_stamper(coords: dict) -> dict | None:
+    try:
+        page = int(coords["page"])
+    except (KeyError, TypeError, ValueError):
+        # Schema validation 422s the API surface, but an internal caller
+        # bypassing it would otherwise hit a silent auto-box stamp.
+        logger.warning(
+            "Coercing malformed signature_field_coords to auto-box: %r",
+            coords,
+        )
+        return None
+    return {
+        "page": max(0, page - 1),
+        "x": coords.get("x"),
+        "y": coords.get("y"),
+        "width": coords.get("w"),
+        "height": coords.get("h"),
+    }
+
+
+def _coords_for_stamper(
+    coords: dict | list[dict] | None,
+) -> dict | list[dict] | None:
     """Translate the user-facing ``SignatureFieldCoords`` shape into
     the dict ``pdf_stamper`` consumes.
 
@@ -79,22 +106,16 @@ def _coords_for_stamper(coords: dict | None) -> dict | None:
     """
     if not coords:
         return None
-    try:
-        page = int(coords["page"])
-    except (KeyError, TypeError, ValueError):
-        # Schema validation 422s the API surface, but an internal caller
-        # bypassing it would otherwise hit a silent auto-box stamp.
-        logger.warning(
-            "Coercing malformed signature_field_coords to auto-box: %r", coords,
-        )
-        return None
-    return {
-        "page": max(0, page - 1),
-        "x": coords.get("x"),
-        "y": coords.get("y"),
-        "width": coords.get("w"),
-        "height": coords.get("h"),
-    }
+    if isinstance(coords, list):
+        boxes = [
+            converted
+            for item in coords
+            if isinstance(item, dict)
+            for converted in [_single_coords_for_stamper(item)]
+            if converted is not None
+        ]
+        return boxes or None
+    return _single_coords_for_stamper(coords)
 
 
 def _signed_date_label(signed_at: datetime, signer_timezone: str | None) -> str:
@@ -164,11 +185,17 @@ def _clean_pdf_filename(filename: str | None) -> str:
     return name[:255]
 
 
-def _coords_to_dict(coords: SignatureFieldCoords | dict | None) -> dict | None:
+def _coords_to_dict(
+    coords: SignatureFieldPlacementValue | dict | list[dict] | None,
+) -> dict | list[dict] | None:
     if coords is None:
         return None
     if isinstance(coords, SignatureFieldCoords):
         return coords.model_dump()
+    if isinstance(coords, list):
+        return [
+            item.model_dump() if isinstance(item, SignatureFieldCoords) else item for item in coords
+        ]
     return coords
 
 
@@ -395,8 +422,12 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         proposal: Proposal,
         document: ProposalSigningDocument,
         *,
-        signature_field_coords: SignatureFieldCoords | dict | None | _UnsetType = _UNSET,
-        date_field_coords: SignatureFieldCoords | dict | None | _UnsetType = _UNSET,
+        signature_field_coords: (
+            SignatureFieldPlacementValue | dict | list[dict] | None | _UnsetType
+        ) = _UNSET,
+        date_field_coords: (
+            SignatureFieldPlacementValue | dict | list[dict] | None | _UnsetType
+        ) = _UNSET,
         user_id: int,
     ) -> ProposalSigningDocument:
         if proposal.signed_at is not None:
@@ -1218,8 +1249,8 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         if proposal.cover_letter:
             cover_letter_html = (
                 '<section class="doc-cover-letter">'
-                f'<p>{escape(proposal.cover_letter)}</p>'
-                '</section>'
+                f"<p>{escape(proposal.cover_letter)}</p>"
+                "</section>"
             )
 
         # ---------- Signatory section ----------
@@ -1267,13 +1298,19 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         proposal_number_html = escape(proposal.proposal_number)
         contact_block = (
             f'<p class="cover-prepared-for">Prepared for <strong>{escape(contact_name)}</strong>'
-            + (f' &middot; <span class="cover-company">{escape(secondary_company)}</span>' if secondary_company else '')
-            + '</p>'
-            if contact_name else ""
+            + (
+                f' &middot; <span class="cover-company">{escape(secondary_company)}</span>'
+                if secondary_company
+                else ""
+            )
+            + "</p>"
+            if contact_name
+            else ""
         )
         footer_block = (
             f'<footer class="doc-footer"><p>{escape(footer_text)}</p></footer>'
-            if footer_text else ""
+            if footer_text
+            else ""
         )
 
         html = f"""\
@@ -1492,11 +1529,14 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
             return
 
         branding = await self.get_branding_for_proposal(proposal)
-        subject, body = render_contract_signed_email(branding, {
-            "audience": "signer",
-            "document_title": proposal.title,
-            "signer_name": proposal.signer_name,
-        })
+        subject, body = render_contract_signed_email(
+            branding,
+            {
+                "audience": "signer",
+                "document_title": proposal.title,
+                "signer_name": proposal.signer_name,
+            },
+        )
 
         # Render + queue are both best-effort: a failure in either leaves
         # the proposal accepted but without a signed-copy email. The CRM
@@ -1523,20 +1563,24 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                         stamped_bytes = await download_object_bytes(
                             document.signed_pdf_path,
                         )
-                        attachments.append(EmailAttachment(
-                            filename=(
-                                f"{proposal.proposal_number}-signed-"
-                                f"{document.original_filename}"
-                            ),
-                            content=stamped_bytes,
-                            content_type="application/pdf",
-                        ))
+                        attachments.append(
+                            EmailAttachment(
+                                filename=(
+                                    f"{proposal.proposal_number}-signed-"
+                                    f"{document.original_filename}"
+                                ),
+                                content=stamped_bytes,
+                                content_type="application/pdf",
+                            )
+                        )
                         stamped_attached = True
                     except Exception as exc:
                         logger.warning(
                             "Failed to fetch signed-PDF object %r for proposal %s "
                             "document %s; signer email will note the missing file",
-                            document.signed_pdf_path, proposal.id, document.id,
+                            document.signed_pdf_path,
+                            proposal.id,
+                            document.id,
                             exc_info=True,
                         )
                         document.signed_pdf_error = (
@@ -1561,11 +1605,13 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                     stamped_bytes = await download_object_bytes(
                         proposal.signed_pdf_path,
                     )
-                    attachments.append(EmailAttachment(
-                        filename=f"proposal-{proposal.proposal_number}-signed.pdf",
-                        content=stamped_bytes,
-                        content_type="application/pdf",
-                    ))
+                    attachments.append(
+                        EmailAttachment(
+                            filename=f"proposal-{proposal.proposal_number}-signed.pdf",
+                            content=stamped_bytes,
+                            content_type="application/pdf",
+                        )
+                    )
                     stamped_attached = True
                 except Exception as exc:
                     # Non-fatal — the generated PDF below keeps the email
@@ -1579,7 +1625,8 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                     logger.warning(
                         "Failed to fetch signed-PDF object %r for proposal %s; "
                         "falling back to generated copy",
-                        proposal.signed_pdf_path, proposal.id,
+                        proposal.signed_pdf_path,
+                        proposal.id,
                         exc_info=True,
                     )
                     proposal.signed_pdf_error = (
@@ -1602,11 +1649,13 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                     proposal.owner_id or 0,
                     include_signature=True,
                 )
-                attachments.append(EmailAttachment(
-                    filename=f"proposal-{proposal.proposal_number}-signed.pdf",
-                    content=pdf_bytes,
-                    content_type="application/pdf",
-                ))
+                attachments.append(
+                    EmailAttachment(
+                        filename=f"proposal-{proposal.proposal_number}-signed.pdf",
+                        content=pdf_bytes,
+                        content_type="application/pdf",
+                    )
+                )
 
             extra_attachments, missing_lines = await self._collect_proposal_attachments(
                 proposal,
@@ -1648,12 +1697,14 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
             # weasyprint" — the traceback is what separates them.
             logger.warning(
                 "Failed to send signed copy for proposal %s: %s",
-                proposal.id, exc,
+                proposal.id,
+                exc,
                 exc_info=True,
             )
 
     async def _collect_proposal_attachments(
-        self, proposal: Proposal,
+        self,
+        proposal: Proposal,
     ) -> tuple[list[EmailAttachment], list[str]]:
         """Fetch every staff-uploaded attachment for ``proposal`` from R2.
 
@@ -1697,23 +1748,25 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                             raise FileNotFoundError(str(path))
                         content = path.read_bytes()
 
-                    attachments.append(EmailAttachment(
-                        filename=att.original_filename,
-                        content=content,
-                        content_type=att.mime_type or "application/octet-stream",
-                    ))
+                    attachments.append(
+                        EmailAttachment(
+                            filename=att.original_filename,
+                            content=content,
+                            content_type=att.mime_type or "application/octet-stream",
+                        )
+                    )
                 except (httpx.HTTPError, OSError) as exc:
                     # Narrow catch — programming errors (AttributeError /
                     # TypeError) should crash loudly in tests, not silently
                     # degrade the email body. exc_info=True so the 2am
                     # debug session has a frame, not a one-liner.
                     key_for_hash = att.file_path or att.filename or ""
-                    digest = hashlib.sha256(
-                        key_for_hash.encode("utf-8")
-                    ).hexdigest()[:16]
+                    digest = hashlib.sha256(key_for_hash.encode("utf-8")).hexdigest()[:16]
                     logger.warning(
                         "Failed to attach proposal attachment %s (proposal=%s): %s",
-                        att.id, proposal.id, exc,
+                        att.id,
+                        proposal.id,
+                        exc,
                         exc_info=True,
                     )
                     missing.append(f"{att.original_filename} (ref {digest})")
@@ -1721,7 +1774,8 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         return attachments, missing
 
     async def get_effective_terms_and_conditions(
-        self, proposal: Proposal,
+        self,
+        proposal: Proposal,
     ) -> str | None:
         """Resolve the T&C body rendered in the Sign-to-Confirm modal.
 
@@ -1752,7 +1806,10 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         return result.scalar_one_or_none()
 
     async def upload_master_contract_pdf(
-        self, proposal: Proposal, content: bytes, filename: str,
+        self,
+        proposal: Proposal,
+        content: bytes,
+        filename: str,
     ) -> Proposal:
         """Persist the rep-uploaded master service agreement PDF.
 
@@ -1785,15 +1842,14 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
             return await TenantBrandingHelper.get_branding_for_user(self.db, proposal.owner_id)
         return TenantBrandingHelper.get_default_branding()
 
-    async def substitute_template_variables(
-        self, template_content: str, variables: dict
-    ) -> str:
+    async def substitute_template_variables(self, template_content: str, variables: dict) -> str:
         """Replace {{variable}} placeholders in template content.
 
         Single-pass substitution so a value that itself contains ``{{x}}``
         is not re-expanded. Missing keys are left as-is; present-but-falsy
         values (None, empty string) substitute to an empty string.
         """
+
         def _replacer(match: "re.Match[str]") -> str:
             key = match.group(1)
             if key not in variables:

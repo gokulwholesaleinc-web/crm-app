@@ -14,7 +14,7 @@ import type {
   ProposalTemplateCreate,
   ProposalTemplateUpdate,
   CreateFromTemplateRequest,
-  SignatureFieldCoords,
+  SignatureFieldCoordsValue,
 } from '../types';
 
 // Query Keys
@@ -161,8 +161,8 @@ export function useUpdateProposalSignatureCoords() {
       dateCoords,
     }: {
       proposalId: number;
-      coords: SignatureFieldCoords | null;
-      dateCoords?: SignatureFieldCoords | null;
+      coords: SignatureFieldCoordsValue | null;
+      dateCoords?: SignatureFieldCoordsValue | null;
     }) =>
       proposalsApi.update(proposalId, {
         signature_field_coords: coords,

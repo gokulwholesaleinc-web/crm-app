@@ -2,7 +2,7 @@
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Literal
+from typing import Annotated, Literal, TypeAlias
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, EmailStr, Field
 
@@ -36,6 +36,13 @@ class SignatureFieldCoords(BaseModel):
     h: float = Field(gt=0, allow_inf_nan=False)
 
 
+SignatureFieldPlacementList: TypeAlias = Annotated[
+    list[SignatureFieldCoords],
+    Field(max_length=100),
+]
+SignatureFieldPlacementValue: TypeAlias = SignatureFieldCoords | SignatureFieldPlacementList
+
+
 class ProposalSigningDocumentResponse(BaseModel):
     """Staff-safe metadata for a PDF that receives the signer signature."""
 
@@ -44,8 +51,8 @@ class ProposalSigningDocumentResponse(BaseModel):
     original_filename: str
     file_size: int
     content_type: str
-    signature_field_coords: SignatureFieldCoords | None = None
-    date_field_coords: SignatureFieldCoords | None = None
+    signature_field_coords: SignatureFieldPlacementValue | None = None
+    date_field_coords: SignatureFieldPlacementValue | None = None
     signed_pdf_path: str | None = None
     signed_pdf_error: str | None = None
     display_order: int
@@ -56,8 +63,8 @@ class ProposalSigningDocumentResponse(BaseModel):
 
 
 class ProposalSigningDocumentUpdate(BaseModel):
-    signature_field_coords: SignatureFieldCoords | None = None
-    date_field_coords: SignatureFieldCoords | None = None
+    signature_field_coords: SignatureFieldPlacementValue | None = None
+    date_field_coords: SignatureFieldPlacementValue | None = None
 
 
 class ProposalBillingFields(BaseModel):
@@ -68,6 +75,7 @@ class ProposalBillingFields(BaseModel):
     awaiting-payment links keep working without showing billing controls in
     proposal composition.
     """
+
     payment_type: PaymentType = "one_time"
     recurring_interval: RecurringInterval | None = None
     recurring_interval_count: int | None = None
@@ -76,6 +84,7 @@ class ProposalBillingFields(BaseModel):
 
 
 # Proposal Schemas
+
 
 class ProposalBase(BaseModel):
     title: str
@@ -122,11 +131,11 @@ class ProposalUpdate(BaseModel):
     owner_id: int | None = None
     terms_and_conditions: str | None = None
     # Visual signature placement. ``None`` (explicitly) clears the row
-    # back to auto-box. Validated against ``SignatureFieldCoords``;
+    # back to auto-box. The API accepts one legacy box or a list of boxes;
     # ``exclude_unset=True`` in the service layer means an absent field
     # leaves the existing value alone.
-    signature_field_coords: SignatureFieldCoords | None = None
-    date_field_coords: SignatureFieldCoords | None = None
+    signature_field_coords: SignatureFieldPlacementValue | None = None
+    date_field_coords: SignatureFieldPlacementValue | None = None
 
     model_config = ConfigDict(extra="forbid")
 
@@ -140,6 +149,7 @@ class ProposalAcceptRequest(BaseModel):
     proposal's designated recipient and the ESIGN consent box must
     have been ticked — both enforced by the service layer.
     """
+
     signer_name: str
     signer_email: EmailStr
     signature_image: str = Field(min_length=1, max_length=400_000)
@@ -205,11 +215,10 @@ class ProposalResponse(ProposalBase, ProposalBillingFields):
     master_contract_pdf_path: str | None = None
     signed_pdf_path: str | None = None
     signed_pdf_error: str | None = None
-    # Visual signature placement on the master contract PDF, or NULL
-    # when the stamper should auto-detect (bottom-right of last page).
-    # Surfaced so the picker UI can re-open with the saved box drawn.
-    signature_field_coords: SignatureFieldCoords | None = None
-    date_field_coords: SignatureFieldCoords | None = None
+    # Visual signature/date placement on the master contract PDF. Legacy
+    # rows may contain one object; new saves contain a list of boxes.
+    signature_field_coords: SignatureFieldPlacementValue | None = None
+    date_field_coords: SignatureFieldPlacementValue | None = None
     signing_documents: list[ProposalSigningDocumentResponse] = []
     terms_and_conditions: str | None = None
     created_at: datetime
@@ -272,6 +281,7 @@ class ProposalSigningDocumentPublicItem(BaseModel):
 
 class ProposalBranding(BaseModel):
     """Tenant branding data for public proposal view."""
+
     company_name: str | None = None
     logo_url: str | None = None
     primary_color: str = "#6366f1"
@@ -286,6 +296,7 @@ class ProposalBranding(BaseModel):
 
 class ProposalPublicResponse(BaseModel):
     """Public view of a proposal (no auth required)."""
+
     proposal_number: str
     title: str
     content: str | None = None
@@ -332,10 +343,12 @@ class ProposalPublicResponse(BaseModel):
 
 class ProposalSendRequest(BaseModel):
     """Request to send a proposal with optional PDF attachment."""
+
     attach_pdf: bool = False
 
 
 # Template Schemas
+
 
 class ProposalTemplateCreate(BaseModel):
     name: str

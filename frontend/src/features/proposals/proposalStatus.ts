@@ -7,6 +7,7 @@
 import type { Proposal } from '../../types';
 import type { TimelineStep } from '../../components/shared/StatusTimeline';
 import type { ChecklistItem } from '../../components/shared/checklist';
+import { hasSignaturePlacements } from './signaturePlacements';
 
 const STATUS_ORDER = ['draft', 'sent', 'viewed', 'accepted'];
 
@@ -166,7 +167,9 @@ export function buildProposalSendChecklist(
   const signingDocuments = proposal.signing_documents ?? [];
   if (signingDocuments.length > 0) {
     const missingPlacement = signingDocuments.filter(
-      (doc) => !doc.signature_field_coords || !doc.date_field_coords,
+      (doc) =>
+        !hasSignaturePlacements(doc.signature_field_coords) ||
+        !hasSignaturePlacements(doc.date_field_coords),
     );
     const firstMissingPlacement = missingPlacement[0];
     items.push({
@@ -194,7 +197,8 @@ export function buildProposalSendChecklist(
     });
   } else if (
     proposal.master_contract_pdf_path &&
-    (!proposal.signature_field_coords || !proposal.date_field_coords)
+    (!hasSignaturePlacements(proposal.signature_field_coords) ||
+      !hasSignaturePlacements(proposal.date_field_coords))
   ) {
     items.push({
       key: 'legacy_master_signature',
@@ -212,12 +216,19 @@ export function buildProposalSendChecklist(
 
 export function hasSigningDocumentSendBlocker(proposal: Proposal): boolean {
   const signingDocuments = proposal.signing_documents ?? [];
-  if (signingDocuments.some((doc) => !doc.signature_field_coords || !doc.date_field_coords)) {
+  if (
+    signingDocuments.some(
+      (doc) =>
+        !hasSignaturePlacements(doc.signature_field_coords) ||
+        !hasSignaturePlacements(doc.date_field_coords),
+    )
+  ) {
     return true;
   }
   return Boolean(
     signingDocuments.length === 0 &&
       proposal.master_contract_pdf_path &&
-      (!proposal.signature_field_coords || !proposal.date_field_coords),
+      (!hasSignaturePlacements(proposal.signature_field_coords) ||
+        !hasSignaturePlacements(proposal.date_field_coords)),
   );
 }

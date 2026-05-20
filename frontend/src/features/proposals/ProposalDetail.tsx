@@ -77,8 +77,12 @@ import type {
   ProposalUpdate,
   ProposalAttachment,
   ProposalSigningDocument,
-  SignatureFieldCoords,
+  SignatureFieldCoordsValue,
 } from '../../types';
+import {
+  formatSignaturePlacementSummary,
+  hasSignaturePlacements,
+} from './signaturePlacements';
 
 function ProposalDetailPage() {
   const { id } = useParams();
@@ -1127,7 +1131,9 @@ function SigningDocumentsCard({
   }, [pdfUrl]);
 
   const incompleteDocs = documents.filter(
-    (doc) => !doc.signature_field_coords || !doc.date_field_coords,
+    (doc) =>
+      !hasSignaturePlacements(doc.signature_field_coords) ||
+      !hasSignaturePlacements(doc.date_field_coords),
   );
 
   const validateFiles = (files: File[]): string | null => {
@@ -1348,7 +1354,10 @@ function SigningDocumentsCard({
       ) : (
         <ul className="mt-4 divide-y divide-gray-200 dark:divide-gray-700 border border-gray-200 dark:border-gray-700 rounded">
           {documents.map((document) => {
-            const ready = Boolean(document.signature_field_coords && document.date_field_coords);
+            const ready = Boolean(
+              hasSignaturePlacements(document.signature_field_coords) &&
+                hasSignaturePlacements(document.date_field_coords),
+            );
             return (
               <li key={document.id} className="px-3 py-3">
                 <div className="flex items-start justify-between gap-3">
@@ -1359,7 +1368,15 @@ function SigningDocumentsCard({
                     <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400 tabular-nums">
                       {formatFileSize(document.file_size)}
                       {ready
-                        ? ` · signature page ${document.signature_field_coords?.page}, date page ${document.date_field_coords?.page}`
+                        ? ` · ${formatSignaturePlacementSummary(
+                            document.signature_field_coords,
+                            'signature',
+                            'signatures',
+                          )}; ${formatSignaturePlacementSummary(
+                            document.date_field_coords,
+                            'date',
+                            'dates',
+                          )}`
                         : ' · needs signature and date areas'}
                     </p>
                     {document.signed_pdf_error && (
@@ -1677,8 +1694,8 @@ function MasterContractCard({
 
 interface SignaturePlacementCardProps {
   proposalId: number;
-  currentCoords: SignatureFieldCoords | null;
-  currentDateCoords: SignatureFieldCoords | null;
+  currentCoords: SignatureFieldCoordsValue | null;
+  currentDateCoords: SignatureFieldCoordsValue | null;
   isLocked: boolean;
 }
 
@@ -1753,12 +1770,12 @@ function SignaturePlacementCard({
         Signature placement
       </h2>
       <p className="text-sm text-gray-700 dark:text-gray-300">
-        {currentCoords
-          ? `Signature placed on page ${currentCoords.page}.`
+        {hasSignaturePlacements(currentCoords)
+          ? formatSignaturePlacementSummary(currentCoords, 'signature', 'signatures')
           : 'No signature box placed.'}
         {' '}
-        {currentDateCoords
-          ? `Date placed on page ${currentDateCoords.page}.`
+        {hasSignaturePlacements(currentDateCoords)
+          ? formatSignaturePlacementSummary(currentDateCoords, 'date', 'dates')
           : 'No date box placed.'}
       </p>
       <div className="mt-3">
@@ -1770,7 +1787,9 @@ function SignaturePlacementCard({
           disabled={isLocked}
           isLoading={loadingPdf}
         >
-          {currentCoords && currentDateCoords ? 'Edit placements' : 'Place signature and date'}
+          {hasSignaturePlacements(currentCoords) && hasSignaturePlacements(currentDateCoords)
+            ? 'Edit placements'
+            : 'Place signature and date'}
         </Button>
         {isLocked && (
           <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">

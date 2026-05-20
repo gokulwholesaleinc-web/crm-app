@@ -5,6 +5,7 @@ import {
   ArrowPathIcon,
   CalendarDaysIcon,
   PencilSquareIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/outline';
 import { GlobalWorkerOptions, getDocument } from 'pdfjs-dist';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
@@ -13,7 +14,8 @@ import type { PDFDocumentProxy } from 'pdfjs-dist';
 // installed pdfjs-dist — no CDN, no manual public/ copy.
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { Modal, ModalFooter, Button } from '../../components/ui';
-import type { SignatureFieldCoords } from '../../types';
+import type { SignatureFieldCoords, SignatureFieldCoordsValue } from '../../types';
+import { normalizeSignaturePlacements } from './signaturePlacements';
 
 GlobalWorkerOptions.workerSrc = pdfWorker;
 
@@ -22,8 +24,8 @@ const RENDER_SCALE = 1.5;
 type PlacementKind = 'signature' | 'date';
 
 export interface SignatureFieldPlacements {
-  signatureFieldCoords: SignatureFieldCoords;
-  dateFieldCoords: SignatureFieldCoords;
+  signatureFieldCoords: SignatureFieldCoords[];
+  dateFieldCoords: SignatureFieldCoords[];
 }
 
 interface SignatureFieldPickerProps {
@@ -31,8 +33,8 @@ interface SignatureFieldPickerProps {
   onClose: () => void;
   /** Object URL or remote URL pointing at the master contract PDF bytes. */
   masterPdfUrl: string;
-  currentCoords: SignatureFieldCoords | null;
-  currentDateCoords: SignatureFieldCoords | null;
+  currentCoords: SignatureFieldCoordsValue | null;
+  currentDateCoords: SignatureFieldCoordsValue | null;
   onSave: (placements: SignatureFieldPlacements) => Promise<void>;
 }
 
@@ -113,9 +115,12 @@ export function SignatureFieldPicker({
   const [pageIdx, setPageIdx] = useState(0);
   const [canvasSize, setCanvasSize] = useState<{ w: number; h: number } | null>(null);
   const [placements, setPlacements] = useState<{
-    signature: SignatureFieldCoords | null;
-    date: SignatureFieldCoords | null;
-  }>({ signature: currentCoords, date: currentDateCoords });
+    signature: SignatureFieldCoords[];
+    date: SignatureFieldCoords[];
+  }>({
+    signature: normalizeSignaturePlacements(currentCoords),
+    date: normalizeSignaturePlacements(currentDateCoords),
+  });
   const [activeKind, setActiveKind] = useState<PlacementKind>('signature');
   const [draftBox, setDraftBox] = useState<DrawnBox | null>(null);
   const [isLoadingDoc, setIsLoadingDoc] = useState(false);
@@ -138,8 +143,8 @@ export function SignatureFieldPicker({
     setDraftBox(null);
     setCanvasSize(null);
     setPlacements({
-      signature: initialCoordsRef.current.currentCoords,
-      date: initialCoordsRef.current.currentDateCoords,
+      signature: normalizeSignaturePlacements(initialCoordsRef.current.currentCoords),
+      date: normalizeSignaturePlacements(initialCoordsRef.current.currentDateCoords),
     });
 
     const loadingTask = getDocument(masterPdfUrl);
@@ -152,8 +157,8 @@ export function SignatureFieldPicker({
         docRef.current = doc;
         setPageCount(doc.numPages);
         const seed =
-          initialCoordsRef.current.currentCoords ??
-          initialCoordsRef.current.currentDateCoords;
+          normalizeSignaturePlacements(initialCoordsRef.current.currentCoords)[0] ??
+          normalizeSignaturePlacements(initialCoordsRef.current.currentDateCoords)[0];
         const initialIdx = seed
           ? clamp(seed.page - 1, 0, doc.numPages - 1)
           : 0;
@@ -281,20 +286,22 @@ export function SignatureFieldPicker({
     const pdfBox = boxToPdfCoords(draftBox, canvasSize.h);
     setPlacements((curr) => ({
       ...curr,
-      [activeKind]: {
+      [activeKind]: curr[activeKind].concat({
         page: draftBox.pageIdx + 1,
         ...pdfBox,
-      },
+      }),
     }));
     setDraftBox(null);
   };
 
   // --- Save / cancel ----------------------------------------------
 
-  const canSave = Boolean(placements.signature && placements.date && !saving);
+  const canSave = Boolean(
+    placements.signature.length > 0 && placements.date.length > 0 && !saving,
+  );
 
   const handleSave = async () => {
-    if (!placements.signature || !placements.date) return;
+    if (placements.signature.length === 0 || placements.date.length === 0) return;
     setSaving(true);
     try {
       await onSave({
@@ -310,20 +317,29 @@ export function SignatureFieldPicker({
   const goPrev = () => setPageIdx((i) => Math.max(0, i - 1));
   const goNext = () => setPageIdx((i) => Math.min(pageCount - 1, i + 1));
 
+  const removePlacement = (kind: PlacementKind, index: number) => {
+    setPlacements((curr) => ({
+      ...curr,
+      [kind]: curr[kind].filter((_, placementIndex) => placementIndex !== index),
+    }));
+  };
+
   const visibleBoxes: Array<{
     kind: PlacementKind;
     box: DrawnBox;
+    index: number | null;
   }> = [];
   if (canvasSize) {
     for (const kind of ['signature', 'date'] as const) {
-      const coords = placements[kind];
-      if (coords && coords.page - 1 === pageIdx) {
-        visibleBoxes.push({ kind, box: pdfCoordsToBox(coords, canvasSize.h) });
-      }
+      placements[kind].forEach((coords, index) => {
+        if (coords.page - 1 === pageIdx) {
+          visibleBoxes.push({ kind, index, box: pdfCoordsToBox(coords, canvasSize.h) });
+        }
+      });
     }
   }
   if (draftBox && draftBox.pageIdx === pageIdx) {
-    visibleBoxes.push({ kind: activeKind, box: draftBox });
+    visibleBoxes.push({ kind: activeKind, index: null, box: draftBox });
   }
 
   return (
@@ -370,13 +386,13 @@ export function SignatureFieldPicker({
             <PlacementToggle
               kind="signature"
               activeKind={activeKind}
-              placed={Boolean(placements.signature)}
+              count={placements.signature.length}
               onClick={setActiveKind}
             />
             <PlacementToggle
               kind="date"
               activeKind={activeKind}
-              placed={Boolean(placements.date)}
+              count={placements.date.length}
               onClick={setActiveKind}
             />
           </div>
@@ -384,10 +400,10 @@ export function SignatureFieldPicker({
 
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
           <span>
-            Signature {placements.signature ? `page ${placements.signature.page}` : 'not placed'}
+            Signatures {placements.signature.length > 0 ? `${placements.signature.length} placed` : 'not placed'}
           </span>
           <span>
-            Date {placements.date ? `page ${placements.date.page}` : 'not placed'}
+            Dates {placements.date.length > 0 ? `${placements.date.length} placed` : 'not placed'}
           </span>
         </div>
 
@@ -423,11 +439,11 @@ export function SignatureFieldPicker({
                 className="absolute inset-0 cursor-crosshair touch-none"
                 style={{ touchAction: 'none' }}
               >
-                {visibleBoxes.map(({ kind, box }, index) => {
+                {visibleBoxes.map(({ kind, box, index }) => {
                   const isDate = kind === 'date';
                   return (
                     <div
-                      key={`${kind}-${index}`}
+                      key={`${kind}-${index ?? 'draft'}-${box.leftPx}-${box.topPx}`}
                       className={`absolute pointer-events-none border-2 ${
                         isDate
                           ? 'border-emerald-500 bg-emerald-500/15'
@@ -439,7 +455,7 @@ export function SignatureFieldPicker({
                         width: `${box.widthPx}px`,
                         height: `${box.heightPx}px`,
                       }}
-                      aria-hidden="true"
+                      aria-hidden={index === null ? 'true' : undefined}
                     >
                       <span
                         className={`absolute -top-5 left-0 rounded px-1.5 py-0.5 text-[10px] font-medium text-white ${
@@ -448,6 +464,29 @@ export function SignatureFieldPicker({
                       >
                         {placementLabel(kind)}
                       </span>
+                      {index !== null && (
+                        <button
+                          type="button"
+                          onPointerDown={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                          }}
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            removePlacement(kind, index);
+                          }}
+                          className={`pointer-events-auto absolute -right-3 -top-3 inline-flex h-6 w-6 items-center justify-center rounded-full border border-white text-white shadow-sm ${
+                            isDate
+                              ? 'bg-emerald-600 hover:bg-emerald-700'
+                              : 'bg-primary-600 hover:bg-primary-700'
+                          }`}
+                          aria-label={`Remove ${placementLabel(kind).toLowerCase()} placement`}
+                          title={`Remove ${placementLabel(kind).toLowerCase()} placement`}
+                        >
+                          <XMarkIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                        </button>
+                      )}
                     </div>
                   );
                 })}
@@ -472,7 +511,7 @@ export function SignatureFieldPicker({
             disabled={!canSave}
             isLoading={saving}
           >
-            Save placement
+            Save placements
           </Button>
         </ModalFooter>
       </div>
@@ -483,18 +522,19 @@ export function SignatureFieldPicker({
 interface PlacementToggleProps {
   kind: PlacementKind;
   activeKind: PlacementKind;
-  placed: boolean;
+  count: number;
   onClick: (kind: PlacementKind) => void;
 }
 
 function PlacementToggle({
   kind,
   activeKind,
-  placed,
+  count,
   onClick,
 }: PlacementToggleProps) {
   const isActive = kind === activeKind;
   const Icon = kind === 'signature' ? PencilSquareIcon : CalendarDaysIcon;
+  const placed = count > 0;
   return (
     <button
       type="button"
@@ -509,7 +549,7 @@ function PlacementToggle({
       <Icon className="h-4 w-4" aria-hidden="true" />
       {placementLabel(kind)}
       <span className={placed ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-300'}>
-        {placed ? 'set' : 'needed'}
+        {placed ? `${count} set` : 'needed'}
       </span>
     </button>
   );
