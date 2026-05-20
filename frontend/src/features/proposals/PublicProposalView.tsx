@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback, startTransition } from 'react';
 import { useParams } from 'react-router-dom';
-import { CheckIcon, PencilSquareIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { ArrowTopRightOnSquareIcon, CheckIcon, PencilSquareIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import axios from 'axios';
 import { sanitizeHexColor, withAlpha } from '../../utils/colorValidation';
 import { useForceLightMode } from '../../hooks/useForceLightMode';
@@ -47,6 +47,13 @@ interface PublicProposal {
   terms: string | null;
   valid_until: string | null;
   status: string;
+  payment_type?: 'one_time' | 'subscription' | null;
+  recurring_interval?: 'month' | 'year' | null;
+  recurring_interval_count?: number | null;
+  amount?: string | number | null;
+  currency?: string | null;
+  stripe_payment_url?: string | null;
+  paid_at?: string | null;
   company: { id: number; name: string } | null;
   contact: { id: number; full_name: string } | null;
   branding: ProposalBranding | null;
@@ -359,9 +366,14 @@ function PublicProposalView() {
     : null;
 
   const hasPricingNotes = Boolean(proposal.pricing_section);
+  const canCompleteLegacyPayment = Boolean(
+    proposal.stripe_payment_url &&
+    proposal.status === 'awaiting_payment' &&
+    !proposal.paid_at,
+  );
 
   const statusPill = actionDone ?? (
-    proposal.status === 'accepted' ? 'accepted'
+    proposal.status === 'accepted' || proposal.status === 'awaiting_payment' || proposal.status === 'paid' ? 'accepted'
     : proposal.status === 'rejected' ? 'rejected'
     : null
   );
@@ -587,6 +599,25 @@ function PublicProposalView() {
                 Decline
               </button>
             </div>
+          </section>
+        )}
+
+        {canCompleteLegacyPayment && proposal.stripe_payment_url && (
+          <section className="mt-10 sm:mt-12 print:hidden">
+            <PlainSectionHeader title="Payment" accent={accent} />
+            <p className="prose-body mb-5">
+              This proposal has been accepted. Use the secure payment link to complete the existing checkout.
+            </p>
+            <a
+              href={proposal.stripe_payment_url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center justify-center gap-2 rounded px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 transition-opacity"
+              style={{ backgroundColor: accent, outlineColor: accent }}
+            >
+              <ArrowTopRightOnSquareIcon className="h-4 w-4" aria-hidden="true" />
+              Complete Payment
+            </a>
           </section>
         )}
 

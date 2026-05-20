@@ -4,7 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, EmailStr, Field, model_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, EmailStr, Field
 
 PaymentType = Literal["one_time", "subscription"]
 RecurringInterval = Literal["month", "year"]
@@ -60,12 +60,13 @@ class ProposalSigningDocumentUpdate(BaseModel):
     date_field_coords: SignatureFieldCoords | None = None
 
 
-class ProposalBillingMixin(BaseModel):
-    """Structured pricing fields shared by ProposalBase/Update/Response.
+class ProposalBillingFields(BaseModel):
+    """Legacy structured payment fields kept on read responses only.
 
-    When payment_type='subscription', recurring_interval and
-    recurring_interval_count must both be set. Validated at the Pydantic
-    layer so the Stripe path never sees a half-configured subscription.
+    Proposal create/edit stopped accepting these values in May 2026. The
+    columns remain so old records, payment retry paths, and public
+    awaiting-payment links keep working without showing billing controls in
+    proposal composition.
     """
     payment_type: PaymentType = "one_time"
     recurring_interval: RecurringInterval | None = None
@@ -73,30 +74,10 @@ class ProposalBillingMixin(BaseModel):
     amount: Decimal | None = None
     currency: str = "USD"
 
-    @model_validator(mode="after")
-    def _check_recurring(self) -> "ProposalBillingMixin":
-        if self.payment_type == "subscription":
-            if not self.recurring_interval or not self.recurring_interval_count:
-                raise ValueError(
-                    "subscription proposals require recurring_interval and "
-                    "recurring_interval_count",
-                )
-            if self.recurring_interval_count < 1:
-                raise ValueError("recurring_interval_count must be >= 1")
-        # one_time must not carry recurrence hints; reject so we don't
-        # store contradictory state at the DB layer.
-        elif self.recurring_interval is not None or self.recurring_interval_count is not None:
-            raise ValueError(
-                "one_time proposals must not set recurring_interval/count",
-            )
-        if self.amount is not None and self.amount <= 0:
-            raise ValueError("amount must be > 0")
-        return self
-
 
 # Proposal Schemas
 
-class ProposalBase(ProposalBillingMixin):
+class ProposalBase(BaseModel):
     title: str
     content: str | None = None
     opportunity_id: int | None = None
@@ -115,6 +96,8 @@ class ProposalBase(ProposalBillingMixin):
     owner_id: int | None = None
     # Per-proposal T&C override. NULL → tenant default applies.
     terms_and_conditions: str | None = None
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class ProposalCreate(ProposalBase):
@@ -138,11 +121,6 @@ class ProposalUpdate(BaseModel):
     designated_signer_email: str | None = None
     owner_id: int | None = None
     terms_and_conditions: str | None = None
-    payment_type: PaymentType | None = None
-    recurring_interval: RecurringInterval | None = None
-    recurring_interval_count: int | None = None
-    amount: Decimal | None = None
-    currency: str | None = None
     # Visual signature placement. ``None`` (explicitly) clears the row
     # back to auto-box. Validated against ``SignatureFieldCoords``;
     # ``exclude_unset=True`` in the service layer means an absent field
@@ -150,34 +128,7 @@ class ProposalUpdate(BaseModel):
     signature_field_coords: SignatureFieldCoords | None = None
     date_field_coords: SignatureFieldCoords | None = None
 
-    @model_validator(mode="after")
-    def _check_billing_consistency(self) -> "ProposalUpdate":
-        """Validate the subset of billing fields present in a PATCH.
-
-        Partial updates pass this validator, but if any billing field is
-        *explicitly* set, the combination still has to be internally
-        consistent so we never land a half-configured subscription in
-        the DB.
-        """
-        if self.payment_type == "subscription":
-            # When turning a proposal into a subscription, interval + count
-            # must land in the same PATCH (the service layer doesn't
-            # merge-then-validate against the existing row).
-            if not self.recurring_interval or not self.recurring_interval_count:
-                raise ValueError(
-                    "switching to subscription requires recurring_interval "
-                    "and recurring_interval_count in the same update",
-                )
-            if self.recurring_interval_count < 1:
-                raise ValueError("recurring_interval_count must be >= 1")
-        elif self.payment_type == "one_time":
-            if self.recurring_interval is not None or self.recurring_interval_count is not None:
-                raise ValueError(
-                    "one_time proposals must not set recurring_interval/count",
-                )
-        if self.amount is not None and self.amount <= 0:
-            raise ValueError("amount must be > 0")
-        return self
+    model_config = ConfigDict(extra="forbid")
 
 
 class ProposalAcceptRequest(BaseModel):
@@ -220,7 +171,7 @@ class ProposalViewResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class ProposalResponse(ProposalBase):
+class ProposalResponse(ProposalBase, ProposalBillingFields):
     id: int
     proposal_number: str
     # Unguessable token used to build the public /proposals/public/{token}
@@ -346,6 +297,16 @@ class ProposalPublicResponse(BaseModel):
     terms: str | None = None
     valid_until: date | None = None
     status: str
+    # Legacy public payment compatibility. New proposal composition does not
+    # expose billing controls, but old awaiting-payment links still need a
+    # payment URL so customers can complete an already-issued payment flow.
+    payment_type: PaymentType | None = None
+    recurring_interval: RecurringInterval | None = None
+    recurring_interval_count: int | None = None
+    amount: Decimal | None = None
+    currency: str | None = None
+    stripe_payment_url: str | None = None
+    paid_at: datetime | None = None
     company: CompanyBrief | None = None
     contact: ContactBrief | None = None
     branding: ProposalBranding | None = None

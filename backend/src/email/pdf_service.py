@@ -195,7 +195,9 @@ class BrandedPDFGenerator:
 
         Expected proposal_data keys:
             proposal_title, client_name, date, sections
-            (list of {title, content}), terms
+            (list of {title, content}), terms.
+            Optional legacy key: preserve_legacy_investment=True keeps total
+            for old signed/payment-link records that already showed it.
         """
         primary = escape(branding.get("primary_color", "#6366f1"))
         secondary = escape(branding.get("secondary_color", "#8b5cf6"))
@@ -251,6 +253,17 @@ class BrandedPDFGenerator:
                 f'</div>'
             )
 
+        investment = ""
+        total = escape(str(proposal_data.get("total", "")))
+        if proposal_data.get("preserve_legacy_investment") and total:
+            currency = escape(str(proposal_data.get("currency", "USD")))
+            investment = (
+                f'<div style="margin:24px 0;padding:16px;background:#f9fafb;border-radius:6px;text-align:center;">'
+                f'<p style="margin:0;font-size:13px;color:#6b7280;">Payment Link Record</p>'
+                f'<p style="margin:4px 0 0;font-size:24px;font-weight:700;color:#111827;">{currency} {total}</p>'
+                f'</div>'
+            )
+
         terms = escape(str(proposal_data.get("terms", "")))
         terms_block = (
             f'<div style="margin-top:24px;padding:12px;background:#f9fafb;border-radius:4px;font-size:12px;color:#6b7280;">'
@@ -258,7 +271,7 @@ class BrandedPDFGenerator:
             if terms else ""
         )
 
-        html = cover + toc + sections_html + terms_block + self._footer_html(branding, page_numbers=True)
+        html = cover + toc + sections_html + investment + terms_block + self._footer_html(branding, page_numbers=True)
         return self._wrap_document(html, title).encode("utf-8")
 
     # ------------------------------------------------------------------

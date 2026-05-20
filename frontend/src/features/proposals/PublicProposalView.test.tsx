@@ -167,6 +167,28 @@ describe('PublicProposalView', () => {
     ).toBeInTheDocument();
   });
 
+  it('shows the legacy payment CTA for awaiting-payment proposals', async () => {
+    mockGet.mockResolvedValue({
+      data: {
+        ...baseProposal,
+        status: 'awaiting_payment',
+        stripe_payment_url: 'https://checkout.stripe.test/pay',
+        amount: '50000',
+        currency: 'USD',
+      },
+    });
+
+    renderAt();
+
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { level: 1, name: 'Test Proposal Title' })).toBeInTheDocument(),
+    );
+    const link = screen.getByRole('link', { name: /Complete Payment/i });
+    expect(link).toHaveAttribute('href', 'https://checkout.stripe.test/pay');
+    expect(screen.queryByText(/USD/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/50000/i)).not.toBeInTheDocument();
+  });
+
   it('requires opening public documents before enabling Sign to Accept', async () => {
     mockGet.mockResolvedValue({
       data: {

@@ -205,7 +205,8 @@ class TestDuplicateEndpoint:
         assert data["executive_summary"] == "Our exec summary"
         assert data["scope_of_work"] == "Scope details here"
         assert data["terms"] == "Net 30"
-        assert data["amount"] is None
+        assert float(data["amount"]) == 500.0
+        assert data["currency"] == "USD"
 
     async def test_clone_clears_esign_fields(
         self, client: AsyncClient, db_session: AsyncSession, test_user: User, auth_headers: dict

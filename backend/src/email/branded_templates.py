@@ -1325,7 +1325,7 @@ def render_proposal_signed_email(
 {''.join(rows)}
 </tbody>
 </table>
-<p style="color:#6b7280;font-size:13px;">The signed proposal is attached for your records.</p>"""
+<p style="color:#6b7280;font-size:13px;">This message confirms the signature event; keep the signed copy with your records.</p>"""
 
     subject = f"Proposal signed — {data.get('proposal_title') or 'Proposal'}"
     html = render_branded_email(

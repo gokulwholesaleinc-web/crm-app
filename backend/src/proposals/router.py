@@ -483,6 +483,25 @@ async def _attach_public_signing_documents(
     ]
 
 
+def _scope_public_payment_fields(response: ProposalPublicResponse) -> None:
+    """Keep public payment compatibility only for active legacy pay links."""
+    has_public_payment_flow = (
+        response.status in {"awaiting_payment", "paid"}
+        or bool(response.stripe_payment_url)
+        or response.paid_at is not None
+    )
+    if has_public_payment_flow:
+        return
+
+    response.payment_type = None
+    response.recurring_interval = None
+    response.recurring_interval_count = None
+    response.amount = None
+    response.currency = None
+    response.stripe_payment_url = None
+    response.paid_at = None
+
+
 async def _check_proposal_reference_access(
     db: DBSession,
     proposal_data: ProposalCreate | ProposalUpdate,
@@ -856,6 +875,7 @@ async def get_public_proposal(
     )
 
     response = ProposalPublicResponse.model_validate(proposal)
+    _scope_public_payment_fields(response)
     response.branding = branding
     response.terms_and_conditions = await service.get_effective_terms_and_conditions(
         proposal,
@@ -907,8 +927,9 @@ async def accept_proposal_public(
     match the proposal's ``designated_signer_email`` (or, failing
     that, the linked contact's email). When a master contract PDF is
     on file, stamps the signature onto a copy and persists the
-    composite to R2. No Stripe spawn — billing is created manually
-    via the Payments module per the 2026-05-14 product decision.
+    composite to R2. No proposal-side Stripe spawn; any new payment
+    collection starts in the Payments module per the 2026-05-14 product
+    decision.
     """
     import hmac as _hmac
 
@@ -951,6 +972,7 @@ async def accept_proposal_public(
 
     branding_data = await service.get_branding_for_proposal(proposal)
     response = ProposalPublicResponse.model_validate(proposal)
+    _scope_public_payment_fields(response)
     response.branding = ProposalBranding(
         company_name=branding_data.get("company_name"),
         logo_url=branding_data.get("logo_url"),
@@ -1023,6 +1045,7 @@ async def reject_proposal_public(
 
     branding_data = await service.get_branding_for_proposal(proposal)
     response = ProposalPublicResponse.model_validate(proposal)
+    _scope_public_payment_fields(response)
     response.branding = ProposalBranding(
         company_name=branding_data.get("company_name"),
         logo_url=branding_data.get("logo_url"),
@@ -1577,9 +1600,9 @@ async def accept_proposal(
     signature plus IP/UA and verifies signer_email. This endpoint is
     the rep-side "the customer accepted offline" action — no
     signature, no e-sign payload. Fires the owner-side
-    ``proposal_signed`` notification for parity but does not
-    auto-spawn Stripe (Lorenzo bills manually via the Payments module
-    per 2026-05-14).
+    ``proposal_signed`` notification for parity. It does not create a
+    proposal-side payment link; any new collection starts in the Payments
+    module per the 2026-05-14 product decision.
     """
     service = ProposalService(db)
     proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
@@ -1626,8 +1649,9 @@ async def duplicate_proposal(
     """Clone a proposal as a new draft.
 
     Copies core proposal content, appends " (copy)" to the title, and clears
-    all e-sign / Stripe / sent timestamps. The clone is owned by the requesting
-    user.
+    all e-sign / Stripe / sent timestamps. Legacy structured payment fields are
+    carried over for retention only; create/edit no longer exposes those inputs.
+    The clone is owned by the requesting user.
     """
     service = ProposalService(db)
     proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
@@ -1656,6 +1680,17 @@ async def duplicate_proposal(
 
     with value_error_as_400():
         clone = await service.create(clone_data, current_user.id)
+
+    # Preserve legacy structured payment data on clones so old records are not
+    # silently erased. These fields are read-only retention now; the form no
+    # longer sends or edits them.
+    clone.payment_type = proposal.payment_type
+    clone.recurring_interval = proposal.recurring_interval
+    clone.recurring_interval_count = proposal.recurring_interval_count
+    clone.amount = proposal.amount
+    clone.currency = proposal.currency
+    await db.flush()
+    await db.refresh(clone)
 
     ip_address = get_client_ip(request)
     await audit_entity_create(db, "proposal", clone.id, current_user.id, ip_address)

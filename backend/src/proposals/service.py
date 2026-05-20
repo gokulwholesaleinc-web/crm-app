@@ -6,6 +6,7 @@ import logging
 import re
 import secrets
 from datetime import UTC, datetime
+from decimal import Decimal
 from html import escape
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -536,8 +537,8 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         page and uploads the composite to R2. Emails the signer a
         countersigned copy.
 
-        No Stripe spawn (Lorenzo's 2026-05-14 ask — billing is created
-        manually via the Payments module after acceptance). Signer
+        No proposal-side Stripe spawn; any new payment collection starts in
+        the Payments module after acceptance. Signer
         email must match the proposal's designated recipient and
         ``agreed_to_terms`` must be True (ESIGN Act consent).
 
@@ -1164,7 +1165,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
             )
 
         # Pricing notes stay as authored text; proposal amount/currency fields
-        # are no longer rendered on customer-facing proposal artifacts.
+        # are no longer rendered on new customer-facing proposal artifacts.
         pricing_free_text = proposal.pricing_section
         if pricing_free_text:
             sections_html += _section(
@@ -1172,11 +1173,40 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 f'<p class="doc-prose">{escape(pricing_free_text)}</p>',
             )
 
+        legacy_payment_snapshot_html = ""
+        if (
+            include_signature
+            and proposal.signed_at
+            and proposal.amount is not None
+            and (
+                proposal.status in ("awaiting_payment", "paid")
+                or bool(proposal.stripe_payment_url)
+                or proposal.paid_at is not None
+            )
+        ):
+            try:
+                amount_val = Decimal(str(proposal.amount))
+            except (ArithmeticError, ValueError, TypeError):
+                amount_val = None  # type: ignore[assignment]
+            if amount_val is not None and amount_val > 0:
+                currency = escape((proposal.currency or "USD").upper())
+                legacy_payment_snapshot_html = _section(
+                    "Payment Link Record",
+                    (
+                        '<p class="doc-prose">'
+                        "This signed copy preserves the payment amount from "
+                        f"the issued legacy payment link: {currency} {amount_val:,.2f}."
+                        "</p>"
+                    ),
+                )
+                sections_html += legacy_payment_snapshot_html
+
         # Fallback `content` block if nothing structured was filled in
         if (
             proposal.content
             and not populated_content
             and not pricing_free_text
+            and not legacy_payment_snapshot_html
         ):
             sections_html += _section(
                 "Proposal",

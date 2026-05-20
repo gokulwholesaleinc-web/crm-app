@@ -184,10 +184,9 @@ class Proposal(Base, AuditableMixin):
     # Status lifecycle:
     #   draft -> sent -> viewed -> accepted -> (awaiting_payment) -> paid
     #                                      \-> rejected
-    # `awaiting_payment` is the brief window between e-sign and Stripe
-    # webhook confirming payment; it lets the UI show "Invoice sent,
-    # waiting on payment" instead of just "Accepted" for deals that have
-    # payment wired up. `paid` is terminal.
+    # `awaiting_payment` is retained for legacy payment links that were
+    # created before proposal composition became pricing-notes-only.
+    # New payment collection starts in the Payments module. `paid` is terminal.
     status: Mapped[str] = mapped_column(String(20), default="draft", nullable=False)
 
     # Content sections
@@ -267,13 +266,10 @@ class Proposal(Base, AuditableMixin):
     # modal. NULL falls back to ``tenant_settings.default_terms_and_conditions``.
     terms_and_conditions: Mapped[str | None] = mapped_column(Text)
 
-    # Stripe billing artifacts. Populated only via the explicit Retry
-    # Billing endpoint (accept-time auto-spawn was removed 2026-05-14
-    # per Lorenzo's manual-billing model). Only one of stripe_invoice_id /
-    # stripe_checkout_session_id will be set, based on the linked
-    # Quote.payment_type: one_time -> invoice, subscription -> checkout
-    # session. stripe_subscription_id is filled in by the
-    # checkout.session.completed webhook when the client completes setup.
+    # Legacy Stripe artifacts. Accept-time auto-spawn was removed 2026-05-14;
+    # new payment collection starts in the Payments module. These columns
+    # remain for existing awaiting-payment/paid proposal links and old retry
+    # paths that need to recover a previously issued payment URL.
     stripe_invoice_id: Mapped[str | None] = mapped_column(String(255), index=True)
     stripe_subscription_id: Mapped[str | None] = mapped_column(
         String(255), index=True
@@ -284,11 +280,8 @@ class Proposal(Base, AuditableMixin):
     stripe_payment_url: Mapped[str | None] = mapped_column(Text)
     invoice_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    # Most-recent Stripe-spawn failure (bad key, customer resolution,
-    # Stripe API error). Populated by `_maybe_spawn_billing` when the
-    # try/except swallows a ValueError so the CRM UI can show the admin
-    # "billing setup failed — retry" instead of a silent "accepted" with
-    # no payment link. Cleared on successful retry.
+    # Most-recent legacy payment-link failure. Retained so operators can see
+    # why an old recovery path did not produce a usable payment URL.
     billing_error: Mapped[str | None] = mapped_column(Text)
 
     # Owner

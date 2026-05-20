@@ -35,16 +35,16 @@ export interface ProposalSigningDocument {
   updated_at: string;
 }
 
-export interface ProposalBillingFields {
-  payment_type?: PaymentType;
+export interface ProposalLegacyBillingFields {
+  payment_type: PaymentType;
   /** Stripe-native unit. 'month' + count=3 = quarterly, count=6 = bi-yearly. */
   recurring_interval?: RecurringInterval | null;
   recurring_interval_count?: number | null;
   amount?: string | number | null;
-  currency?: string;
+  currency: string;
 }
 
-export interface ProposalBase extends ProposalBillingFields {
+export interface ProposalBase {
   title: string;
   content?: string | null;
   contact_id?: number | null;
@@ -91,11 +91,6 @@ export interface ProposalUpdate {
   designated_signer_email?: string | null;
   owner_id?: number | null;
   terms_and_conditions?: string | null;
-  payment_type?: PaymentType;
-  recurring_interval?: RecurringInterval | null;
-  recurring_interval_count?: number | null;
-  amount?: string | number | null;
-  currency?: string;
   /** Visual signature-box placement on the master contract. Pass an
    * object to set, ``null`` to clear back to the auto-box default. */
   signature_field_coords?: SignatureFieldCoords | null;
@@ -112,7 +107,7 @@ export interface ProposalView {
   user_agent?: string | null;
 }
 
-export interface Proposal extends ProposalBase {
+export interface Proposal extends ProposalBase, ProposalLegacyBillingFields {
   id: number;
   proposal_number: string;
   /** Unguessable token used for the public /accept link. Nullable only

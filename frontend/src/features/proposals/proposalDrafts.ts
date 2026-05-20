@@ -1,6 +1,6 @@
 import { safeStorage } from '../../utils/safeStorage';
 
-const VERSION = 'v1';
+const VERSION = 'v2';
 const KEY_PREFIX = 'crm_proposal_draft:';
 
 export type ProposalDraftMode = 'create' | 'edit';
@@ -24,7 +24,7 @@ export interface ProposalFormDraftValue {
 }
 
 export interface ProposalFormDraftRecord {
-  version: 1;
+  version: 2;
   mode: ProposalDraftMode;
   proposalId: number | null;
   updatedAt: string;
@@ -79,13 +79,13 @@ function sanitizeDraftValue(raw: unknown): ProposalFormDraftValue | null {
 
 function sanitizeRecord(raw: unknown): ProposalFormDraftRecord | null {
   if (!isPlainObject(raw)) return null;
-  if (raw.version !== 1) return null;
+  if (raw.version !== 2) return null;
   if (raw.mode !== 'create' && raw.mode !== 'edit') return null;
   if (typeof raw.updatedAt !== 'string' || !raw.updatedAt) return null;
   const value = sanitizeDraftValue(raw.value);
   if (!value) return null;
   return {
-    version: 1,
+    version: 2,
     mode: raw.mode,
     proposalId: cleanNullableNumber(raw.proposalId),
     updatedAt: raw.updatedAt,
@@ -106,7 +106,7 @@ export function writeProposalDraft(
 ): ProposalFormDraftRecord | null {
   if (!key) return null;
   const record: ProposalFormDraftRecord = {
-    version: 1,
+    version: 2,
     mode,
     proposalId: mode === 'edit' ? proposalId ?? null : null,
     updatedAt: new Date().toISOString(),

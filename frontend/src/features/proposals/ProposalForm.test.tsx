@@ -18,7 +18,7 @@ const TEST_USER: User = {
   created_at: '2026-05-18T00:00:00.000Z',
 };
 
-const CREATE_DRAFT_KEY = 'crm_proposal_draft:7:create:new:v1';
+const CREATE_DRAFT_KEY = 'crm_proposal_draft:7:create:new:v2';
 
 const baseProps = {
   onSubmit: vi.fn(),
@@ -127,7 +127,7 @@ describe('ProposalForm local drafts', () => {
 
     const saved = JSON.parse(window.localStorage.getItem(CREATE_DRAFT_KEY) ?? 'null');
     expect(saved).toMatchObject({
-      version: 1,
+      version: 2,
       mode: 'create',
       proposalId: null,
       value: {
@@ -242,7 +242,7 @@ describe('ProposalForm local drafts', () => {
         new StorageEvent('storage', {
           key: CREATE_DRAFT_KEY,
           oldValue: null,
-          newValue: '{"version":1}',
+          newValue: '{"version":2}',
         }),
       );
     });

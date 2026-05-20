@@ -10,6 +10,7 @@ from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from httpx import AsyncClient
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.auth.models import User
@@ -18,6 +19,7 @@ from src.companies.models import Company
 from src.contacts.models import Contact
 from src.email.models import EmailQueue
 from src.proposals.models import Proposal
+from src.proposals.schemas import ProposalCreate, ProposalUpdate
 from src.whitelabel.models import Tenant, TenantSettings, TenantUser
 
 
@@ -36,6 +38,18 @@ def _extract_pdf_text(content: bytes) -> str:
 # =============================================================================
 # Fixtures
 # =============================================================================
+
+
+class TestProposalBillingInputSchema:
+    """Legacy billing fields are read-only; the form no longer accepts them."""
+
+    def test_create_rejects_legacy_billing_fields(self):
+        with pytest.raises(ValidationError):
+            ProposalCreate(title="No billing", amount=5000, currency="USD")
+
+    def test_update_rejects_legacy_billing_fields(self):
+        with pytest.raises(ValidationError):
+            ProposalUpdate(amount=5000)
 
 @pytest.fixture
 async def branded_tenant(db_session: AsyncSession) -> Tenant:
@@ -402,6 +416,32 @@ class TestGenerateProposalPDF:
         assert "-signed.pdf" in content_disp
 
     @pytest.mark.asyncio
+    async def test_signed_legacy_payment_pdf_preserves_payment_record(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        branded_auth_headers: dict,
+        branded_proposal: Proposal,
+    ):
+        """Signed legacy payment-link PDFs keep the amount the old link issued."""
+        branded_proposal.signed_at = datetime(2026, 4, 29, 17, 30, tzinfo=UTC)
+        branded_proposal.status = "awaiting_payment"
+        branded_proposal.amount = 50000
+        branded_proposal.currency = "USD"
+        branded_proposal.stripe_payment_url = "https://checkout.stripe.test/pay"
+        await db_session.commit()
+
+        response = await client.get(
+            f"/api/proposals/{branded_proposal.id}/pdf",
+            headers=branded_auth_headers,
+        )
+
+        assert response.status_code == 200
+        content = _extract_pdf_text(response.content)
+        assert "Payment Link Record" in content
+        assert "USD 50,000.00" in content
+
+    @pytest.mark.asyncio
     async def test_unsigned_proposal_pdf_omits_signature_block(
         self,
         client: AsyncClient,
@@ -600,9 +640,35 @@ class TestPublicViewBranding:
         assert data["timeline"] == "Q1 2026"
         assert data["terms"] == "Standard terms apply"
         assert data["cover_letter"] is not None
-        assert "amount" not in data
-        assert "currency" not in data
-        assert "stripe_payment_url" not in data
+        assert data["amount"] is None
+        assert data["currency"] is None
+        assert data["stripe_payment_url"] is None
+
+    @pytest.mark.asyncio
+    async def test_public_view_preserves_legacy_awaiting_payment_link(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        branded_proposal: Proposal,
+    ):
+        """Old awaiting-payment links must still expose the checkout URL."""
+        branded_proposal.status = "awaiting_payment"
+        branded_proposal.amount = 50000
+        branded_proposal.currency = "USD"
+        branded_proposal.stripe_payment_url = "https://checkout.stripe.test/pay"
+        await db_session.commit()
+        await db_session.refresh(branded_proposal)
+
+        response = await client.get(
+            f"/api/proposals/public/{branded_proposal.public_token}",
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "awaiting_payment"
+        assert float(data["amount"]) == 50000.0
+        assert data["currency"] == "USD"
+        assert data["stripe_payment_url"] == "https://checkout.stripe.test/pay"
 
     @pytest.mark.asyncio
     async def test_public_view_branding_has_footer_text(

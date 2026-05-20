@@ -453,6 +453,24 @@ class TestBrandedPDFGenerator:
         assert "Table of Contents" in html
         assert "Acme Corp" in html
 
+    def test_generate_proposal_pdf_can_preserve_legacy_investment(self):
+        """Legacy signed/payment-link records can opt into retaining old totals."""
+        result = self.gen.generate_proposal_pdf(
+            {
+                "proposal_title": "Legacy Proposal",
+                "client_name": "Bob Corp",
+                "sections": [],
+                "total": "120,000.00",
+                "currency": "USD",
+                "preserve_legacy_investment": True,
+            },
+            SAMPLE_BRANDING,
+        )
+
+        html = result.decode("utf-8")
+        assert "Payment Link Record" in html
+        assert "USD 120,000.00" in html
+
     def test_generate_invoice_pdf_returns_bytes(self):
         """Should return bytes containing branded HTML with invoice details and paid status."""
         invoice_data = {
