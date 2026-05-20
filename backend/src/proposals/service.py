@@ -53,6 +53,7 @@ from src.proposals.schemas import (
     ProposalUpdate,
     SignatureFieldCoords,
     SignatureFieldPlacementValue,
+    SignatureFieldPlacementWriteValue,
 )
 
 logger = logging.getLogger(__name__)
@@ -87,9 +88,10 @@ def _single_coords_for_stamper(coords: dict) -> dict | None:
     }
 
 
-def _strict_coords_for_stamper(coords: object, *, index: int) -> dict:
+def _strict_coords_for_stamper(coords: object, *, index: int, field_name: str) -> dict:
+    message = f"Malformed {field_name} placement at index {index}"
     if not isinstance(coords, dict):
-        raise ValueError(f"Malformed signature/date placement at index {index}")
+        raise ValueError(message)
 
     try:
         page = int(coords["page"])
@@ -98,7 +100,7 @@ def _strict_coords_for_stamper(coords: object, *, index: int) -> dict:
         width = float(coords["w"])
         height = float(coords["h"])
     except (KeyError, TypeError, ValueError) as exc:
-        raise ValueError(f"Malformed signature/date placement at index {index}") from exc
+        raise ValueError(message) from exc
 
     if (
         page < 1
@@ -106,7 +108,7 @@ def _strict_coords_for_stamper(coords: object, *, index: int) -> dict:
         or width <= 0
         or height <= 0
     ):
-        raise ValueError(f"Malformed signature/date placement at index {index}")
+        raise ValueError(message)
 
     return {
         "page": page - 1,
@@ -119,6 +121,8 @@ def _strict_coords_for_stamper(coords: object, *, index: int) -> dict:
 
 def _coords_for_stamper(
     coords: dict | list[dict] | None,
+    *,
+    field_name: str = "signature",
 ) -> dict | list[dict] | None:
     """Translate the user-facing ``SignatureFieldCoords`` shape into
     the dict ``pdf_stamper`` consumes.
@@ -139,8 +143,11 @@ def _coords_for_stamper(
         return None
     if isinstance(coords, list):
         if not coords:
-            raise ValueError("At least one signature/date placement is required")
-        return [_strict_coords_for_stamper(item, index=index) for index, item in enumerate(coords)]
+            raise ValueError(f"At least one {field_name} placement is required")
+        return [
+            _strict_coords_for_stamper(item, index=index, field_name=field_name)
+            for index, item in enumerate(coords)
+        ]
     return _single_coords_for_stamper(coords)
 
 
@@ -449,10 +456,10 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         document: ProposalSigningDocument,
         *,
         signature_field_coords: (
-            SignatureFieldPlacementValue | dict | list[dict] | None | _UnsetType
+            SignatureFieldPlacementWriteValue | dict | list[dict] | None | _UnsetType
         ) = _UNSET,
         date_field_coords: (
-            SignatureFieldPlacementValue | dict | list[dict] | None | _UnsetType
+            SignatureFieldPlacementWriteValue | dict | list[dict] | None | _UnsetType
         ) = _UNSET,
         user_id: int,
     ) -> ProposalSigningDocument:
@@ -740,8 +747,14 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                     StampInputs(
                         master_pdf=master_bytes,
                         signature_png=proposal.signature_image,
-                        coords=_coords_for_stamper(document.signature_field_coords),
-                        date_coords=_coords_for_stamper(document.date_field_coords),
+                        coords=_coords_for_stamper(
+                            document.signature_field_coords,
+                            field_name="signature",
+                        ),
+                        date_coords=_coords_for_stamper(
+                            document.date_field_coords,
+                            field_name="date",
+                        ),
                         date_label=_signed_date_label(signed_at, signer_timezone),
                         signer_name=proposal.signer_name or "",
                         signer_email=proposal.signer_email or "",
@@ -842,8 +855,14 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 StampInputs(
                     master_pdf=master_bytes,
                     signature_png=proposal.signature_image,
-                    coords=_coords_for_stamper(proposal.signature_field_coords),
-                    date_coords=_coords_for_stamper(proposal.date_field_coords),
+                    coords=_coords_for_stamper(
+                        proposal.signature_field_coords,
+                        field_name="signature",
+                    ),
+                    date_coords=_coords_for_stamper(
+                        proposal.date_field_coords,
+                        field_name="date",
+                    ),
                     date_label=_signed_date_label(signed_at, signer_timezone),
                     signer_name=proposal.signer_name or "",
                     signer_email=proposal.signer_email or "",

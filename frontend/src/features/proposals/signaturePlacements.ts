@@ -1,12 +1,13 @@
 import type {
   SignatureFieldCoords,
   SignatureFieldCoordsValue,
-} from '../../types';
+} from '../../types/proposals';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+// Keep in sync with backend/src/proposals/schemas.py::SignatureFieldCoords.
 export function isSignatureFieldCoords(
   value: unknown,
 ): value is SignatureFieldCoords {
@@ -47,8 +48,17 @@ export function hasSignaturePlacements(
 ): boolean {
   if (!value) return false;
   return Array.isArray(value)
-    ? value.some(isSignatureFieldCoords)
+    ? value.length > 0 && value.every(isSignatureFieldCoords)
     : isSignatureFieldCoords(value);
+}
+
+export function hasInvalidSignaturePlacements(
+  value: SignatureFieldCoordsValue | null | undefined,
+): boolean {
+  if (!value) return false;
+  return Array.isArray(value)
+    ? value.length > 0 && !value.every(isSignatureFieldCoords)
+    : !isSignatureFieldCoords(value);
 }
 
 export function formatSignaturePlacementSummary(
@@ -56,6 +66,7 @@ export function formatSignaturePlacementSummary(
   singularLabel: string,
   pluralLabel: string,
 ): string {
+  if (hasInvalidSignaturePlacements(value)) return `invalid ${pluralLabel}`;
   const placements = normalizeSignaturePlacements(value);
   if (placements.length === 0) return `no ${pluralLabel}`;
   const pages = Array.from(

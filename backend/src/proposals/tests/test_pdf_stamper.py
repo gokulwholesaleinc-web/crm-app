@@ -100,24 +100,35 @@ class TestStampMasterWithSignature:
         with pytest.raises(ValueError, match="signature coords list is empty"):
             stamp_master_with_signature(_inputs(coords=[]))
 
-    def test_malformed_coord_list_dedupes_auto_box(self):
+    def test_malformed_coord_list_raises(self):
+        reader = PdfReader(io.BytesIO(_make_master_pdf(page_count=2)))
+        with pytest.raises(ValueError, match="Malformed signature placement"):
+            _resolve_signature_boxes(
+                reader,
+                [
+                    {"page": 0, "x": "nope"},
+                    {"page": 0, "x": "still-nope"},
+                ],
+            )
+
+    def test_duplicate_valid_coord_list_preserves_each_entry(self):
         reader = PdfReader(io.BytesIO(_make_master_pdf(page_count=2)))
         boxes = _resolve_signature_boxes(
             reader,
             [
-                {"page": 0, "x": "nope"},
-                {"page": 0, "x": "still-nope"},
+                {"page": 0, "x": 72, "y": 120, "width": 120, "height": 48},
+                {"page": 0, "x": 72, "y": 120, "width": 120, "height": 48},
             ],
         )
-        assert len(boxes) == 1
+        assert len(boxes) == 2
 
-    def test_out_of_range_signature_page_logs_clamp(self, caplog):
+    def test_out_of_range_signature_page_raises_for_list(self):
         reader = PdfReader(io.BytesIO(_make_master_pdf(page_count=2)))
-        _resolve_signature_boxes(
-            reader,
-            [{"page": 99, "x": 72, "y": 120, "width": 120, "height": 48}],
-        )
-        assert "outside PDF page range" in caplog.text
+        with pytest.raises(ValueError, match="outside PDF page range 1-2"):
+            _resolve_signature_boxes(
+                reader,
+                [{"page": 99, "x": 72, "y": 120, "width": 120, "height": 48}],
+            )
 
     def test_audit_page_contains_signer_metadata(self):
         out = stamp_master_with_signature(_inputs())
@@ -161,6 +172,18 @@ class TestStampMasterWithSignature:
             (page.extract_text() or "") for page in PdfReader(io.BytesIO(out)).pages[:-1]
         )
         assert "05-14-2026" not in date_text
+
+    def test_out_of_range_date_page_raises_for_list(self):
+        with pytest.raises(
+            ValueError, match="Date placement page 100 is outside PDF page range 1-2"
+        ):
+            stamp_master_with_signature(
+                _inputs(
+                    coords=[{"page": 0, "x": 72, "y": 120, "width": 120, "height": 48}],
+                    date_coords=[{"page": 99, "x": 240, "y": 120, "width": 90, "height": 24}],
+                    date_label="05-14-2026",
+                ),
+            )
 
     def test_multiple_signature_and_date_boxes_render(self):
         out = stamp_master_with_signature(

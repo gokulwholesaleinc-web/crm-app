@@ -10,10 +10,11 @@ Inputs
   of those JSON objects, pointing at the slots in ``master_pdf`` where
   the signature image should land (PDF points; origin = bottom-left).
   ``None`` triggers auto-detect to the last page bottom-right. A single
-  coords payload that's missing ``x/y/width/height`` (or has invalid
-  values) falls back to the bottom-right auto-box on the *requested*
-  ``page`` rather than the last page. Multi-placement fallbacks are
-  de-duped so multiple malformed entries do not stack the same auto-box.
+  legacy coords payload that's missing ``x/y/width/height`` (or has
+  invalid values) falls back to the bottom-right auto-box on the
+  *requested* ``page`` rather than the last page. List payloads are
+  strict: malformed or out-of-range entries raise so the service can
+  surface ``signed_pdf_error`` instead of stamping the wrong page.
 * ``signer_*`` + ``signed_at`` + ``proposal_number``: rendered into
   the appended audit page so a printed copy is self-contained.
 
@@ -128,40 +129,42 @@ def _resolve_signature_boxes(
     if isinstance(coords, list):
         if not coords:
             raise ValueError("signature coords list is empty")
-        boxes = [_resolve_target_box(reader, item) for item in coords]
-        return _dedupe_boxes(boxes)
+        return [
+            _resolve_target_box(reader, item, strict=True, field_name="signature")
+            for item in coords
+        ]
     return [_resolve_target_box(reader, coords)]
-
-
-def _dedupe_boxes(
-    boxes: list[tuple[int, tuple[float, float, float, float]]],
-) -> list[tuple[int, tuple[float, float, float, float]]]:
-    unique: list[tuple[int, tuple[float, float, float, float]]] = []
-    seen: set[tuple[int, tuple[float, float, float, float]]] = set()
-    for box in boxes:
-        if box in seen:
-            continue
-        seen.add(box)
-        unique.append(box)
-    return unique
 
 
 def _resolve_target_box(
     reader: PdfReader,
     coords: dict[str, Any] | None,
+    *,
+    strict: bool = False,
+    field_name: str = "signature",
 ) -> tuple[int, tuple[float, float, float, float]]:
     page_count = len(reader.pages)
     if not coords:
+        if strict:
+            raise ValueError(f"Malformed {field_name} placement")
         return _auto_box(reader, page_count - 1)
 
     try:
         page = int(coords.get("page", page_count - 1))
     except (TypeError, ValueError):
+        if strict:
+            raise ValueError(f"Malformed {field_name} placement page") from None
         logger.warning("Malformed signature coords page %r; using last page", coords)
         page = page_count - 1
     requested_page = page
     page = max(0, min(page_count - 1, page))
     if page != requested_page:
+        message = (
+            f"{field_name.capitalize()} placement page {requested_page + 1} "
+            f"is outside PDF page range 1-{page_count}"
+        )
+        if strict:
+            raise ValueError(message)
         logger.warning(
             "Signature coords page %s outside PDF page range 0-%s; clamped to %s",
             requested_page,
@@ -179,10 +182,14 @@ def _resolve_target_box(
         width = float(coords["width"])
         height = float(coords["height"])
     except (KeyError, TypeError, ValueError):
+        if strict:
+            raise ValueError(f"Malformed {field_name} placement") from None
         logger.warning("Malformed signature coords %r; using auto-box", coords)
         return _auto_box(reader, page)
 
     if width <= 0 or height <= 0:
+        if strict:
+            raise ValueError(f"Malformed {field_name} placement")
         logger.warning("Zero/negative signature dims %r; using auto-box", coords)
         return _auto_box(reader, page)
 
@@ -200,10 +207,8 @@ def _resolve_date_boxes(
     coords: dict[str, Any] | list[dict[str, Any]],
 ) -> list[tuple[int, tuple[float, float, float, float]]] | None:
     if isinstance(coords, list):
-        boxes = [
-            box for item in coords for box in [_resolve_date_box(reader, item)] if box is not None
-        ]
-        return _dedupe_boxes(boxes) or None
+        boxes = [_resolve_date_box(reader, item, strict=True) for item in coords]
+        return [box for box in boxes if box is not None] or None
     box = _resolve_date_box(reader, coords)
     return None if box is None else [box]
 
@@ -211,6 +216,8 @@ def _resolve_date_boxes(
 def _resolve_date_box(
     reader: PdfReader,
     coords: dict[str, Any],
+    *,
+    strict: bool = False,
 ) -> tuple[int, tuple[float, float, float, float]] | None:
     """Resolve one date stamp coord, or return None to skip that date stamp.
 
@@ -226,15 +233,24 @@ def _resolve_date_box(
         width = float(coords["width"])
         height = float(coords["height"])
     except (KeyError, TypeError, ValueError):
+        if strict:
+            raise ValueError("Malformed date placement") from None
         logger.warning("Malformed proposal date coords %r; skipping date stamp", coords)
         return None
     if width <= 0 or height <= 0:
+        if strict:
+            raise ValueError("Malformed date placement")
         logger.warning("Zero/negative date stamp dims %r; skipping date stamp", coords)
         return None
 
     requested_page = page
     page = max(0, min(page_count - 1, page))
     if page != requested_page:
+        message = (
+            f"Date placement page {requested_page + 1} " f"is outside PDF page range 1-{page_count}"
+        )
+        if strict:
+            raise ValueError(message)
         logger.warning(
             "Date coords page %s outside PDF page range 0-%s; clamped to %s",
             requested_page,

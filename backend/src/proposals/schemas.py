@@ -26,6 +26,8 @@ class SignatureFieldCoords(BaseModel):
     validation (e.g. a box drawn slightly past the page edge).
     """
 
+    # Keep in sync with
+    # frontend/src/features/proposals/signaturePlacements.ts::isSignatureFieldCoords.
     # ``allow_inf_nan=False`` keeps inf/-inf/NaN from sneaking past the
     # ``ge=0`` / ``gt=0`` short-circuits and persisting as garbage that
     # only the stamper's clamp logic would catch.
@@ -41,6 +43,7 @@ SignatureFieldPlacementList: TypeAlias = Annotated[
     Field(min_length=1, max_length=100),
 ]
 SignatureFieldPlacementValue: TypeAlias = SignatureFieldCoords | SignatureFieldPlacementList
+SignatureFieldPlacementWriteValue: TypeAlias = SignatureFieldPlacementList
 
 
 class ProposalSigningDocumentResponse(BaseModel):
@@ -63,8 +66,8 @@ class ProposalSigningDocumentResponse(BaseModel):
 
 
 class ProposalSigningDocumentUpdate(BaseModel):
-    signature_field_coords: SignatureFieldPlacementValue | None = None
-    date_field_coords: SignatureFieldPlacementValue | None = None
+    signature_field_coords: SignatureFieldPlacementWriteValue | None = None
+    date_field_coords: SignatureFieldPlacementWriteValue | None = None
 
 
 class ProposalBillingFields(BaseModel):
@@ -131,11 +134,10 @@ class ProposalUpdate(BaseModel):
     owner_id: int | None = None
     terms_and_conditions: str | None = None
     # Visual signature placement. ``None`` (explicitly) clears the row
-    # back to auto-box. The API accepts one legacy box or a list of boxes;
-    # ``exclude_unset=True`` in the service layer means an absent field
-    # leaves the existing value alone.
-    signature_field_coords: SignatureFieldPlacementValue | None = None
-    date_field_coords: SignatureFieldPlacementValue | None = None
+    # back to auto-box. New writes must be lists; read schemas still accept
+    # one legacy box so old rows round-trip safely.
+    signature_field_coords: SignatureFieldPlacementWriteValue | None = None
+    date_field_coords: SignatureFieldPlacementWriteValue | None = None
 
     model_config = ConfigDict(extra="forbid")
 

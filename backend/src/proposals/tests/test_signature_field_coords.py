@@ -228,7 +228,7 @@ class TestSignatureFieldCoordsRoundtrip:
     async def test_patch_persists_valid_coords(self, client: AsyncClient, db_session: AsyncSession):
         user = await _make_user(db_session)
         proposal = await _make_draft_proposal(db_session, user)
-        coords = {"page": 1, "x": 100.5, "y": 200.0, "w": 216.0, "h": 72.0}
+        coords = [{"page": 1, "x": 100.5, "y": 200.0, "w": 216.0, "h": 72.0}]
 
         resp = await client.patch(
             f"/api/proposals/{proposal.id}",
@@ -248,6 +248,22 @@ class TestSignatureFieldCoordsRoundtrip:
 
         await db_session.refresh(proposal)
         assert proposal.signature_field_coords == coords
+
+    async def test_get_returns_legacy_single_coords(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
+        user = await _make_user(db_session)
+        proposal = await _make_draft_proposal(db_session, user)
+        legacy_coords = {"page": 1, "x": 100.5, "y": 200.0, "w": 216.0, "h": 72.0}
+        proposal.signature_field_coords = legacy_coords
+        await db_session.commit()
+
+        get_resp = await client.get(
+            f"/api/proposals/{proposal.id}",
+            headers=_auth_headers(user),
+        )
+        assert get_resp.status_code == 200
+        assert get_resp.json()["signature_field_coords"] == legacy_coords
 
     async def test_patch_persists_multiple_coords(
         self, client: AsyncClient, db_session: AsyncSession
@@ -293,7 +309,7 @@ class TestSignatureFieldCoordsRoundtrip:
     ):
         user = await _make_user(db_session)
         proposal = await _make_draft_proposal(db_session, user)
-        coords = {"page": 2, "x": 50.0, "y": 100.0, "w": 180.0, "h": 60.0}
+        coords = [{"page": 2, "x": 50.0, "y": 100.0, "w": 180.0, "h": 60.0}]
 
         set_resp = await client.patch(
             f"/api/proposals/{proposal.id}",
@@ -322,7 +338,7 @@ class TestSignatureFieldCoordsRoundtrip:
     ):
         user = await _make_user(db_session)
         proposal = await _make_draft_proposal(db_session, user)
-        coords = {"page": 1, "x": 10.0, "y": 20.0, "w": 200.0, "h": 50.0}
+        coords = [{"page": 1, "x": 10.0, "y": 20.0, "w": 200.0, "h": 50.0}]
 
         set_resp = await client.patch(
             f"/api/proposals/{proposal.id}",
@@ -373,6 +389,29 @@ class TestSignatureFieldCoordsValidation:
         resp = await client.patch(
             f"/api/proposals/{proposal.id}",
             json={"signature_field_coords": bad_coords},
+            headers=_auth_headers(user),
+        )
+        assert resp.status_code == 422, resp.text
+
+    async def test_patch_rejects_single_coords_object(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+    ):
+        user = await _make_user(db_session)
+        proposal = await _make_draft_proposal(db_session, user)
+
+        resp = await client.patch(
+            f"/api/proposals/{proposal.id}",
+            json={
+                "signature_field_coords": {
+                    "page": 1,
+                    "x": 10,
+                    "y": 10,
+                    "w": 100,
+                    "h": 50,
+                },
+            },
             headers=_auth_headers(user),
         )
         assert resp.status_code == 422, resp.text
@@ -587,5 +626,5 @@ class TestStampUsesConfiguredBox:
         ]
         with pytest.raises(ValueError, match="At least one"):
             _coords_for_stamper([])
-        with pytest.raises(ValueError, match="index 1"):
+        with pytest.raises(ValueError, match="Malformed signature placement at index 1"):
             _coords_for_stamper([valid, {"page": 1, "x": "nope"}])
