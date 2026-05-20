@@ -678,21 +678,38 @@ async def download_public_proposal_attachment(
         # distinguish "exists but not yours" from "doesn't exist".
         raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Attachment not found")
 
-    try:
-        download_url = await att_service.get_download_url(attachment)
-    except Exception as exc:
-        logger.info("R2 presign failed for attachment %s: %s", attachment.id, exc)
-        download_url = None
+    from src.attachments.object_storage import object_exists
 
+    # Confirm the object actually exists before recording the view.
+    # Presigning alone doesn't prove the key resolves — if the object
+    # is missing the signer sees an R2 404 in the popup, but we'd
+    # otherwise have already written a viewed row that lets the
+    # read-before-sign gate pass.
+    download_url: str | None = None
     file_path = None
-    if not download_url:
+    if attachment.file_path.startswith("obj://"):
+        object_key = attachment.file_path[6:]
+        try:
+            exists = await object_exists(object_key)
+        except Exception as exc:
+            logger.info("R2 head_object failed for attachment %s: %s", attachment.id, exc)
+            exists = False
+        if not exists:
+            raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="File not found")
+        try:
+            download_url = await att_service.get_download_url(attachment)
+        except Exception as exc:
+            logger.info("R2 presign failed for attachment %s: %s", attachment.id, exc)
+            download_url = None
+        if not download_url:
+            raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="File not found")
+    else:
         file_path = att_service.get_file_path(attachment)
         if not file_path or not file_path.exists():
             raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="File not found")
 
-    # Record the view AFTER confirming the object can be delivered. If
-    # R2 is down and there's no local file, we shouldn't claim the
-    # signer viewed an attachment they couldn't actually open.
+    # Record the view AFTER confirming the object is deliverable so a
+    # missing R2 key can't write a "viewed" row that bypasses the gate.
     ip_address = request.client.host if request.client else None
     user_agent = request.headers.get("user-agent")
     await record_attachment_view(

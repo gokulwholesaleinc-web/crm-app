@@ -47,16 +47,20 @@ export function ProposalAttachmentsSection({
 
   const handleOpen = (id: number) => {
     const url = buildDownloadUrl(token, documentKind, id);
-    // window.open returns null when a popup is blocked (CSP, in-app
-    // browsers, mobile Safari with popup-blocker on). Bailing out before
-    // we mark viewed prevents the gate from auto-passing on a doc the
-    // signer never actually saw — same silent-failure pattern PR #348
-    // caught for the View-PDF button on MSA cards.
-    const opened = window.open(url, '_blank', 'noopener,noreferrer');
-    if (!opened) {
+    // window.open returns null when the 'noopener' feature is set, even
+    // on a successful popup (Chromium spec behavior). To detect actually
+    // blocked popups vs noopener-suppressed return values, we open
+    // about:blank without noopener, check the handle, then detach the
+    // opener and navigate. Falsy handle → real popup block.
+    const popup = window.open('about:blank', '_blank');
+    if (!popup) {
       window.alert('Your browser blocked the document popup. Please allow popups for this site and try again.');
       return;
     }
+    // Sever the cross-window reference before navigating so the
+    // target page can't reach back through window.opener.
+    popup.opener = null;
+    popup.location.href = url;
     // Optimistically mark viewed for instant UX feedback; the server
     // records the view as a side effect of the download endpoint hit.
     // If the download actually 5xx'd / rate-limited / failed, the

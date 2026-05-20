@@ -46,9 +46,13 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockGet.mockReset();
   mockPost.mockReset();
-  // Return a truthy fake Window so the popup-blocked guard in
-  // ProposalAttachmentsSection doesn't bail out before marking viewed.
-  vi.spyOn(window, 'open').mockImplementation(() => ({} as Window));
+  // Return a popup-shaped fake Window so handleOpen's
+  // `popup.opener = null; popup.location.href = url` writes succeed
+  // without bailing out the popup-blocked guard.
+  vi.spyOn(window, 'open').mockImplementation(() => ({
+    opener: window,
+    location: { href: '' },
+  } as unknown as Window));
   vi.spyOn(window, 'alert').mockImplementation(() => {});
 });
 

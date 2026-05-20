@@ -70,6 +70,30 @@ async def get_download_url(object_key: str, ttl_sec: int = 3600) -> str:
     )
 
 
+async def object_exists(object_key: str) -> bool:
+    """Return True iff the object is present in R2 (HEAD request).
+
+    Used by the public attachment-download path before recording a
+    view — presigning alone doesn't prove the object exists, so a
+    missing key would otherwise log a "viewed" row that lets the
+    read-before-sign gate pass on a doc the signer never received.
+    """
+    from botocore.exceptions import ClientError
+
+    client = _get_r2_client()
+    try:
+        await _run_boto(
+            lambda: client.head_object(Bucket=_get_bucket_name(), Key=object_key)
+        )
+    except ClientError as exc:
+        response = getattr(exc, "response", None) or {}
+        err = response.get("Error", {}) if isinstance(response, dict) else {}
+        if err.get("Code") in ("NoSuchKey", "404", "NotFound"):
+            return False
+        raise
+    return True
+
+
 async def download_object_bytes(object_key: str) -> bytes:
     """Fetch the raw bytes of an R2 object via boto3.
 
