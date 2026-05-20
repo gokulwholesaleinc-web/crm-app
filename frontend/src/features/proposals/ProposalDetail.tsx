@@ -49,6 +49,10 @@ import {
   hasSigningDocumentSendBlocker,
 } from './proposalStatus';
 import {
+  buildProposalSendFailure,
+  type ProposalSendFailure,
+} from './proposalSendErrors';
+import {
   listProposalAttachments,
   uploadProposalAttachment,
   deleteProposalAttachment,
@@ -107,6 +111,7 @@ function ProposalDetailPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDealWonBanner, setShowDealWonBanner] = useState(false);
+  const [sendFailure, setSendFailure] = useState<ProposalSendFailure | null>(null);
   const actionRowRef = useRef<HTMLDivElement>(null);
   const signingDocumentsRef = useRef<HTMLDivElement>(null);
   const prevStatusRef = useRef<string | undefined>(undefined);
@@ -184,11 +189,14 @@ function ProposalDetailPage() {
   }
 
   const handleSend = async () => {
+    setSendFailure(null);
     try {
       await sendProposalMutation.mutateAsync({ proposalId: proposal.id });
       showSuccess('Proposal sent');
-    } catch {
-      showError('Failed to send proposal');
+    } catch (err) {
+      const failure = buildProposalSendFailure(extractApiErrorDetail(err));
+      setSendFailure(failure);
+      showError(failure.message);
     }
   };
 
@@ -452,6 +460,37 @@ function ProposalDetailPage() {
           </Button>
         </div>
       </div>
+
+      {sendFailure && (
+        <div
+          role="alert"
+          aria-live="assertive"
+          className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-100"
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex min-w-0 items-start gap-3">
+              <ExclamationTriangleIcon
+                className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600 dark:text-amber-300"
+                aria-hidden="true"
+              />
+              <div className="min-w-0">
+                <p className="text-sm font-semibold">{sendFailure.title}</p>
+                <p className="mt-1 text-sm text-amber-800 dark:text-amber-200">
+                  {sendFailure.message}
+                </p>
+              </div>
+            </div>
+            {sendFailure.action && (
+              <Link
+                to={sendFailure.action.to}
+                className="inline-flex flex-shrink-0 items-center justify-center rounded border border-amber-300 bg-white px-3 py-1.5 text-sm font-medium text-amber-900 hover:bg-amber-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100 dark:hover:bg-amber-900/40"
+              >
+                {sendFailure.action.label}
+              </Link>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Deal Won banner — appears when polling detects accepted status
           during the current session. Dismissible, no auto-toast spam. */}

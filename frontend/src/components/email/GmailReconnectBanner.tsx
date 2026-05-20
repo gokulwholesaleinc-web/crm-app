@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 import { useGmailStatus } from '../../hooks/useGmailStatus';
+import { GMAIL_SETTINGS_PATH } from '../../utils/integrationLinks';
 
 /**
  * Renders a "Reconnect Gmail" warning when the current user's Gmail
@@ -40,10 +41,10 @@ export function GmailReconnectBanner() {
             reconnect.{lastSynced && <> Last successful sync: <strong>{lastSynced}</strong>.</>}
           </p>
           <Link
-            to="/settings#integrations"
+            to={GMAIL_SETTINGS_PATH}
             className="mt-2 inline-flex items-center gap-1 font-medium text-amber-900 dark:text-amber-100 underline hover:no-underline"
           >
-            Go to Settings → Integrations to reconnect
+            Go to Settings → Gmail to reconnect
           </Link>
         </div>
       </div>
