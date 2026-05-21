@@ -6,6 +6,7 @@ import {
   ArrowLeftIcon,
   ArrowPathIcon,
   ArrowUpTrayIcon,
+  DocumentDuplicateIcon,
   DocumentTextIcon,
   PaperAirplaneIcon,
   CheckIcon,
@@ -30,6 +31,11 @@ import {
   useRejectProposal,
   useRestampProposalSignedPdf,
   useUpdateProposalSignatureCoords,
+  useProposalBundle,
+  useCreateProposalBundle,
+  useUpdateProposalBundle,
+  useSendProposalBundle,
+  useDuplicateProposal,
 } from '../../hooks/useProposals';
 import { ProposalAuditCard } from './ProposalAuditCard';
 // Lazy-loaded because pdf.js (~300 KB gzipped) only needs to land in
@@ -74,6 +80,8 @@ import { showSuccess, showError } from '../../utils/toast';
 import { extractApiErrorDetail } from '../../utils/errors';
 import type {
   ProposalCreate,
+  Proposal,
+  ProposalBundle,
   ProposalUpdate,
   ProposalAttachment,
   ProposalSigningDocument,
@@ -111,6 +119,13 @@ function ProposalDetailPage() {
   const acceptProposalMutation = useAcceptProposal();
   const rejectProposalMutation = useRejectProposal();
   const restampSignedPdfMutation = useRestampProposalSignedPdf();
+  const { data: proposalBundle, isLoading: isBundleLoading } = useProposalBundle(
+    proposal?.proposal_bundle_id ?? undefined,
+  );
+  const createBundleMutation = useCreateProposalBundle();
+  const updateBundleMutation = useUpdateProposalBundle();
+  const sendBundleMutation = useSendProposalBundle();
+  const duplicateProposalMutation = useDuplicateProposal();
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -192,9 +207,19 @@ function ProposalDetailPage() {
     );
   }
 
+  const isBundled = Boolean(proposal.proposal_bundle_id);
+  const bundleIsMutable = !isBundled || proposalBundle?.status === 'draft';
+  const bundleOptionCount = proposalBundle?.proposals?.length ?? (isBundled ? 0 : 1);
+  const bundleCanSendStatus =
+    Boolean(proposalBundle) && ['draft', 'sent', 'viewed'].includes(proposalBundle?.status ?? '');
   const handleSend = async () => {
     setSendFailure(null);
     try {
+      if (proposalBundle) {
+        await sendBundleMutation.mutateAsync(proposalBundle.id);
+        showSuccess('Proposal options sent');
+        return;
+      }
       await sendProposalMutation.mutateAsync({ proposalId: proposal.id });
       showSuccess('Proposal sent');
     } catch (err) {
@@ -289,15 +314,52 @@ function ProposalDetailPage() {
   const handleCopyPublicLink = () => {
     // Use the SPA route — not the raw JSON API path — and key on the
     // unguessable public_token, not the enumerable proposal_number.
-    if (!proposal.public_token) {
+    const publicToken = isBundled ? proposalBundle?.public_token : proposal.public_token;
+    if (!publicToken) {
       showError('This proposal has no public link yet; save or send it first.');
       return;
     }
-    const url = `${window.location.origin}/proposals/public/${proposal.public_token}`;
+    const url = `${window.location.origin}/proposals/public/${publicToken}`;
     navigator.clipboard.writeText(url).then(
-      () => showSuccess('Public link copied to clipboard'),
+      () => showSuccess(isBundled ? 'Options link copied to clipboard' : 'Public link copied to clipboard'),
       () => showError('Failed to copy link')
     );
+  };
+
+  const handleAddProposalOption = async () => {
+    if (proposal.status !== 'draft') {
+      showError('Proposal options can only be changed while draft');
+      return;
+    }
+    if (proposal.proposal_bundle_id && !proposalBundle) {
+      showError('Proposal options are still loading');
+      return;
+    }
+    try {
+      const clone = await duplicateProposalMutation.mutateAsync(proposal.id);
+      if (proposalBundle) {
+        const proposalIds = Array.from(
+          new Set([...(proposalBundle.proposals ?? []).map((option) => option.id), clone.id]),
+        );
+        await updateBundleMutation.mutateAsync({
+          bundleId: proposalBundle.id,
+          data: { proposal_ids: proposalIds },
+        });
+      } else {
+        const clientName = proposal.contact?.full_name || proposal.company?.name;
+        await createBundleMutation.mutateAsync({
+          title: clientName ? `Proposal options for ${clientName}` : 'Proposal options',
+          description: null,
+          proposal_ids: [proposal.id, clone.id],
+        });
+      }
+      showSuccess('Proposal option added');
+      navigate(`/proposals/${clone.id}`, {
+        state: { focusSigningDocuments: true },
+      });
+    } catch (err) {
+      showError(extractApiErrorDetail(err) ?? 'Failed to add proposal option');
+    }
   };
 
   const currentUser = useAuthStore.getState().user;
@@ -314,15 +376,31 @@ function ProposalDetailPage() {
   // Show Send for draft/sent/viewed so the CRM user can resend if delivery
   // failed (bad Gmail token, sandbox rejection). Require a recipient so the
   // frontend gates the 400 the backend would return without one.
-  const canSendStatus = ['draft', 'sent', 'viewed'].includes(proposal.status ?? '');
+  const canSendStatus = isBundled
+    ? bundleCanSendStatus
+    : ['draft', 'sent', 'viewed'].includes(proposal.status ?? '');
   const signingDocsBlockSend = hasSigningDocumentSendBlocker(proposal);
-  const canSend = canSendStatus && Boolean(proposalRecipient) && !signingDocsBlockSend;
-  const sendLabel = isDraft ? 'Send' : 'Resend';
-  const sendDisabledTitle = !proposalRecipient
+  const canSend = isBundled
+    ? canSendStatus &&
+      Boolean(proposalBundle) &&
+      bundleOptionCount >= 2 &&
+      Boolean(proposalRecipient) &&
+      !signingDocsBlockSend
+    : canSendStatus && Boolean(proposalRecipient) && !signingDocsBlockSend;
+  const sendLabel = isBundled
+    ? (proposalBundle?.status === 'draft' ? 'Send options' : 'Resend options')
+    : (isDraft ? 'Send' : 'Resend');
+  const sendDisabledTitle = isBundled && !proposalBundle
+    ? 'Proposal options are still loading'
+    : isBundled && bundleOptionCount < 2
+    ? 'Add at least two proposal options before sending'
+    : !proposalRecipient
     ? 'Set a designated signer email or attach a contact with an email before sending'
     : signingDocsBlockSend
       ? 'Place signature and date areas on every uploaded signing document before sending'
       : undefined;
+  const publicLinkToken = isBundled ? proposalBundle?.public_token : proposal.public_token;
+  const copyLinkLabel = isBundled ? 'Copy Options Link' : 'Copy Link';
   const canAcceptReject = proposal.status === 'sent' || proposal.status === 'viewed';
   const canEdit = ['draft', 'sent', 'viewed'].includes(proposal.status ?? '');
 
@@ -358,11 +436,11 @@ function ProposalDetailPage() {
           <Button
             size="sm"
             onClick={handleSend}
-            disabled={sendProposalMutation.isPending || !canSend}
+            disabled={sendProposalMutation.isPending || sendBundleMutation.isPending || !canSend}
             variant={isDraft ? 'primary' : 'secondary'}
             title={sendDisabledTitle}
           >
-            {sendProposalMutation.isPending ? 'Sending...' : sendLabel}
+            {sendProposalMutation.isPending || sendBundleMutation.isPending ? 'Sending...' : sendLabel}
           </Button>
         )}
         {canEdit && (
@@ -411,11 +489,11 @@ function ProposalDetailPage() {
             <Button
               onClick={handleSend}
               leftIcon={<PaperAirplaneIcon className="h-4 w-4" />}
-              disabled={sendProposalMutation.isPending || !canSend}
+              disabled={sendProposalMutation.isPending || sendBundleMutation.isPending || !canSend}
               title={sendDisabledTitle}
               variant={isDraft ? 'primary' : 'secondary'}
             >
-              {sendProposalMutation.isPending ? 'Sending...' : sendLabel}
+              {sendProposalMutation.isPending || sendBundleMutation.isPending ? 'Sending...' : sendLabel}
             </Button>
           )}
           {/* SECONDARY — common follow-ups, always visible when applicable. */}
@@ -443,10 +521,10 @@ function ProposalDetailPage() {
             variant="secondary"
             onClick={handleCopyPublicLink}
             leftIcon={<ClipboardDocumentIcon className="h-4 w-4" />}
-            disabled={!proposal.public_token}
-            title={proposal.public_token ? undefined : 'Save or send the proposal first to generate a public link.'}
+            disabled={!publicLinkToken}
+            title={publicLinkToken ? undefined : 'Save or send the proposal first to generate a public link.'}
           >
-            Copy Link
+            {copyLinkLabel}
           </Button>
           {canEdit && (
             <Button
@@ -576,6 +654,28 @@ function ProposalDetailPage() {
           <SendChecklist
             items={sendChecklist}
             hideWhenAllGreen
+          />
+        </div>
+      )}
+
+      {(isDraft || isBundled) && (
+        <div data-guide="proposal-detail-options">
+          <ProposalOptionsCard
+            proposal={proposal}
+            bundle={proposalBundle}
+            isLoadingBundle={isBundleLoading}
+            canAddOption={isDraft && bundleIsMutable}
+            isAddingOption={
+              duplicateProposalMutation.isPending ||
+              createBundleMutation.isPending ||
+              updateBundleMutation.isPending
+            }
+            canSendOptions={Boolean(proposalBundle) && canSend}
+            isSendingOptions={sendBundleMutation.isPending}
+            onAddOption={handleAddProposalOption}
+            onSendOptions={handleSend}
+            onCopyLink={handleCopyPublicLink}
+            sendDisabledTitle={sendDisabledTitle}
           />
         </div>
       )}
@@ -866,6 +966,145 @@ function ProposalDetailPage() {
         variant="danger"
         isLoading={deleteProposalMutation.isPending}
       />
+    </div>
+  );
+}
+
+// -----------------------------------------------------------------
+// ProposalOptionsCard
+// -----------------------------------------------------------------
+
+interface ProposalOptionsCardProps {
+  proposal: Proposal;
+  bundle?: ProposalBundle;
+  isLoadingBundle: boolean;
+  canAddOption: boolean;
+  isAddingOption: boolean;
+  canSendOptions: boolean;
+  isSendingOptions: boolean;
+  onAddOption: () => void;
+  onSendOptions: () => void;
+  onCopyLink: () => void;
+  sendDisabledTitle?: string;
+}
+
+function ProposalOptionsCard({
+  proposal,
+  bundle,
+  isLoadingBundle,
+  canAddOption,
+  isAddingOption,
+  canSendOptions,
+  isSendingOptions,
+  onAddOption,
+  onSendOptions,
+  onCopyLink,
+  sendDisabledTitle,
+}: ProposalOptionsCardProps) {
+  const options = bundle?.proposals?.length ? bundle.proposals : [proposal];
+  const isDraftBundle = !bundle || bundle.status === 'draft';
+
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white p-5 shadow dark:border-gray-700 dark:bg-gray-800">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+              Proposal Options
+            </h2>
+            {bundle && <StatusBadge status={bundle.status} size="sm" showDot={false} />}
+          </div>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            {bundle?.bundle_number ?? 'Start an options link from this proposal'}
+          </p>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          {bundle && (
+            <>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={onCopyLink}
+                leftIcon={<ClipboardDocumentIcon className="h-4 w-4" />}
+                disabled={!bundle.public_token}
+              >
+                Copy Link
+              </Button>
+              <Button
+                type="button"
+                onClick={onSendOptions}
+                leftIcon={<PaperAirplaneIcon className="h-4 w-4" />}
+                disabled={!canSendOptions || isSendingOptions}
+                isLoading={isSendingOptions}
+                title={sendDisabledTitle}
+              >
+                {bundle.status === 'draft' ? 'Send options' : 'Resend options'}
+              </Button>
+            </>
+          )}
+          {isDraftBundle && (
+            <Button
+              type="button"
+              variant={bundle ? 'secondary' : 'primary'}
+              onClick={onAddOption}
+              leftIcon={<DocumentDuplicateIcon className="h-4 w-4" />}
+              disabled={!canAddOption || isAddingOption}
+              isLoading={isAddingOption}
+              title={!canAddOption ? 'Options can only be changed while draft' : undefined}
+            >
+              Add option
+            </Button>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-4 overflow-hidden rounded-md border border-gray-200 dark:border-gray-700">
+        <ul className="divide-y divide-gray-200 dark:divide-gray-700">
+          {options.map((option) => {
+            const isCurrent = option.id === proposal.id;
+            return (
+              <li
+                key={option.id}
+                className="flex flex-col gap-2 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Link
+                      to={`/proposals/${option.id}`}
+                      className="truncate text-sm font-medium text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-300"
+                    >
+                      {option.title}
+                    </Link>
+                    {isCurrent && (
+                      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+                        Current
+                      </span>
+                    )}
+                    {option.bundle_is_recommended && (
+                      <span className="rounded-full bg-primary-50 px-2 py-0.5 text-xs font-medium text-primary-700 dark:bg-primary-900/30 dark:text-primary-300">
+                        Recommended
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                    {option.proposal_number}
+                    {typeof option.signing_documents?.length === 'number' && (
+                      <> · {option.signing_documents.length} signing doc{option.signing_documents.length === 1 ? '' : 's'}</>
+                    )}
+                  </p>
+                </div>
+                <StatusBadge status={option.status} size="sm" showDot={false} />
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+
+      {isLoadingBundle && (
+        <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">
+          Loading proposal options…
+        </p>
+      )}
     </div>
   );
 }
