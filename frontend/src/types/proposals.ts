@@ -55,15 +55,8 @@ export interface ProposalPackageItemCreate extends ProposalPackageItemBase {
   price_id?: number | null;
 }
 
-export interface ProposalPackageItemUpdate {
+export interface ProposalPackageItemUpdate extends ProposalPackageItemCreate {
   id?: number;
-  product_id?: number | null;
-  price_id?: number | null;
-  description?: string | null;
-  quantity?: ProposalMoney | null;
-  unit_price?: ProposalMoney | null;
-  discount_amount?: ProposalMoney | null;
-  sort_order?: number | null;
 }
 
 export interface ProposalPackageItem extends ProposalPackageItemBase {

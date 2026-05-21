@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type { ReactElement } from 'react';
 import type { Proposal } from '../../types';
 import { ProposalPackagesCard } from './ProposalDetail';
+import { getPackageFormValidationError } from './proposalPackageFormValidation';
 
 function renderWithQuery(ui: ReactElement) {
   const client = new QueryClient({
@@ -86,6 +87,31 @@ describe('ProposalPackagesCard', () => {
     expect(screen.getByRole('button', { name: /Add package/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Edit$/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Deactivate/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Remove/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Remove/i })).not.toBeInTheDocument();
+  });
+
+  it('blocks active zero-total packages before submitting to the API', () => {
+    expect(
+      getPackageFormValidationError({
+        name: 'Starter',
+        description: '',
+        currency: 'USD',
+        payment_type: 'one_time',
+        recurring_interval: 'month',
+        recurring_interval_count: 1,
+        is_recommended: false,
+        is_active: true,
+        sort_order: 0,
+        items: [
+          {
+            description: 'Implementation',
+            quantity: '1.00',
+            unit_price: '0.00',
+            discount_amount: '0.00',
+            sort_order: 0,
+          },
+        ],
+      }),
+    ).toBe('Active package total must be greater than 0');
   });
 });

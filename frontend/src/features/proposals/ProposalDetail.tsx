@@ -33,7 +33,6 @@ import {
   useUpdateProposalSignatureCoords,
   useCreateProposalPackage,
   useUpdateProposalPackage,
-  useDeleteProposalPackage,
 } from '../../hooks/useProposals';
 import { ProposalAuditCard } from './ProposalAuditCard';
 // Lazy-loaded because pdf.js (~300 KB gzipped) only needs to land in
@@ -99,6 +98,11 @@ import {
   isZeroMoney,
   sortPackages,
 } from './proposalPackages';
+import {
+  getPackageFormValidationError,
+  type PackageFormItem,
+  type PackageFormState,
+} from './proposalPackageFormValidation';
 
 function ProposalDetailPage() {
   const { id } = useParams();
@@ -898,28 +902,6 @@ function ProposalDetailPage() {
 // ProposalPackagesCard
 // -----------------------------------------------------------------
 
-type PackageFormItem = {
-  id?: number;
-  description: string;
-  quantity: string;
-  unit_price: string;
-  discount_amount: string;
-  sort_order: number;
-};
-
-type PackageFormState = {
-  name: string;
-  description: string;
-  currency: string;
-  payment_type: 'one_time' | 'subscription';
-  recurring_interval: 'month' | 'year';
-  recurring_interval_count: number;
-  is_recommended: boolean;
-  is_active: boolean;
-  sort_order: number;
-  items: PackageFormItem[];
-};
-
 const emptyPackageItem = (sortOrder = 0): PackageFormItem => ({
   description: '',
   quantity: '1.00',
@@ -1012,7 +994,6 @@ interface ProposalPackagesCardProps {
 export function ProposalPackagesCard({ proposal, isDraft }: ProposalPackagesCardProps) {
   const createPackage = useCreateProposalPackage();
   const updatePackage = useUpdateProposalPackage();
-  const deletePackage = useDeleteProposalPackage();
   const packages = sortPackages(proposal.packages ?? []);
   const [editingId, setEditingId] = useState<number | 'new' | null>(null);
   const [form, setForm] = useState<PackageFormState>(() =>
@@ -1055,6 +1036,11 @@ export function ProposalPackagesCard({ proposal, isDraft }: ProposalPackagesCard
 
   const saveForm = async () => {
     if (!isDraft) return;
+    const validationError = getPackageFormValidationError(form);
+    if (validationError) {
+      showError(validationError);
+      return;
+    }
     try {
       if (editingId === 'new') {
         await createPackage.mutateAsync({
@@ -1087,23 +1073,6 @@ export function ProposalPackagesCard({ proposal, isDraft }: ProposalPackagesCard
       showSuccess(pkg.is_active ? 'Package deactivated' : 'Package reactivated');
     } catch (err) {
       showError(extractApiErrorDetail(err) ?? 'Failed to update package');
-    }
-  };
-
-  const removePackage = async (pkg: ProposalPackage) => {
-    if (!isDraft) return;
-    // Soft-delete: the row stays so the audit trail can reference it; the
-    // staff Reactivate button can bring it back. Toast wording matches the
-    // actual semantic so users aren't surprised when the row reappears as
-    // inactive.
-    try {
-      await deletePackage.mutateAsync({
-        proposalId: proposal.id,
-        packageId: pkg.id,
-      });
-      showSuccess('Package deactivated');
-    } catch (err) {
-      showError(extractApiErrorDetail(err) ?? 'Failed to deactivate package');
     }
   };
 
@@ -1214,16 +1183,6 @@ export function ProposalPackagesCard({ proposal, isDraft }: ProposalPackagesCard
                       disabled={updatePackage.isPending}
                     >
                       {pkg.is_active ? 'Deactivate' : 'Reactivate'}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => void removePackage(pkg)}
-                      disabled={deletePackage.isPending}
-                      leftIcon={<TrashIcon className="h-4 w-4" />}
-                    >
-                      Remove
                     </Button>
                   </div>
                 )}

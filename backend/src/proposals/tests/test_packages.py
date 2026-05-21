@@ -412,6 +412,7 @@ class TestProposalPackages:
     ):
         proposal = await _make_proposal(db_session, test_user)
         package = await _add_package(db_session, proposal)
+        await db_session.refresh(package, ["items"])
 
         resp = await client.patch(
             f"/api/proposals/{proposal.id}/packages/{package.id}",
@@ -420,6 +421,7 @@ class TestProposalPackages:
                 "is_recommended": True,
                 "items": [
                     {
+                        "id": package.items[0].id,
                         "description": "Updated line",
                         "quantity": "3.00",
                         "unit_price": "200.00",

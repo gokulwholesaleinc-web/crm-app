@@ -139,27 +139,8 @@ class ProposalPackageItemCreate(ProposalPackageItemBase):
     pass
 
 
-class ProposalPackageItemUpdate(BaseModel):
-    product_id: int | None = None
-    price_id: int | None = None
-    description: str | None = Field(default=None, min_length=1)
-    quantity: QuantityDecimal | None = None
-    unit_price: MoneyDecimal | None = None
-    discount_amount: MoneyDecimal | None = None
-    total: MoneyDecimal | None = None
-    sort_order: int | None = None
-
-    model_config = ConfigDict(extra="forbid")
-
-    @field_validator("description")
-    @classmethod
-    def _trim_description(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        value = value.strip()
-        if not value:
-            raise ValueError("Item description is required")
-        return value
+class ProposalPackageItemUpdate(ProposalPackageItemBase):
+    id: int | None = None
 
 
 class ProposalPackageItemResponse(_FixedDecimalResponse):
@@ -250,7 +231,7 @@ class ProposalPackageUpdate(BaseModel):
     sort_order: int | None = None
     is_recommended: bool | None = None
     is_active: bool | None = None
-    items: list[ProposalPackageItemCreate] | None = Field(default=None, min_length=1)
+    items: list[ProposalPackageItemUpdate] | None = Field(default=None, min_length=1)
 
     model_config = ConfigDict(extra="forbid")
 

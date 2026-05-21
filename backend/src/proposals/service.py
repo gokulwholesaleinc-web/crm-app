@@ -604,7 +604,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
             setattr(package, key, value)
         if data.items is not None:
             package.items = [
-                ProposalPackageItem(**item.model_dump(exclude={"total"}))
+                ProposalPackageItem(**item.model_dump(exclude={"id", "total"}))
                 for item in data.items
             ]
         package.updated_by_id = user_id
