@@ -1168,7 +1168,7 @@ export const SECTIONS: Section[] = [
     title: 'Admin Sharing',
     icon: ShareIcon,
     searchText:
-      'admin sharing shares audit record access revoke shared with shared by permission manager admin filters',
+      'admin sharing shares audit record access bulk add grant revoke shared with shared by permission manager admin filters',
     body: (
       <div className="space-y-3">
         <p className="text-sm text-gray-700 dark:text-gray-300">
@@ -1176,6 +1176,10 @@ export const SECTIONS: Section[] = [
           shares. Use it when you need to inspect or revoke access without opening every record.
         </p>
         <ul className="space-y-1.5">
+          <Bullet>
+            Bulk add access for contacts, companies, leads, and proposals by choosing a teammate,
+            permission, and record IDs.
+          </Bullet>
           <Bullet>
             Filter by entity type, recipient, sharer, or permission level.
           </Bullet>
@@ -1281,7 +1285,8 @@ export const SECTIONS: Section[] = [
               Admins can audit every share in the system from{' '}
               <a href="/admin/sharing" className="text-primary-600 hover:underline dark:text-primary-400">Admin → Sharing</a>:
               filter by entity type, by who shared, by who received, or by permission level, and
-              revoke any share with one click.
+              revoke any share with one click. Admins can also grant a teammate access to many
+              records from that same page.
             </Bullet>
           </ul>
         </div>

@@ -2,13 +2,20 @@
 Tests for admin sharing endpoint: GET /api/sharing/admin and related flows.
 """
 
+import time
+
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.auth.models import User
 from src.auth.security import create_access_token, get_password_hash
+from src.contacts.models import Contact
+from src.core import data_scope as data_scope_module
+from src.core.data_scope import DataScope
 from src.core.models import EntityShare
+from src.notifications.models import Notification
 from src.roles.models import RoleName, UserRole
 
 # ---------------------------------------------------------------------------
@@ -75,6 +82,23 @@ async def another_user(db_session: AsyncSession) -> User:
         hashed_password=get_password_hash("password123"),
         full_name="Another User",
         is_active=True,
+        is_superuser=False,
+        role="sales_rep",
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    return user
+
+
+@pytest_asyncio.fixture
+async def inactive_user(db_session: AsyncSession) -> User:
+    """Create an inactive user for validation tests."""
+    user = User(
+        email="inactive_share_target@example.com",
+        hashed_password=get_password_hash("password123"),
+        full_name="Inactive User",
+        is_active=False,
         is_superuser=False,
         role="sales_rep",
     )
@@ -448,3 +472,214 @@ class TestAdminRevokeShare:
             f"/api/sharing/{sample_share.id}", headers=_headers(manager_user)
         )
         assert response.status_code == 403
+
+
+class TestAdminBulkShare:
+    """Tests for POST /api/sharing/admin/bulk."""
+
+    async def _make_contact(
+        self,
+        db_session: AsyncSession,
+        admin_user: User,
+        email: str,
+    ) -> Contact:
+        contact = Contact(
+            first_name="Bulk",
+            last_name=email.split("@")[0],
+            email=email,
+            status="active",
+            owner_id=admin_user.id,
+            created_by_id=admin_user.id,
+        )
+        db_session.add(contact)
+        await db_session.commit()
+        await db_session.refresh(contact)
+        return contact
+
+    @pytest.mark.asyncio
+    async def test_sales_rep_gets_403(
+        self,
+        client: AsyncClient,
+        sales_rep_user: User,
+        another_user: User,
+    ):
+        response = await client.post(
+            "/api/sharing/admin/bulk",
+            headers=_headers(sales_rep_user),
+            json={
+                "entity_type": "contacts",
+                "entity_ids": [1],
+                "shared_with_user_id": another_user.id,
+                "permission_level": "view",
+            },
+        )
+
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_validates_request_contract(
+        self,
+        client: AsyncClient,
+        admin_user: User,
+        another_user: User,
+        inactive_user: User,
+    ):
+        invalid_permission = await client.post(
+            "/api/sharing/admin/bulk",
+            headers=_headers(admin_user),
+            json={
+                "entity_type": "contacts",
+                "entity_ids": [1],
+                "shared_with_user_id": another_user.id,
+                "permission_level": "owner",
+            },
+        )
+        assert invalid_permission.status_code == 400
+
+        self_share = await client.post(
+            "/api/sharing/admin/bulk",
+            headers=_headers(admin_user),
+            json={
+                "entity_type": "contacts",
+                "entity_ids": [1],
+                "shared_with_user_id": admin_user.id,
+                "permission_level": "view",
+            },
+        )
+        assert self_share.status_code == 400
+
+        inactive_target = await client.post(
+            "/api/sharing/admin/bulk",
+            headers=_headers(admin_user),
+            json={
+                "entity_type": "contacts",
+                "entity_ids": [1],
+                "shared_with_user_id": inactive_user.id,
+                "permission_level": "view",
+            },
+        )
+        assert inactive_target.status_code == 404
+
+        invalid_entity = await client.post(
+            "/api/sharing/admin/bulk",
+            headers=_headers(admin_user),
+            json={
+                "entity_type": "payments",
+                "entity_ids": [1],
+                "shared_with_user_id": another_user.id,
+                "permission_level": "view",
+            },
+        )
+        assert invalid_entity.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_creates_updates_skips_and_reports_missing_records(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        admin_user: User,
+        another_user: User,
+    ):
+        new_contact = await self._make_contact(
+            db_session, admin_user, "bulk-new@example.com"
+        )
+        skipped_contact = await self._make_contact(
+            db_session, admin_user, "bulk-skip@example.com"
+        )
+        updated_contact = await self._make_contact(
+            db_session, admin_user, "bulk-update@example.com"
+        )
+        missing_id = updated_contact.id + 999
+
+        db_session.add_all([
+            EntityShare(
+                entity_type="contacts",
+                entity_id=skipped_contact.id,
+                shared_with_user_id=another_user.id,
+                shared_by_user_id=admin_user.id,
+                permission_level="view",
+            ),
+            EntityShare(
+                entity_type="contacts",
+                entity_id=updated_contact.id,
+                shared_with_user_id=another_user.id,
+                shared_by_user_id=another_user.id,
+                permission_level="edit",
+            ),
+        ])
+        await db_session.commit()
+
+        data_scope_module._scope_cache[another_user.id] = (
+            time.monotonic(),
+            DataScope(
+                user_id=another_user.id,
+                role_name="sales_rep",
+                owner_id=another_user.id,
+                is_scoped=True,
+                shared_entity_ids={"contacts": [skipped_contact.id]},
+            ),
+        )
+
+        response = await client.post(
+            "/api/sharing/admin/bulk",
+            headers=_headers(admin_user),
+            json={
+                "entity_type": "contacts",
+                "entity_ids": [
+                    new_contact.id,
+                    skipped_contact.id,
+                    updated_contact.id,
+                    missing_id,
+                    new_contact.id,
+                ],
+                "shared_with_user_id": another_user.id,
+                "permission_level": "view",
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["created"] == 1
+        assert data["updated"] == 1
+        assert data["skipped"] == 1
+        assert data["failed"] == 1
+        assert [item["entity_id"] for item in data["items"]] == [
+            new_contact.id,
+            skipped_contact.id,
+            updated_contact.id,
+            missing_id,
+        ]
+        assert {item["status"] for item in data["items"]} == {
+            "created",
+            "updated",
+            "skipped",
+            "failed",
+        }
+
+        shares = (
+            await db_session.execute(
+                select(EntityShare).where(
+                    EntityShare.shared_with_user_id == another_user.id,
+                    EntityShare.entity_id.in_([
+                        new_contact.id,
+                        skipped_contact.id,
+                        updated_contact.id,
+                    ]),
+                )
+            )
+        ).scalars().all()
+        permission_by_entity = {share.entity_id: share.permission_level for share in shares}
+        assert permission_by_entity == {
+            new_contact.id: "view",
+            skipped_contact.id: "view",
+            updated_contact.id: "view",
+        }
+        assert another_user.id not in data_scope_module._scope_cache
+
+        notifications = (
+            await db_session.execute(
+                select(Notification).where(Notification.user_id == another_user.id)
+            )
+        ).scalars().all()
+        assert len(notifications) == 1
+        assert notifications[0].type == "entity_shared_with_you"

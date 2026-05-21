@@ -86,6 +86,27 @@ export interface AdminShareFilters {
   page_size?: number;
 }
 
+export interface AdminBulkShareRequest {
+  entity_type: string;
+  entity_ids: number[];
+  shared_with_user_id: number;
+  permission_level: PermissionLevel;
+}
+
+export interface AdminBulkShareResult {
+  entity_id: number;
+  status: 'created' | 'updated' | 'skipped' | 'failed';
+  detail: string;
+}
+
+export interface AdminBulkShareResponse {
+  created: number;
+  updated: number;
+  skipped: number;
+  failed: number;
+  items: AdminBulkShareResult[];
+}
+
 export const listAdminShares = async (
   filters: AdminShareFilters = {},
 ): Promise<AdminShareListResponse> => {
@@ -100,3 +121,9 @@ export const listAdminShares = async (
   return response.data;
 };
 
+export const bulkShareAdmin = async (
+  data: AdminBulkShareRequest,
+): Promise<AdminBulkShareResponse> => {
+  const response = await apiClient.post<AdminBulkShareResponse>(`${BASE}/admin/bulk`, data);
+  return response.data;
+};
