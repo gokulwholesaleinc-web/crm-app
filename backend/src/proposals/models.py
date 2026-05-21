@@ -253,6 +253,12 @@ class Proposal(Base, AuditableMixin):
     # an extra R2 round-trip and a signed copy can be rebuilt from the
     # row alone if R2 loses the stamped PDF.
     signature_image: Mapped[bytes | None] = mapped_column(LargeBinary)
+    # Frozen JSON snapshot of what the customer actually signed off on. Carried
+    # forward from PR #378's `selected_package_snapshot` via migration 047 so
+    # the legal/audit trail for already-signed proposals survives the package
+    # → bundle rewrite. New bundle-mode proposals don't write this; it exists
+    # only to preserve historical record.
+    accepted_selection_snapshot: Mapped[dict | None] = mapped_column(JSON)
     # R2 key of the optional master service agreement PDF uploaded by
     # the rep. When set, the accept endpoint stamps the signature image
     # onto a copy of this PDF + an audit page and persists the result

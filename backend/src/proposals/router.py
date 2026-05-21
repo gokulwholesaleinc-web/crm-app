@@ -583,6 +583,27 @@ async def _attach_public_signing_documents(
     ]
 
 
+def _branding_from_dict(data: dict | None) -> ProposalBranding:
+    """Build a ProposalBranding from a TenantBrandingHelper dict.
+
+    Centralizes the default color contract so a brand-default change is one
+    edit. Was copy-pasted 4× across the public proposal routes.
+    """
+    data = data or {}
+    return ProposalBranding(
+        company_name=data.get("company_name"),
+        logo_url=data.get("logo_url"),
+        primary_color=data.get("primary_color", "#6366f1"),
+        secondary_color=data.get("secondary_color", "#8b5cf6"),
+        accent_color=data.get("accent_color", "#22c55e"),
+        bg_color_light=data.get("bg_color_light", "#f9fafb"),
+        surface_color_light=data.get("surface_color_light", "#ffffff"),
+        footer_text=data.get("footer_text"),
+        privacy_policy_url=data.get("privacy_policy_url"),
+        terms_of_service_url=data.get("terms_of_service_url"),
+    )
+
+
 def _scope_public_payment_fields(response: ProposalPublicResponse) -> None:
     """Keep public payment compatibility only for active legacy pay links."""
     has_public_payment_flow = (
@@ -999,18 +1020,7 @@ async def get_public_proposal(
             if proposals
             else {}
         )
-        branding = ProposalBranding(
-            company_name=branding_data.get("company_name"),
-            logo_url=branding_data.get("logo_url"),
-            primary_color=branding_data.get("primary_color", "#6366f1"),
-            secondary_color=branding_data.get("secondary_color", "#8b5cf6"),
-            accent_color=branding_data.get("accent_color", "#22c55e"),
-            bg_color_light=branding_data.get("bg_color_light", "#f9fafb"),
-            surface_color_light=branding_data.get("surface_color_light", "#ffffff"),
-            footer_text=branding_data.get("footer_text"),
-            privacy_policy_url=branding_data.get("privacy_policy_url"),
-            terms_of_service_url=branding_data.get("terms_of_service_url"),
-        )
+        branding = _branding_from_dict(branding_data)
 
         option_responses: list[ProposalPublicResponse] = []
         for option in proposals:
@@ -1062,22 +1072,10 @@ async def get_public_proposal(
 
     # Resolve branding from proposal owner's tenant
     branding_data = await service.get_branding_for_proposal(proposal)
-    branding = ProposalBranding(
-        company_name=branding_data.get("company_name"),
-        logo_url=branding_data.get("logo_url"),
-        primary_color=branding_data.get("primary_color", "#6366f1"),
-        secondary_color=branding_data.get("secondary_color", "#8b5cf6"),
-        accent_color=branding_data.get("accent_color", "#22c55e"),
-        bg_color_light=branding_data.get("bg_color_light", "#f9fafb"),
-        surface_color_light=branding_data.get("surface_color_light", "#ffffff"),
-        footer_text=branding_data.get("footer_text"),
-        privacy_policy_url=branding_data.get("privacy_policy_url"),
-        terms_of_service_url=branding_data.get("terms_of_service_url"),
-    )
 
     response = ProposalPublicResponse.model_validate(proposal)
     _scope_public_payment_fields(response)
-    response.branding = branding
+    response.branding = _branding_from_dict(branding_data)
     response.terms_and_conditions = await service.get_effective_terms_and_conditions(
         proposal,
     )
@@ -1137,6 +1135,21 @@ async def accept_proposal_public(
     service = ProposalService(db)
     proposal = await service.get_public_proposal(token)
     if not proposal or not _hmac.compare_digest(proposal.public_token or "", token):
+        # The token may belong to a bundle, not a single proposal. Resolving
+        # it as a bundle yields an actionable error instead of a generic 404
+        # — the chooser flow expects the customer to pick an option before
+        # POSTing accept.
+        bundle = await service.get_public_bundle(token)
+        if bundle and _hmac.compare_digest(bundle.public_token or "", token):
+            if bundle.selected_proposal_id is not None or bundle.status == "accepted":
+                raise HTTPException(
+                    status_code=HTTPStatus.CONFLICT,
+                    detail="This proposal bundle was already accepted",
+                )
+            raise HTTPException(
+                status_code=HTTPStatus.BAD_REQUEST,
+                detail="Pick a proposal option before signing",
+            )
         raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Proposal not found")
 
     unviewed_count = await _unviewed_public_document_count(
@@ -1172,21 +1185,31 @@ async def accept_proposal_public(
     # proposal_signed notification + email is dispatched by ProposalService.accept_proposal_public
     # via notify_on_proposal_signed (matrix-gated). Don't double-fire from the router.
 
+    # Sibling rejections in a bundle: emit PROPOSAL_REJECTED per option that
+    # was flipped to rejected by _mark_bundle_accepted, so the owner's
+    # notifications matrix + reporting reflect the full picture (not just
+    # the winner). Done post-accept so events fire outside the bundle row
+    # lock acquired in accept_proposal_public.
+    rejected_siblings = getattr(proposal, "_bundle_rejected_siblings", None) or []
+    for sibling in rejected_siblings:
+        await emit(PROPOSAL_REJECTED, {
+            "entity_id": sibling.id,
+            "entity_type": "proposal",
+            "user_id": None,
+            "data": {
+                "proposal_number": sibling.proposal_number,
+                "status": sibling.status,
+                "rejected_via": "bundle_sibling",
+                "reason": sibling.rejection_reason,
+                "bundle_id": proposal.proposal_bundle_id,
+                "accepted_proposal_id": proposal.id,
+            },
+        })
+
     branding_data = await service.get_branding_for_proposal(proposal)
     response = ProposalPublicResponse.model_validate(proposal)
     _scope_public_payment_fields(response)
-    response.branding = ProposalBranding(
-        company_name=branding_data.get("company_name"),
-        logo_url=branding_data.get("logo_url"),
-        primary_color=branding_data.get("primary_color", "#6366f1"),
-        secondary_color=branding_data.get("secondary_color", "#8b5cf6"),
-        accent_color=branding_data.get("accent_color", "#22c55e"),
-        bg_color_light=branding_data.get("bg_color_light", "#f9fafb"),
-        surface_color_light=branding_data.get("surface_color_light", "#ffffff"),
-        footer_text=branding_data.get("footer_text"),
-        privacy_policy_url=branding_data.get("privacy_policy_url"),
-        terms_of_service_url=branding_data.get("terms_of_service_url"),
-    )
+    response.branding = _branding_from_dict(branding_data)
     response.terms_and_conditions = await service.get_effective_terms_and_conditions(
         proposal,
     )
@@ -1217,6 +1240,19 @@ async def reject_proposal_public(
     service = ProposalService(db)
     proposal = await service.get_public_proposal(token)
     if not proposal or not _hmac.compare_digest(proposal.public_token or "", token):
+        # See accept_proposal_public above for why a bundle-token hit returns
+        # 400/409 instead of 404.
+        bundle = await service.get_public_bundle(token)
+        if bundle and _hmac.compare_digest(bundle.public_token or "", token):
+            if bundle.selected_proposal_id is not None or bundle.status == "accepted":
+                raise HTTPException(
+                    status_code=HTTPStatus.CONFLICT,
+                    detail="This proposal bundle was already accepted",
+                )
+            raise HTTPException(
+                status_code=HTTPStatus.BAD_REQUEST,
+                detail="Pick a proposal option before rejecting",
+            )
         raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Proposal not found")
 
     signer_ip = get_client_ip(request)
@@ -1248,18 +1284,7 @@ async def reject_proposal_public(
     branding_data = await service.get_branding_for_proposal(proposal)
     response = ProposalPublicResponse.model_validate(proposal)
     _scope_public_payment_fields(response)
-    response.branding = ProposalBranding(
-        company_name=branding_data.get("company_name"),
-        logo_url=branding_data.get("logo_url"),
-        primary_color=branding_data.get("primary_color", "#6366f1"),
-        secondary_color=branding_data.get("secondary_color", "#8b5cf6"),
-        accent_color=branding_data.get("accent_color", "#22c55e"),
-        bg_color_light=branding_data.get("bg_color_light", "#f9fafb"),
-        surface_color_light=branding_data.get("surface_color_light", "#ffffff"),
-        footer_text=branding_data.get("footer_text"),
-        privacy_policy_url=branding_data.get("privacy_policy_url"),
-        terms_of_service_url=branding_data.get("terms_of_service_url"),
-    )
+    response.branding = _branding_from_dict(branding_data)
     return response
 
 

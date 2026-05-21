@@ -98,11 +98,43 @@ def upgrade() -> None:
         sqlite_where=sa.text("bundle_is_recommended = 1 AND proposal_bundle_id IS NOT NULL"),
     )
 
-    # PR #378's package schema was deployed as an intermediate shape. The
-    # product model is now real proposal options grouped under a bundle, so the
-    # package artifacts are intentionally removed. Any accepted selected-package
-    # snapshot data is lost on this upgrade; there are no Stripe side effects in
-    # the retired package MVP.
+    # DB-level backstop on the "one accepted sibling per bundle" invariant.
+    # accept_proposal_public takes a SELECT FOR UPDATE on the bundle to
+    # serialize concurrent accepts; this partial unique index is the
+    # belt-and-suspenders so a future code path that forgets the lock can
+    # never produce two accepted siblings.
+    op.create_index(
+        "uq_proposals_one_accepted_per_bundle",
+        "proposals",
+        ["proposal_bundle_id"],
+        unique=True,
+        postgresql_where=sa.text(
+            "proposal_bundle_id IS NOT NULL "
+            "AND status IN ('accepted', 'awaiting_payment', 'paid')"
+        ),
+        sqlite_where=sa.text(
+            "proposal_bundle_id IS NOT NULL "
+            "AND status IN ('accepted', 'awaiting_payment', 'paid')"
+        ),
+    )
+
+    # PR #378's package schema was deployed as an intermediate shape (LIVE on
+    # prod 2026-05-21). The product model is now real proposal options grouped
+    # under a bundle. Before dropping selected_package_snapshot, preserve any
+    # customer-signed selection JSON into a new `accepted_selection_snapshot`
+    # column so the audit/legal record of what was actually accepted survives
+    # the rewrite. There are no Stripe side effects in the retired package
+    # MVP, only the JSON snapshot is at risk.
+    op.add_column(
+        "proposals",
+        sa.Column("accepted_selection_snapshot", sa.JSON(), nullable=True),
+    )
+    op.execute(
+        "UPDATE proposals "
+        "SET accepted_selection_snapshot = selected_package_snapshot "
+        "WHERE selected_package_snapshot IS NOT NULL"
+    )
+
     op.drop_constraint("ck_proposals_selected_package_pair", "proposals", type_="check")
     op.drop_index("ix_proposals_selected_package_id", table_name="proposals")
     op.drop_constraint("fk_proposals_selected_package_id", "proposals", type_="foreignkey")
@@ -184,6 +216,15 @@ def downgrade() -> None:
         "(selected_package_id IS NULL) = (selected_package_snapshot IS NULL)",
     )
 
+    # Restore the preserved snapshots on the way down.
+    op.execute(
+        "UPDATE proposals "
+        "SET selected_package_snapshot = accepted_selection_snapshot "
+        "WHERE accepted_selection_snapshot IS NOT NULL"
+    )
+    op.drop_column("proposals", "accepted_selection_snapshot")
+
+    op.drop_index("uq_proposals_one_accepted_per_bundle", table_name="proposals")
     op.drop_index("uq_proposals_one_recommended_per_bundle", table_name="proposals")
     op.drop_index("ix_proposals_bundle_order", table_name="proposals")
     op.drop_constraint("fk_proposal_bundles_selected_proposal_id", "proposal_bundles", type_="foreignkey")

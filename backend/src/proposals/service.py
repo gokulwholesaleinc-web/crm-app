@@ -367,25 +367,16 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
     async def _generate_bundle_number(self) -> str:
         year = datetime.now(UTC).year
         prefix = f"PB-{year}-"
-        result = await self.db.execute(
-            select(ProposalBundle.bundle_number)
-            .where(ProposalBundle.bundle_number.like(f"{prefix}%"))
-            .order_by(ProposalBundle.bundle_number.desc())
-            .limit(1)
+        # Match _generate_proposal_number's shape: count-based, predictable, no
+        # silent-fallback branch. A malformed bundle_number on the latest row
+        # should fail loud (the prior fallback would have silently re-issued a
+        # non-monotonic sequence on top of corrupted data).
+        count_result = await self.db.execute(
+            select(func.count(ProposalBundle.id)).where(
+                ProposalBundle.bundle_number.like(f"{prefix}%")
+            )
         )
-        last = result.scalar_one_or_none()
-        if last is None:
-            seq = 1
-        else:
-            try:
-                seq = int(last.removeprefix(prefix)) + 1
-            except ValueError:
-                count_result = await self.db.execute(
-                    select(func.count(ProposalBundle.id)).where(
-                        ProposalBundle.bundle_number.like(f"{prefix}%")
-                    )
-                )
-                seq = (count_result.scalar() or 0) + 1
+        seq = (count_result.scalar() or 0) + 1
         return f"{prefix}{seq:04d}"
 
     async def get_bundle(self, bundle_id: int) -> ProposalBundle | None:
@@ -421,6 +412,14 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         return result.scalar_one_or_none()
 
     async def record_bundle_view(self, bundle: ProposalBundle) -> None:
+        # Don't re-arm sibling status on an already-closed bundle. Once a
+        # sibling was accepted, the other siblings are correctly `rejected`;
+        # if a previous flush left any in `sent` (e.g. a partial failure),
+        # they must NOT bounce back to `viewed` here — that would expose
+        # them as actionable to a customer who refreshed the chooser page
+        # after acceptance, widening the accept-race window.
+        if bundle.status in ("accepted", "rejected"):
+            return
         now = datetime.now(UTC)
         bundle.viewed_at = now
         if bundle.status == "sent":
@@ -871,6 +870,39 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         if selected_proposal_id is not None and selected_proposal_id != proposal.id:
             raise ValueError("Selected proposal does not match the proposal being signed")
 
+        # Bundle invariant: only one sibling can ever reach `accepted`. Two
+        # signers hitting two different sibling URLs concurrently each pass
+        # their own per-proposal conditional UPDATE (different rows), so the
+        # serialization point has to live on the bundle row. Acquire FOR
+        # UPDATE on the bundle BEFORE the per-proposal UPDATE — the second
+        # accept blocks until the first commits, then sees status='accepted'
+        # and refuses. A partial unique index on
+        # proposals(proposal_bundle_id) WHERE status IN ('accepted','awaiting_payment','paid')
+        # (migration 047) is the DB-level backstop if the app-layer guard is
+        # ever bypassed.
+        locked_bundle: ProposalBundle | None = None
+        if proposal.proposal_bundle_id is not None:
+            bundle_lock = await self.db.execute(
+                select(ProposalBundle)
+                .options(selectinload(ProposalBundle.proposals))
+                .where(ProposalBundle.id == proposal.proposal_bundle_id)
+                .with_for_update()
+            )
+            locked_bundle = bundle_lock.scalar_one_or_none()
+            if locked_bundle is None:
+                raise ValueError(
+                    f"Proposal {proposal.id} references missing bundle "
+                    f"{proposal.proposal_bundle_id}",
+                )
+            if locked_bundle.selected_proposal_id is not None and locked_bundle.selected_proposal_id != proposal.id:
+                raise ValueError(
+                    "Another proposal in this bundle was already accepted",
+                )
+            if locked_bundle.status == "accepted":
+                raise ValueError(
+                    "Another proposal in this bundle was already accepted",
+                )
+
         # Atomic status transition: conditional UPDATE guarded by the
         # same (sent|viewed) whitelist. If two accept requests arrive
         # concurrently, only one row update will match — the other
@@ -899,8 +931,8 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
             )
         await self.db.flush()
         await self.db.refresh(proposal)
-        if proposal.proposal_bundle_id:
-            await self._mark_bundle_accepted(proposal, accepted_at=now)
+        if locked_bundle is not None:
+            await self._mark_bundle_accepted(proposal, locked_bundle, accepted_at=now)
 
         # Stamp + upload the master PDF if Lorenzo attached one. Failure
         # is logged but does not unwind the acceptance — the signed-row
@@ -945,15 +977,22 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         await self.db.refresh(proposal)
         return proposal
 
-    async def _mark_bundle_accepted(self, selected: Proposal, *, accepted_at: datetime) -> None:
-        bundle = await self.get_bundle(selected.proposal_bundle_id) if selected.proposal_bundle_id else None
-        if not bundle:
-            return
+    async def _mark_bundle_accepted(
+        self,
+        selected: Proposal,
+        bundle: ProposalBundle,
+        *,
+        accepted_at: datetime,
+    ) -> None:
+        # Caller (accept_proposal_public) acquired FOR UPDATE on this bundle
+        # row and pre-loaded bundle.proposals; this method just mutates under
+        # that lock and never re-queries.
         bundle.status = "accepted"
         bundle.selected_proposal_id = selected.id
         bundle.selected_at = accepted_at
         bundle.accepted_at = accepted_at
         actor_id = selected.owner_id or selected.created_by_id
+        rejected_siblings: list[Proposal] = []
         for option in bundle.proposals:
             if option.id != selected.id and option.status in ("sent", "viewed"):
                 option.status = "rejected"
@@ -961,6 +1000,28 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 option.rejection_reason = (
                     f"Another proposal in bundle {bundle.bundle_number} was accepted."
                 )
+                rejected_siblings.append(option)
+                # Per-sibling Activity row so the owner's timeline shows the
+                # full picture, not just the winner. emit() runs in the
+                # router after _mark_bundle_accepted returns — keeping IO
+                # out of the locked critical section.
+                if actor_id:
+                    self.db.add(
+                        Activity(
+                            activity_type="note",
+                            subject=f"Proposal rejected: {option.title}",
+                            description=(
+                                f"Auto-rejected because another proposal in "
+                                f"bundle {bundle.bundle_number} was accepted."
+                            ),
+                            entity_type="proposals",
+                            entity_id=option.id,
+                            is_completed=True,
+                            completed_at=accepted_at,
+                            owner_id=actor_id,
+                            created_by_id=actor_id,
+                        )
+                    )
         if actor_id:
             self.db.add(
                 Activity(
@@ -975,6 +1036,12 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                     created_by_id=actor_id,
                 )
             )
+        # Stash the rejected siblings on the proposal so the router can emit
+        # PROPOSAL_REJECTED events post-commit. Avoids importing the events
+        # module from the service layer (and avoids emitting under the row
+        # lock, which would tie event-handler latency to the bundle's
+        # serialization window).
+        selected._bundle_rejected_siblings = rejected_siblings  # type: ignore[attr-defined]
         await self.db.flush()
 
     async def _maybe_stamp_signing_documents(

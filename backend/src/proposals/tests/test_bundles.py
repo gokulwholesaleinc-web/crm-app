@@ -287,3 +287,195 @@ class TestProposalBundles:
             )
         ).scalar_one_or_none()
         assert activity is not None
+
+    async def test_per_sibling_rejection_activity_row_is_logged(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        test_user: User,
+    ):
+        # The winner's Activity is covered above; this verifies HIGH #5 — the
+        # owner's timeline shows every option that flipped to rejected too,
+        # not just the one that was accepted.
+        winner = await _make_proposal(db_session, test_user, title="Winner", status="sent")
+        loser_a = await _make_proposal(db_session, test_user, title="Loser A", status="sent")
+        loser_b = await _make_proposal(db_session, test_user, title="Loser B", status="sent")
+        await _make_bundle(db_session, test_user, [winner, loser_a, loser_b], status="sent")
+        signature = "data:image/png;base64," + base64.b64encode(_ONE_PIXEL_PNG).decode()
+
+        resp = await client.post(
+            f"/api/proposals/public/{winner.public_token}/accept",
+            json={
+                "signer_name": "Signer",
+                "signer_email": "signer@example.com",
+                "signature_image": signature,
+                "agreed_to_terms": True,
+                "selected_proposal_id": winner.id,
+            },
+        )
+        assert resp.status_code == 200
+
+        rejection_activities = (
+            await db_session.execute(
+                select(Activity).where(
+                    Activity.entity_type == "proposals",
+                    Activity.entity_id.in_([loser_a.id, loser_b.id]),
+                    Activity.subject.like("Proposal rejected:%"),
+                )
+            )
+        ).scalars().all()
+        rejected_entity_ids = {a.entity_id for a in rejection_activities}
+        assert rejected_entity_ids == {loser_a.id, loser_b.id}, (
+            "Expected an Activity row for every sibling flipped to rejected"
+        )
+
+    async def test_second_accept_attempt_blocks_after_first_wins(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        test_user: User,
+    ):
+        # CRITICAL #1 — after one sibling is accepted, attempting to accept
+        # another in the same bundle must fail (400 from value_error_as_400).
+        # The DB-level partial unique index is the prod backstop; this test
+        # validates the app-layer guard that fires first.
+        first = await _make_proposal(db_session, test_user, title="First", status="sent")
+        second = await _make_proposal(db_session, test_user, title="Second", status="sent")
+        await _make_bundle(db_session, test_user, [first, second], status="sent")
+        signature = "data:image/png;base64," + base64.b64encode(_ONE_PIXEL_PNG).decode()
+
+        first_resp = await client.post(
+            f"/api/proposals/public/{first.public_token}/accept",
+            json={
+                "signer_name": "Signer",
+                "signer_email": "signer@example.com",
+                "signature_image": signature,
+                "agreed_to_terms": True,
+                "selected_proposal_id": first.id,
+            },
+        )
+        assert first_resp.status_code == 200
+
+        # Second sibling: its per-proposal status check would already reject
+        # this, but more importantly the bundle-FOR-UPDATE path means even
+        # if the per-proposal check were bypassed (different transaction
+        # ordering, race), the bundle.status='accepted' guard refuses.
+        second_resp = await client.post(
+            f"/api/proposals/public/{second.public_token}/accept",
+            json={
+                "signer_name": "Signer",
+                "signer_email": "signer@example.com",
+                "signature_image": signature,
+                "agreed_to_terms": True,
+                "selected_proposal_id": second.id,
+            },
+        )
+        assert second_resp.status_code == 400
+
+    async def test_accept_with_bundle_token_returns_400_pick_option(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        test_user: User,
+    ):
+        # HIGH #6 — bundle token sent to the per-proposal accept endpoint
+        # used to return a generic 404. Resolve as bundle first; if no
+        # selection has been made, return 400 with an actionable message.
+        first = await _make_proposal(db_session, test_user, title="Lean", status="sent")
+        second = await _make_proposal(db_session, test_user, title="Full", status="sent")
+        bundle = await _make_bundle(db_session, test_user, [first, second], status="sent")
+        signature = "data:image/png;base64," + base64.b64encode(_ONE_PIXEL_PNG).decode()
+
+        resp = await client.post(
+            f"/api/proposals/public/{bundle.public_token}/accept",
+            json={
+                "signer_name": "Signer",
+                "signer_email": "signer@example.com",
+                "signature_image": signature,
+                "agreed_to_terms": True,
+            },
+        )
+        assert resp.status_code == 400
+        assert "pick" in resp.json()["detail"].lower()
+
+    async def test_accept_with_bundle_token_returns_409_after_selection(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        test_user: User,
+    ):
+        # HIGH #6 — once the bundle has been selected, a stale bundle-token
+        # accept returns 409, not 404.
+        first = await _make_proposal(db_session, test_user, title="Lean", status="sent")
+        second = await _make_proposal(db_session, test_user, title="Full", status="sent")
+        bundle = await _make_bundle(db_session, test_user, [first, second], status="sent")
+        signature = "data:image/png;base64," + base64.b64encode(_ONE_PIXEL_PNG).decode()
+
+        first_resp = await client.post(
+            f"/api/proposals/public/{first.public_token}/accept",
+            json={
+                "signer_name": "Signer",
+                "signer_email": "signer@example.com",
+                "signature_image": signature,
+                "agreed_to_terms": True,
+                "selected_proposal_id": first.id,
+            },
+        )
+        assert first_resp.status_code == 200
+
+        bundle_resp = await client.post(
+            f"/api/proposals/public/{bundle.public_token}/accept",
+            json={
+                "signer_name": "Signer",
+                "signer_email": "signer@example.com",
+                "signature_image": signature,
+                "agreed_to_terms": True,
+            },
+        )
+        assert bundle_resp.status_code == 409
+        assert "already accepted" in bundle_resp.json()["detail"].lower()
+
+    async def test_record_bundle_view_does_not_rearm_accepted_bundle(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        test_user: User,
+    ):
+        # HIGH #3 — opening the bundle URL after acceptance must not flip
+        # any leftover sent sibling back to viewed (which would widen the
+        # accept race in #1).
+        first = await _make_proposal(db_session, test_user, title="A", status="sent")
+        second = await _make_proposal(db_session, test_user, title="B", status="sent")
+        bundle = await _make_bundle(db_session, test_user, [first, second], status="sent")
+        signature = "data:image/png;base64," + base64.b64encode(_ONE_PIXEL_PNG).decode()
+
+        await client.post(
+            f"/api/proposals/public/{first.public_token}/accept",
+            json={
+                "signer_name": "Signer",
+                "signer_email": "signer@example.com",
+                "signature_image": signature,
+                "agreed_to_terms": True,
+                "selected_proposal_id": first.id,
+            },
+        )
+
+        # GET on the bundle token after accept — this calls record_bundle_view.
+        resp = await client.get(f"/api/proposals/public/{bundle.public_token}")
+        assert resp.status_code == 200
+
+        await db_session.refresh(first)
+        await db_session.refresh(second)
+        await db_session.refresh(bundle)
+        assert first.status == "accepted"
+        assert second.status == "rejected", (
+            "Rejected sibling must NOT be re-armed to viewed by record_bundle_view"
+        )
+        assert bundle.status == "accepted"
+
+    async def test_proposal_model_has_accepted_selection_snapshot_column(self):
+        # CRITICAL #2 — migration 047 backfills PR #378's signed snapshots
+        # into this column. The model must declare it so the ORM can read
+        # the preserved audit data.
+        cols = Base.metadata.tables["proposals"].c
+        assert "accepted_selection_snapshot" in cols
