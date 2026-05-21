@@ -8,6 +8,12 @@ import type { Proposal } from '../../types';
 import type { TimelineStep } from '../../components/shared/StatusTimeline';
 import type { ChecklistItem } from '../../components/shared/checklist';
 import { hasSignaturePlacements } from './signaturePlacements';
+import {
+  getActivePackages,
+  hasPackageRows,
+  isPackageItemValid,
+  moneyToNumber,
+} from './proposalPackages';
 
 const STATUS_ORDER = ['draft', 'sent', 'viewed', 'accepted'];
 
@@ -211,7 +217,95 @@ export function buildProposalSendChecklist(
     });
   }
 
+  const packages = proposal.packages ?? [];
+  const activePackages = getActivePackages(packages);
+  if (hasPackageRows(proposal)) {
+    const activePackageCount = activePackages.length;
+    items.push({
+      key: 'proposal_packages_active',
+      label:
+        activePackageCount > 0
+          ? `${activePackageCount} active package${activePackageCount === 1 ? '' : 's'}`
+          : 'At least one active package',
+      state: activePackageCount > 0,
+      hint:
+        activePackageCount > 0
+          ? undefined
+          : 'Reactivate or add a package before sending; package rows with none active cannot be sent.',
+    });
+
+    if (activePackageCount > 0) {
+      const currencies = new Set(
+        activePackages.map((pkg) => pkg.currency?.trim().toUpperCase()).filter(Boolean),
+      );
+      const invalidPackages = activePackages.filter((pkg) => {
+        const cadenceValid =
+          pkg.payment_type === 'one_time'
+            ? !pkg.recurring_interval && !pkg.recurring_interval_count
+            : Boolean(pkg.recurring_interval) &&
+              Boolean(pkg.recurring_interval_count && pkg.recurring_interval_count >= 1);
+        const items = pkg.items ?? [];
+        return (
+          pkg.name.trim().length === 0 ||
+          !/^[A-Z]{3}$/.test(pkg.currency) ||
+          !cadenceValid ||
+          items.length === 0 ||
+          !items.every(isPackageItemValid) ||
+          moneyToNumber(pkg.total) <= 0
+        );
+      });
+      const recommendedCount = activePackages.filter((pkg) => pkg.is_recommended).length;
+
+      items.push({
+        key: 'proposal_packages_valid',
+        label:
+          invalidPackages.length === 0
+            ? 'Package details are ready'
+            : `${invalidPackages.length} active package${
+                invalidPackages.length === 1 ? '' : 's'
+              } need details`,
+        state: invalidPackages.length === 0,
+        hint:
+          invalidPackages.length === 0
+            ? undefined
+            : 'Every active package needs a name, valid cadence, valid line items, and a positive server total.',
+      });
+      items.push({
+        key: 'proposal_packages_currency',
+        label:
+          currencies.size <= 1
+            ? 'Active packages use one currency'
+            : 'Active packages must share one currency',
+        state: currencies.size <= 1,
+        hint:
+          currencies.size <= 1
+            ? undefined
+            : 'Use the same currency on every active package before sending.',
+      });
+      items.push({
+        key: 'proposal_packages_recommended',
+        label:
+          recommendedCount <= 1
+            ? 'Recommended package rule satisfied'
+            : 'Only one package can be recommended',
+        state: recommendedCount <= 1,
+        hint:
+          recommendedCount <= 1
+            ? undefined
+            : 'Clear the recommended marker from all but one active package.',
+      });
+    }
+  }
+
   return items;
+}
+
+export function hasPackageSendBlocker(proposal: Proposal): boolean {
+  if (!hasPackageRows(proposal)) return false;
+  const packageItems = buildProposalSendChecklist(proposal, {
+    onEditContact: () => {},
+  }).filter((item) => item.key.startsWith('proposal_packages_'));
+  return packageItems.some((item) => !item.state);
 }
 
 export function hasSigningDocumentSendBlocker(proposal: Proposal): boolean {

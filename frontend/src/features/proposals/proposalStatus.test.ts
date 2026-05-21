@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Proposal } from '../../types';
 import {
   buildProposalSendChecklist,
+  hasPackageSendBlocker,
   hasSigningDocumentSendBlocker,
 } from './proposalStatus';
 
@@ -123,5 +124,103 @@ describe('proposal signing document send guardrails', () => {
 
     expect(hasSigningDocumentSendBlocker(readyProposal)).toBe(false);
     expect(hasSigningDocumentSendBlocker(emptyProposal)).toBe(true);
+  });
+});
+
+describe('proposal package send guardrails', () => {
+  it('does not block text-only proposals with no package rows', () => {
+    const checklist = buildProposalSendChecklist(baseProposal, {
+      onEditContact: vi.fn(),
+    });
+
+    expect(hasPackageSendBlocker(baseProposal)).toBe(false);
+    expect(checklist.some((item) => item.key.startsWith('proposal_packages_'))).toBe(false);
+  });
+
+  it('blocks proposals that have package rows but zero active packages', () => {
+    const proposal = {
+      ...baseProposal,
+      packages: [
+        {
+          id: 10,
+          proposal_id: 1,
+          name: 'Old option',
+          description: null,
+          currency: 'USD',
+          payment_type: 'one_time',
+          recurring_interval: null,
+          recurring_interval_count: null,
+          subtotal: '1000.00',
+          discount_amount: '0.00',
+          tax_amount: '0.00',
+          total: '1000.00',
+          sort_order: 0,
+          is_recommended: false,
+          is_active: false,
+          items: [],
+        },
+      ],
+    } as Proposal;
+
+    expect(hasPackageSendBlocker(proposal)).toBe(true);
+    const checklist = buildProposalSendChecklist(proposal, {
+      onEditContact: vi.fn(),
+    });
+    expect(checklist.find((item) => item.key === 'proposal_packages_active')?.state).toBe(false);
+  });
+
+  it('passes valid active packages and catches mixed currencies', () => {
+    const readyPackage = {
+      id: 10,
+      proposal_id: 1,
+      name: 'Starter',
+      description: null,
+      currency: 'USD',
+      payment_type: 'one_time',
+      recurring_interval: null,
+      recurring_interval_count: null,
+      subtotal: '1000.00',
+      discount_amount: '0.00',
+      tax_amount: '0.00',
+      total: '1000.00',
+      sort_order: 0,
+      is_recommended: true,
+      is_active: true,
+      items: [
+        {
+          id: 100,
+          package_id: 10,
+          description: 'Implementation',
+          quantity: '1.00',
+          unit_price: '1000.00',
+          discount_amount: '0.00',
+          total: '1000.00',
+          sort_order: 0,
+        },
+      ],
+    };
+    const readyProposal = {
+      ...baseProposal,
+      packages: [readyPackage],
+    } as Proposal;
+    const mixedCurrencyProposal = {
+      ...baseProposal,
+      packages: [
+        readyPackage,
+        {
+          ...readyPackage,
+          id: 11,
+          currency: 'EUR',
+          is_recommended: false,
+        },
+      ],
+    } as Proposal;
+
+    expect(hasPackageSendBlocker(readyProposal)).toBe(false);
+    expect(hasPackageSendBlocker(mixedCurrencyProposal)).toBe(true);
+    const checklist = buildProposalSendChecklist(mixedCurrencyProposal, {
+      onEditContact: vi.fn(),
+    });
+    expect(checklist.find((item) => item.key === 'proposal_packages_currency')?.state).toBe(false);
   });
 });

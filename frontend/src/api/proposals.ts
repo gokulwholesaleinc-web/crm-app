@@ -15,6 +15,9 @@ import type {
   CreateFromTemplateRequest,
   ProposalAttachment,
   ProposalSigningDocument,
+  ProposalPackage,
+  ProposalPackageCreate,
+  ProposalPackageUpdate,
   SignatureFieldCoordsValue,
 } from '../types';
 
@@ -78,6 +81,45 @@ export const sendProposal = async (proposalId: number): Promise<Proposal> => {
 export const acceptProposal = async (proposalId: number): Promise<Proposal> => {
   const response = await apiClient.post<Proposal>(`${PROPOSALS_BASE}/${proposalId}/accept`);
   return response.data;
+};
+
+export const listProposalPackages = async (
+  proposalId: number,
+): Promise<ProposalPackage[]> => {
+  const response = await apiClient.get<ProposalPackage[]>(
+    `${PROPOSALS_BASE}/${proposalId}/packages`,
+  );
+  return response.data;
+};
+
+export const createProposalPackage = async (
+  proposalId: number,
+  data: ProposalPackageCreate,
+): Promise<ProposalPackage> => {
+  const response = await apiClient.post<ProposalPackage>(
+    `${PROPOSALS_BASE}/${proposalId}/packages`,
+    data,
+  );
+  return response.data;
+};
+
+export const updateProposalPackage = async (
+  proposalId: number,
+  packageId: number,
+  data: ProposalPackageUpdate,
+): Promise<ProposalPackage> => {
+  const response = await apiClient.patch<ProposalPackage>(
+    `${PROPOSALS_BASE}/${proposalId}/packages/${packageId}`,
+    data,
+  );
+  return response.data;
+};
+
+export const deleteProposalPackage = async (
+  proposalId: number,
+  packageId: number,
+): Promise<void> => {
+  await apiClient.delete(`${PROPOSALS_BASE}/${proposalId}/packages/${packageId}`);
 };
 
 /**
@@ -447,6 +489,10 @@ export const proposalsApi = {
   send: sendProposal,
   sendWithEmail: sendProposalWithEmail,
   accept: acceptProposal,
+  listPackages: listProposalPackages,
+  createPackage: createProposalPackage,
+  updatePackage: updateProposalPackage,
+  deletePackage: deleteProposalPackage,
   reject: rejectProposal,
   restampSignedPdf: restampProposalSignedPdf,
   listTemplates: listProposalTemplates,

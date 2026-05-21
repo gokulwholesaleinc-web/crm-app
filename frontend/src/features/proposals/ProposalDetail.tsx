@@ -16,6 +16,7 @@ import {
   ClipboardDocumentIcon,
   TrophyIcon,
   ExclamationTriangleIcon,
+  PlusIcon,
 } from '@heroicons/react/24/outline';
 import { Button, HelpLink, Modal, ConfirmDialog, StatusBadge } from '../../components/ui';
 import { StickyActionBar } from '../../components/shared/StickyActionBar';
@@ -30,6 +31,9 @@ import {
   useRejectProposal,
   useRestampProposalSignedPdf,
   useUpdateProposalSignatureCoords,
+  useCreateProposalPackage,
+  useUpdateProposalPackage,
+  useDeleteProposalPackage,
 } from '../../hooks/useProposals';
 import { ProposalAuditCard } from './ProposalAuditCard';
 // Lazy-loaded because pdf.js (~300 KB gzipped) only needs to land in
@@ -47,6 +51,7 @@ import {
   buildProposalTimelineSteps,
   buildProposalSendChecklist,
   hasSigningDocumentSendBlocker,
+  hasPackageSendBlocker,
 } from './proposalStatus';
 import {
   buildProposalSendFailure,
@@ -73,9 +78,14 @@ import { useWorkSessionHeartbeat } from '../../hooks/useWorkSessionHeartbeat';
 import { showSuccess, showError } from '../../utils/toast';
 import { extractApiErrorDetail } from '../../utils/errors';
 import type {
+  Proposal,
   ProposalCreate,
   ProposalUpdate,
   ProposalAttachment,
+  ProposalPackage,
+  ProposalPackageCreate,
+  ProposalPackageItemUpdate,
+  ProposalPackageUpdate,
   ProposalSigningDocument,
   SignatureFieldCoordsValue,
 } from '../../types';
@@ -83,6 +93,12 @@ import {
   formatSignaturePlacementSummary,
   hasSignaturePlacements,
 } from './signaturePlacements';
+import {
+  formatPackageCadence,
+  formatPackageCurrency,
+  isZeroMoney,
+  sortPackages,
+} from './proposalPackages';
 
 function ProposalDetailPage() {
   const { id } = useParams();
@@ -316,12 +332,16 @@ function ProposalDetailPage() {
   // frontend gates the 400 the backend would return without one.
   const canSendStatus = ['draft', 'sent', 'viewed'].includes(proposal.status ?? '');
   const signingDocsBlockSend = hasSigningDocumentSendBlocker(proposal);
-  const canSend = canSendStatus && Boolean(proposalRecipient) && !signingDocsBlockSend;
+  const packageBlockSend = hasPackageSendBlocker(proposal);
+  const canSend =
+    canSendStatus && Boolean(proposalRecipient) && !signingDocsBlockSend && !packageBlockSend;
   const sendLabel = isDraft ? 'Send' : 'Resend';
   const sendDisabledTitle = !proposalRecipient
     ? 'Set a designated signer email or attach a contact with an email before sending'
     : signingDocsBlockSend
       ? 'Place signature and date areas on every uploaded signing document before sending'
+      : packageBlockSend
+        ? 'Resolve package checklist items before sending'
       : undefined;
   const canAcceptReject = proposal.status === 'sent' || proposal.status === 'viewed';
   const canEdit = ['draft', 'sent', 'viewed'].includes(proposal.status ?? '');
@@ -346,6 +366,7 @@ function ProposalDetailPage() {
     proposal.executive_summary ||
       proposal.scope_of_work ||
       proposal.pricing_section ||
+      (proposal.packages && proposal.packages.length > 0) ||
       proposal.timeline ||
       proposal.terms ||
       proposal.content,
@@ -623,6 +644,9 @@ function ProposalDetailPage() {
               placeholder="Deliverables, phases, what's in and out of scope."
             />
           </div>
+          <div data-guide="proposal-detail-packages">
+            <ProposalPackagesCard proposal={proposal} isDraft={isDraft} />
+          </div>
           <div data-guide="proposal-detail-pricing">
             <InlineSectionEditor
               title="Pricing"
@@ -866,6 +890,601 @@ function ProposalDetailPage() {
         variant="danger"
         isLoading={deleteProposalMutation.isPending}
       />
+    </div>
+  );
+}
+
+// -----------------------------------------------------------------
+// ProposalPackagesCard
+// -----------------------------------------------------------------
+
+type PackageFormItem = {
+  id?: number;
+  description: string;
+  quantity: string;
+  unit_price: string;
+  discount_amount: string;
+  sort_order: number;
+};
+
+type PackageFormState = {
+  name: string;
+  description: string;
+  currency: string;
+  payment_type: 'one_time' | 'subscription';
+  recurring_interval: 'month' | 'year';
+  recurring_interval_count: number;
+  is_recommended: boolean;
+  is_active: boolean;
+  sort_order: number;
+  items: PackageFormItem[];
+};
+
+const emptyPackageItem = (sortOrder = 0): PackageFormItem => ({
+  description: '',
+  quantity: '1.00',
+  unit_price: '0.00',
+  discount_amount: '0.00',
+  sort_order: sortOrder,
+});
+
+const emptyPackageForm = (sortOrder = 0): PackageFormState => ({
+  name: '',
+  description: '',
+  currency: 'USD',
+  payment_type: 'one_time',
+  recurring_interval: 'month',
+  recurring_interval_count: 1,
+  is_recommended: false,
+  is_active: true,
+  sort_order: sortOrder,
+  items: [emptyPackageItem()],
+});
+
+function packageToForm(pkg: ProposalPackage): PackageFormState {
+  return {
+    name: pkg.name,
+    description: pkg.description ?? '',
+    currency: pkg.currency,
+    payment_type: pkg.payment_type,
+    recurring_interval: pkg.recurring_interval ?? 'month',
+    recurring_interval_count: pkg.recurring_interval_count ?? 1,
+    is_recommended: pkg.is_recommended,
+    is_active: pkg.is_active,
+    sort_order: pkg.sort_order,
+    items:
+      pkg.items.length > 0
+        ? pkg.items.map((item) => ({
+            id: item.id,
+            description: item.description,
+            quantity: item.quantity,
+            unit_price: item.unit_price,
+            discount_amount: item.discount_amount,
+            sort_order: item.sort_order ?? 0,
+          }))
+        : [emptyPackageItem()],
+  };
+}
+
+function formToPackageCreate(form: PackageFormState): ProposalPackageCreate {
+  return {
+    name: form.name.trim(),
+    description: form.description.trim() || null,
+    currency: form.currency.trim().toUpperCase(),
+    payment_type: form.payment_type,
+    recurring_interval:
+      form.payment_type === 'subscription' ? form.recurring_interval : null,
+    recurring_interval_count:
+      form.payment_type === 'subscription' ? form.recurring_interval_count : null,
+    is_recommended: form.is_recommended,
+    is_active: form.is_active,
+    sort_order: form.sort_order,
+    items: form.items.map((item, index) => ({
+      description: item.description.trim(),
+      quantity: item.quantity,
+      unit_price: item.unit_price,
+      discount_amount: item.discount_amount,
+      sort_order: item.sort_order ?? index,
+    })),
+  };
+}
+
+function formToPackageUpdate(form: PackageFormState): ProposalPackageUpdate {
+  const base = formToPackageCreate(form);
+  return {
+    ...base,
+    items: form.items.map((item, index): ProposalPackageItemUpdate => ({
+      id: item.id,
+      description: item.description.trim(),
+      quantity: item.quantity,
+      unit_price: item.unit_price,
+      discount_amount: item.discount_amount,
+      sort_order: item.sort_order ?? index,
+    })),
+  };
+}
+
+interface ProposalPackagesCardProps {
+  proposal: Proposal;
+  isDraft: boolean;
+}
+
+export function ProposalPackagesCard({ proposal, isDraft }: ProposalPackagesCardProps) {
+  const createPackage = useCreateProposalPackage();
+  const updatePackage = useUpdateProposalPackage();
+  const deletePackage = useDeleteProposalPackage();
+  const packages = sortPackages(proposal.packages ?? []);
+  const [editingId, setEditingId] = useState<number | 'new' | null>(null);
+  const [form, setForm] = useState<PackageFormState>(() =>
+    emptyPackageForm(packages.length),
+  );
+  const selectedSnapshot = proposal.selected_package_snapshot;
+  const isSaving = createPackage.isPending || updatePackage.isPending;
+
+  const beginCreate = () => {
+    setForm(emptyPackageForm(packages.length));
+    setEditingId('new');
+  };
+
+  const beginEdit = (pkg: ProposalPackage) => {
+    setForm(packageToForm(pkg));
+    setEditingId(pkg.id);
+  };
+
+  const updateItem = (
+    index: number,
+    patch: Partial<PackageFormItem>,
+  ) => {
+    setForm((current) => ({
+      ...current,
+      items: current.items.map((item, itemIndex) =>
+        itemIndex === index ? { ...item, ...patch } : item,
+      ),
+    }));
+  };
+
+  const removeItem = (index: number) => {
+    setForm((current) => ({
+      ...current,
+      items:
+        current.items.length === 1
+          ? current.items
+          : current.items.filter((_item, itemIndex) => itemIndex !== index),
+    }));
+  };
+
+  const saveForm = async () => {
+    if (!isDraft) return;
+    try {
+      if (editingId === 'new') {
+        await createPackage.mutateAsync({
+          proposalId: proposal.id,
+          data: formToPackageCreate(form),
+        });
+        showSuccess('Package added');
+      } else if (typeof editingId === 'number') {
+        await updatePackage.mutateAsync({
+          proposalId: proposal.id,
+          packageId: editingId,
+          data: formToPackageUpdate(form),
+        });
+        showSuccess('Package updated');
+      }
+      setEditingId(null);
+    } catch (err) {
+      showError(extractApiErrorDetail(err) ?? 'Failed to save package');
+    }
+  };
+
+  const toggleActive = async (pkg: ProposalPackage) => {
+    if (!isDraft) return;
+    try {
+      await updatePackage.mutateAsync({
+        proposalId: proposal.id,
+        packageId: pkg.id,
+        data: { is_active: !pkg.is_active },
+      });
+      showSuccess(pkg.is_active ? 'Package deactivated' : 'Package reactivated');
+    } catch (err) {
+      showError(extractApiErrorDetail(err) ?? 'Failed to update package');
+    }
+  };
+
+  const removePackage = async (pkg: ProposalPackage) => {
+    if (!isDraft) return;
+    // Soft-delete: the row stays so the audit trail can reference it; the
+    // staff Reactivate button can bring it back. Toast wording matches the
+    // actual semantic so users aren't surprised when the row reappears as
+    // inactive.
+    try {
+      await deletePackage.mutateAsync({
+        proposalId: proposal.id,
+        packageId: pkg.id,
+      });
+      showSuccess('Package deactivated');
+    } catch (err) {
+      showError(extractApiErrorDetail(err) ?? 'Failed to deactivate package');
+    }
+  };
+
+  return (
+    <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-gray-100 dark:border-gray-700">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+            Packages
+          </h2>
+          {!isDraft && (
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              Package options are read-only after the proposal is sent.
+            </p>
+          )}
+        </div>
+        {isDraft && (
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={beginCreate}
+            leftIcon={<PlusIcon className="h-4 w-4" />}
+          >
+            Add package
+          </Button>
+        )}
+      </div>
+
+      {selectedSnapshot && (
+        <div className="mt-4 rounded border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-900 dark:border-green-800 dark:bg-green-900/20 dark:text-green-200">
+          Selected package: <span className="font-medium">{selectedSnapshot.name}</span>{' '}
+          ({formatPackageCurrency(selectedSnapshot.total, selectedSnapshot.currency)})
+        </div>
+      )}
+
+      {packages.length === 0 && editingId !== 'new' && (
+        <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">
+          No package options yet. Text-only proposals can still be sent without packages.
+        </p>
+      )}
+
+      <div className="mt-4 space-y-3">
+        {packages.map((pkg) => {
+          const isSelected = selectedSnapshot?.package_id === pkg.id;
+          return (
+            <div
+              key={pkg.id}
+              className={`rounded border p-4 ${
+                pkg.is_active
+                  ? 'border-gray-200 dark:border-gray-700'
+                  : 'border-gray-200 bg-gray-50 opacity-80 dark:border-gray-700 dark:bg-gray-900/50'
+              }`}
+            >
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                      {pkg.name || 'Untitled package'}
+                    </h3>
+                    {pkg.is_recommended && (
+                      <span className="rounded-full bg-primary-50 px-2 py-0.5 text-xs font-medium text-primary-700 dark:bg-primary-900/30 dark:text-primary-300">
+                        Recommended
+                      </span>
+                    )}
+                    {!pkg.is_active && (
+                      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+                        Inactive
+                      </span>
+                    )}
+                    {isSelected && (
+                      <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-300">
+                        Selected
+                      </span>
+                    )}
+                  </div>
+                  {pkg.description && (
+                    <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
+                      {pkg.description}
+                    </p>
+                  )}
+                  <p className="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">
+                    {formatPackageCurrency(pkg.total, pkg.currency)}
+                    <span className="ml-2 font-normal text-gray-500 dark:text-gray-400">
+                      {formatPackageCadence(
+                        pkg.payment_type,
+                        pkg.recurring_interval,
+                        pkg.recurring_interval_count,
+                      )}
+                    </span>
+                  </p>
+                </div>
+                {isDraft && (
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => beginEdit(pkg)}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => void toggleActive(pkg)}
+                      disabled={updatePackage.isPending}
+                    >
+                      {pkg.is_active ? 'Deactivate' : 'Reactivate'}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => void removePackage(pkg)}
+                      disabled={deletePackage.isPending}
+                      leftIcon={<TrashIcon className="h-4 w-4" />}
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              {pkg.items.length > 0 && (
+                <div className="mt-3 overflow-x-auto">
+                  <table className="min-w-full text-xs">
+                    <thead className="text-left text-gray-500 dark:text-gray-400">
+                      <tr>
+                        <th className="py-1 pr-3 font-medium">Item</th>
+                        <th className="py-1 px-3 font-medium text-right">Qty</th>
+                        <th className="py-1 px-3 font-medium text-right">Unit</th>
+                        <th className="py-1 pl-3 font-medium text-right">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                      {pkg.items.map((item) => (
+                        <tr key={item.id}>
+                          <td className="py-1.5 pr-3 text-gray-700 dark:text-gray-200">
+                            {item.description}
+                          </td>
+                          <td className="py-1.5 px-3 text-right tabular-nums">
+                            {item.quantity}
+                          </td>
+                          <td className="py-1.5 px-3 text-right tabular-nums">
+                            {formatPackageCurrency(item.unit_price, pkg.currency)}
+                          </td>
+                          <td className="py-1.5 pl-3 text-right tabular-nums">
+                            {formatPackageCurrency(item.total, pkg.currency)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 border-t border-gray-100 pt-3 text-xs dark:border-gray-700">
+                <dt className="text-gray-500 dark:text-gray-400">Subtotal</dt>
+                <dd className="text-right tabular-nums text-gray-900 dark:text-gray-100">
+                  {formatPackageCurrency(pkg.subtotal, pkg.currency)}
+                </dd>
+                {!isZeroMoney(pkg.discount_amount) && (
+                  <>
+                    <dt className="text-gray-500 dark:text-gray-400">Discount</dt>
+                    <dd className="text-right tabular-nums text-gray-900 dark:text-gray-100">
+                      -{formatPackageCurrency(pkg.discount_amount, pkg.currency)}
+                    </dd>
+                  </>
+                )}
+                {!isZeroMoney(pkg.tax_amount) && (
+                  <>
+                    <dt className="text-gray-500 dark:text-gray-400">Tax</dt>
+                    <dd className="text-right tabular-nums text-gray-900 dark:text-gray-100">
+                      {formatPackageCurrency(pkg.tax_amount, pkg.currency)}
+                    </dd>
+                  </>
+                )}
+                <dt className="font-medium text-gray-700 dark:text-gray-200">Total</dt>
+                <dd className="text-right font-semibold tabular-nums text-gray-900 dark:text-gray-100">
+                  {formatPackageCurrency(pkg.total, pkg.currency)}
+                </dd>
+              </dl>
+            </div>
+          );
+        })}
+      </div>
+
+      {editingId && isDraft && (
+        <div className="mt-4 rounded border border-primary-200 bg-primary-50/50 p-4 dark:border-primary-800 dark:bg-primary-950/20">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className="block text-sm">
+              <span className="text-xs font-medium text-gray-600 dark:text-gray-300">Name</span>
+              <input
+                value={form.name}
+                onChange={(e) => setForm((curr) => ({ ...curr, name: e.target.value }))}
+                className="mt-1 block w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+              />
+            </label>
+            <label className="block text-sm">
+              <span className="text-xs font-medium text-gray-600 dark:text-gray-300">Currency</span>
+              <input
+                value={form.currency}
+                onChange={(e) => setForm((curr) => ({ ...curr, currency: e.target.value.toUpperCase().slice(0, 3) }))}
+                className="mt-1 block w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm uppercase text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                maxLength={3}
+              />
+            </label>
+            <label className="block text-sm">
+              <span className="text-xs font-medium text-gray-600 dark:text-gray-300">Payment type</span>
+              <select
+                value={form.payment_type}
+                onChange={(e) =>
+                  setForm((curr) => ({
+                    ...curr,
+                    payment_type: e.target.value as PackageFormState['payment_type'],
+                  }))
+                }
+                className="mt-1 block w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+              >
+                <option value="one_time">One-time</option>
+                <option value="subscription">Subscription</option>
+              </select>
+            </label>
+            <label className="block text-sm">
+              <span className="text-xs font-medium text-gray-600 dark:text-gray-300">Sort order</span>
+              <input
+                type="number"
+                value={form.sort_order}
+                onChange={(e) => setForm((curr) => ({ ...curr, sort_order: Number(e.target.value) }))}
+                className="mt-1 block w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+              />
+            </label>
+            {form.payment_type === 'subscription' && (
+              <>
+                <label className="block text-sm">
+                  <span className="text-xs font-medium text-gray-600 dark:text-gray-300">Interval</span>
+                  <select
+                    value={form.recurring_interval}
+                    onChange={(e) =>
+                      setForm((curr) => ({
+                        ...curr,
+                        recurring_interval: e.target.value as PackageFormState['recurring_interval'],
+                      }))
+                    }
+                    className="mt-1 block w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                  >
+                    <option value="month">Month</option>
+                    <option value="year">Year</option>
+                  </select>
+                </label>
+                <label className="block text-sm">
+                  <span className="text-xs font-medium text-gray-600 dark:text-gray-300">Every</span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={form.recurring_interval_count}
+                    onChange={(e) =>
+                      setForm((curr) => ({
+                        ...curr,
+                        recurring_interval_count: Math.max(1, Number(e.target.value) || 1),
+                      }))
+                    }
+                    className="mt-1 block w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                  />
+                </label>
+              </>
+            )}
+            <label className="block sm:col-span-2 text-sm">
+              <span className="text-xs font-medium text-gray-600 dark:text-gray-300">Description</span>
+              <textarea
+                value={form.description}
+                onChange={(e) => setForm((curr) => ({ ...curr, description: e.target.value }))}
+                rows={2}
+                className="mt-1 block w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+              />
+            </label>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-4 text-sm">
+            <label className="inline-flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={form.is_recommended}
+                onChange={(e) => setForm((curr) => ({ ...curr, is_recommended: e.target.checked }))}
+                className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              />
+              Recommended
+            </label>
+            <label className="inline-flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={form.is_active}
+                onChange={(e) => setForm((curr) => ({ ...curr, is_active: e.target.checked }))}
+                className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              />
+              Active
+            </label>
+          </div>
+
+          <div className="mt-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                Line items
+              </h3>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() =>
+                  setForm((curr) => ({
+                    ...curr,
+                    items: [...curr.items, emptyPackageItem(curr.items.length)],
+                  }))
+                }
+              >
+                Add item
+              </Button>
+            </div>
+            {form.items.map((item, index) => (
+              <div key={item.id ?? index} className="grid grid-cols-12 gap-2">
+                <input
+                  aria-label={`Package item ${index + 1} description`}
+                  value={item.description}
+                  onChange={(e) => updateItem(index, { description: e.target.value })}
+                  placeholder="Description"
+                  className="col-span-12 rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 sm:col-span-5"
+                />
+                <input
+                  aria-label={`Package item ${index + 1} quantity`}
+                  value={item.quantity}
+                  onChange={(e) => updateItem(index, { quantity: e.target.value })}
+                  placeholder="Qty"
+                  className="col-span-3 rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 sm:col-span-2"
+                />
+                <input
+                  aria-label={`Package item ${index + 1} unit price`}
+                  value={item.unit_price}
+                  onChange={(e) => updateItem(index, { unit_price: e.target.value })}
+                  placeholder="Unit"
+                  className="col-span-4 rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 sm:col-span-2"
+                />
+                <input
+                  aria-label={`Package item ${index + 1} discount`}
+                  value={item.discount_amount}
+                  onChange={(e) => updateItem(index, { discount_amount: e.target.value })}
+                  placeholder="Discount"
+                  className="col-span-4 rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 sm:col-span-2"
+                />
+                <button
+                  type="button"
+                  onClick={() => removeItem(index)}
+                  disabled={form.items.length === 1}
+                  aria-label={`Remove package item ${index + 1}`}
+                  className="col-span-1 inline-flex items-center justify-center rounded text-gray-400 hover:text-red-600 disabled:opacity-30"
+                >
+                  <XMarkIcon className="h-4 w-4" aria-hidden="true" />
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-4 flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setEditingId(null)}
+              disabled={isSaving}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              onClick={() => void saveForm()}
+              isLoading={isSaving}
+            >
+              Save package
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
