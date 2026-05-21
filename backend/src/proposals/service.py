@@ -816,7 +816,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         signer_user_agent: str | None = None,
         signer_timezone: str | None = None,
         selected_proposal_id: int | None = None,
-    ) -> Proposal:
+    ) -> tuple[Proposal, list[Proposal]]:
         """Accept a proposal via the public Sign-to-Confirm modal.
 
         Persists the drawn signature, transitions the proposal to
@@ -931,8 +931,11 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
             )
         await self.db.flush()
         await self.db.refresh(proposal)
+        rejected_siblings: list[Proposal] = []
         if locked_bundle is not None:
-            await self._mark_bundle_accepted(proposal, locked_bundle, accepted_at=now)
+            rejected_siblings = await self._mark_bundle_accepted(
+                proposal, locked_bundle, accepted_at=now,
+            )
 
         # Stamp + upload the master PDF if Lorenzo attached one. Failure
         # is logged but does not unwind the acceptance — the signed-row
@@ -975,7 +978,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 )
 
         await self.db.refresh(proposal)
-        return proposal
+        return proposal, rejected_siblings
 
     async def _mark_bundle_accepted(
         self,
@@ -983,7 +986,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         bundle: ProposalBundle,
         *,
         accepted_at: datetime,
-    ) -> None:
+    ) -> list[Proposal]:
         # Caller (accept_proposal_public) acquired FOR UPDATE on this bundle
         # row and pre-loaded bundle.proposals; this method just mutates under
         # that lock and never re-queries.
@@ -1036,13 +1039,12 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                     created_by_id=actor_id,
                 )
             )
-        # Stash the rejected siblings on the proposal so the router can emit
-        # PROPOSAL_REJECTED events post-commit. Avoids importing the events
-        # module from the service layer (and avoids emitting under the row
-        # lock, which would tie event-handler latency to the bundle's
-        # serialization window).
-        selected._bundle_rejected_siblings = rejected_siblings  # type: ignore[attr-defined]
+        # Return the rejected siblings so the router can emit PROPOSAL_REJECTED
+        # events post-commit. Avoids importing the events module from the
+        # service layer, and emitting under the row lock would tie event-
+        # handler latency to the bundle's serialization window.
         await self.db.flush()
+        return rejected_siblings
 
     async def _maybe_stamp_signing_documents(
         self,

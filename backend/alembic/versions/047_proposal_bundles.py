@@ -102,20 +102,19 @@ def upgrade() -> None:
     # accept_proposal_public takes a SELECT FOR UPDATE on the bundle to
     # serialize concurrent accepts; this partial unique index is the
     # belt-and-suspenders so a future code path that forgets the lock can
-    # never produce two accepted siblings.
+    # never produce two accepted siblings. One predicate so the accepted-
+    # status set is a single edit if it ever changes.
+    _accepted_pred = sa.text(
+        "proposal_bundle_id IS NOT NULL "
+        "AND status IN ('accepted', 'awaiting_payment', 'paid')"
+    )
     op.create_index(
         "uq_proposals_one_accepted_per_bundle",
         "proposals",
         ["proposal_bundle_id"],
         unique=True,
-        postgresql_where=sa.text(
-            "proposal_bundle_id IS NOT NULL "
-            "AND status IN ('accepted', 'awaiting_payment', 'paid')"
-        ),
-        sqlite_where=sa.text(
-            "proposal_bundle_id IS NOT NULL "
-            "AND status IN ('accepted', 'awaiting_payment', 'paid')"
-        ),
+        postgresql_where=_accepted_pred,
+        sqlite_where=_accepted_pred,
     )
 
     # PR #378's package schema was deployed as an intermediate shape (LIVE on
@@ -210,19 +209,22 @@ def downgrade() -> None:
         ondelete="SET NULL",
     )
     op.create_index("ix_proposals_selected_package_id", "proposals", ["selected_package_id"])
+
+    # Downgrade audit-data note: `accepted_selection_snapshot` is dropped
+    # here without copying back into `selected_package_snapshot`. The PR #378
+    # pair-CHECK enforces `(selected_package_id IS NULL) = (selected_package_snapshot IS NULL)`,
+    # but the original `selected_package_id` integers are unrecoverable on
+    # downgrade (the proposal_packages rows have been dropped, and their ids
+    # were never preserved). Restoring only the snapshot half would brick the
+    # CHECK for every PR #378-era signed proposal. Operators who need the
+    # historical audit JSON must SELECT it out of `accepted_selection_snapshot`
+    # BEFORE running this downgrade.
+    op.drop_column("proposals", "accepted_selection_snapshot")
     op.create_check_constraint(
         "ck_proposals_selected_package_pair",
         "proposals",
         "(selected_package_id IS NULL) = (selected_package_snapshot IS NULL)",
     )
-
-    # Restore the preserved snapshots on the way down.
-    op.execute(
-        "UPDATE proposals "
-        "SET selected_package_snapshot = accepted_selection_snapshot "
-        "WHERE accepted_selection_snapshot IS NOT NULL"
-    )
-    op.drop_column("proposals", "accepted_selection_snapshot")
 
     op.drop_index("uq_proposals_one_accepted_per_bundle", table_name="proposals")
     op.drop_index("uq_proposals_one_recommended_per_bundle", table_name="proposals")

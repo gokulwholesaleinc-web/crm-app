@@ -3,7 +3,7 @@
 import base64
 import binascii
 import logging
-from typing import Annotated
+from typing import Annotated, NoReturn
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, RedirectResponse, Response
@@ -583,6 +583,38 @@ async def _attach_public_signing_documents(
     ]
 
 
+async def _raise_bundle_or_404(
+    service: ProposalService,
+    token: str,
+    *,
+    verb: str,
+) -> NoReturn:
+    """Resolve `token` as a bundle to give a meaningful error, or 404.
+
+    Called from per-proposal accept/reject endpoints when the token doesn't
+    match a proposal row. If it actually belongs to a bundle, return 409 when
+    the bundle has already been selected, or 400 when the customer hasn't
+    picked an option yet. `verb` is interpolated into the 400 message
+    ("signing" / "rejecting").
+
+    Always raises; never returns.
+    """
+    import hmac as _hmac  # noqa: PLC0415
+
+    bundle = await service.get_public_bundle(token)
+    if bundle and _hmac.compare_digest(bundle.public_token or "", token):
+        if bundle.selected_proposal_id is not None or bundle.status == "accepted":
+            raise HTTPException(
+                status_code=HTTPStatus.CONFLICT,
+                detail="This proposal bundle was already accepted",
+            )
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail=f"Pick a proposal option before {verb}",
+        )
+    raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Proposal not found")
+
+
 def _branding_from_dict(data: dict | None) -> ProposalBranding:
     """Build a ProposalBranding from a TenantBrandingHelper dict.
 
@@ -1135,22 +1167,7 @@ async def accept_proposal_public(
     service = ProposalService(db)
     proposal = await service.get_public_proposal(token)
     if not proposal or not _hmac.compare_digest(proposal.public_token or "", token):
-        # The token may belong to a bundle, not a single proposal. Resolving
-        # it as a bundle yields an actionable error instead of a generic 404
-        # — the chooser flow expects the customer to pick an option before
-        # POSTing accept.
-        bundle = await service.get_public_bundle(token)
-        if bundle and _hmac.compare_digest(bundle.public_token or "", token):
-            if bundle.selected_proposal_id is not None or bundle.status == "accepted":
-                raise HTTPException(
-                    status_code=HTTPStatus.CONFLICT,
-                    detail="This proposal bundle was already accepted",
-                )
-            raise HTTPException(
-                status_code=HTTPStatus.BAD_REQUEST,
-                detail="Pick a proposal option before signing",
-            )
-        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Proposal not found")
+        await _raise_bundle_or_404(service, token, verb="signing")
 
     unviewed_count = await _unviewed_public_document_count(
         db,
@@ -1169,8 +1186,9 @@ async def accept_proposal_public(
     signer_ip = get_client_ip(request)
     signer_user_agent = request.headers.get("user-agent")
     signature_bytes = _decode_signature_image(accept_data.signature_image)
+    rejected_siblings: list = []
     with value_error_as_400():
-        proposal = await service.accept_proposal_public(
+        proposal, rejected_siblings = await service.accept_proposal_public(
             proposal,
             signer_name=accept_data.signer_name,
             signer_email=accept_data.signer_email,
@@ -1190,7 +1208,6 @@ async def accept_proposal_public(
     # notifications matrix + reporting reflect the full picture (not just
     # the winner). Done post-accept so events fire outside the bundle row
     # lock acquired in accept_proposal_public.
-    rejected_siblings = getattr(proposal, "_bundle_rejected_siblings", None) or []
     for sibling in rejected_siblings:
         await emit(PROPOSAL_REJECTED, {
             "entity_id": sibling.id,
@@ -1240,20 +1257,7 @@ async def reject_proposal_public(
     service = ProposalService(db)
     proposal = await service.get_public_proposal(token)
     if not proposal or not _hmac.compare_digest(proposal.public_token or "", token):
-        # See accept_proposal_public above for why a bundle-token hit returns
-        # 400/409 instead of 404.
-        bundle = await service.get_public_bundle(token)
-        if bundle and _hmac.compare_digest(bundle.public_token or "", token):
-            if bundle.selected_proposal_id is not None or bundle.status == "accepted":
-                raise HTTPException(
-                    status_code=HTTPStatus.CONFLICT,
-                    detail="This proposal bundle was already accepted",
-                )
-            raise HTTPException(
-                status_code=HTTPStatus.BAD_REQUEST,
-                detail="Pick a proposal option before rejecting",
-            )
-        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Proposal not found")
+        await _raise_bundle_or_404(service, token, verb="rejecting")
 
     signer_ip = get_client_ip(request)
     signer_user_agent = request.headers.get("user-agent")
