@@ -4,7 +4,7 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import selectinload
 
 from src.contacts.models import Contact
@@ -17,11 +17,21 @@ from src.core.sorting import build_order_clauses
 logger = logging.getLogger(__name__)
 
 
-# `name` sorts by (last_name, first_name) because Contact.full_name is a Python
-# property, not a column — surname-first is the alphabetical convention users
-# expect on a contacts list.
+# `name` sorts by the surname when present, otherwise by the given name —
+# imported contacts often land with the full name in `first_name` and an
+# empty or whitespace-only `last_name`, and a plain `(last_name, first_name)`
+# sort pushed those rows above "A" because whitespace and empty string sort
+# before any letter. trim() collapses padded imports, nullif() coalesces
+# blanks to NULL, and lower() keeps the order case-insensitive so
+# "alexander" doesn't slot after "Schonfeld".
+_CONTACT_NAME_SORT_KEY = func.lower(
+    func.coalesce(
+        func.nullif(func.trim(Contact.last_name), ""),
+        func.trim(Contact.first_name),
+    )
+)
 CONTACT_SORTABLE_FIELDS: dict[str, Any] = {
-    "name": (Contact.last_name, Contact.first_name),
+    "name": (_CONTACT_NAME_SORT_KEY, func.lower(func.trim(Contact.first_name))),
     "email": Contact.email,
     "created_at": Contact.created_at,
 }

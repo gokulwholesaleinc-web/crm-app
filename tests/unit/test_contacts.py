@@ -156,6 +156,71 @@ class TestContactsList:
         data = response.json()
         assert any(c["id"] == test_contact.id for c in data["items"])
 
+    @pytest.mark.asyncio
+    async def test_list_contacts_order_by_name_handles_empty_last_name(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+    ):
+        """`name` asc must coalesce empty last_name onto first_name and be case-insensitive.
+
+        Imported contacts often land with the full display name in `first_name`
+        and an empty `last_name`. A naive `(last_name, first_name)` sort puts
+        those rows above 'A' because '' < any letter — visible to users as a
+        non-alphabetical order on the Name column.
+        """
+        # Surname populated (mixed casing to catch case-sensitivity regressions)
+        # plus surname-less rows whose alphabetical slot must come from first_name.
+        fixtures = [
+            ("First", "Schonfeld", "schonfeld@x.example"),
+            ("First", "alexander", "alexander@x.example"),
+            ("First", "Beukinga", "beukinga@x.example"),
+            ("Cabrera-Solo", "", "cabrera@x.example"),
+            ("Powell-Solo", "", "powell@x.example"),
+            # Trailing-space surnames are common in CSV imports; trim() must
+            # collapse them so the row still falls back to first_name.
+            ("Dawson-Solo", "   ", "dawson@x.example"),
+        ]
+        for fn, ln, em in fixtures:
+            db_session.add(
+                Contact(
+                    first_name=fn,
+                    last_name=ln,
+                    email=em,
+                    status="active",
+                    owner_id=test_user.id,
+                    created_by_id=test_user.id,
+                )
+            )
+        await db_session.commit()
+
+        response = await client.get(
+            "/api/contacts",
+            headers=auth_headers,
+            params={"order_by": "name", "order_dir": "asc", "page_size": 100},
+        )
+        assert response.status_code == 200
+
+        target_emails = {em for _, _, em in fixtures}
+        ordered = [
+            (c["last_name"], c["first_name"])
+            for c in response.json()["items"]
+            if c["email"] in target_emails
+        ]
+        # Expected slots case-insensitively (whitespace-only last_name trims
+        # to empty and falls back to first_name like any blank import):
+        # 'alexander', 'Beukinga', 'Cabrera-Solo', 'Dawson-Solo', 'Powell-Solo', 'Schonfeld'.
+        assert ordered == [
+            ("alexander", "First"),
+            ("Beukinga", "First"),
+            ("", "Cabrera-Solo"),
+            ("   ", "Dawson-Solo"),
+            ("", "Powell-Solo"),
+            ("Schonfeld", "First"),
+        ]
+
 
 class TestContactsCreate:
     """Tests for contact creation endpoint."""

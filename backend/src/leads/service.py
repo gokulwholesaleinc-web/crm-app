@@ -19,16 +19,24 @@ from src.opportunities.models import PipelineStage
 logger = logging.getLogger(__name__)
 
 
-# `name` sorts by (last_name, first_name) — Lead.full_name is a Python property
-# (first/last with company_name fallback), not a column. Surname-first matches
-# the alphabetical convention users expect on a leads list.
+# `name` sorts by whichever of (last_name, first_name, company_name) is the
+# first non-empty value — mirrors Lead.full_name's fallback chain so the
+# visual order matches what users see on the list. Lowercased so mixed-case
+# imports don't shuffle "alexander" past "Schonfeld".
 #
 # `stage` orders by PipelineStage.order (pipeline position), not the stage
 # name, so descending sort puts later stages first. `source` orders by the
 # joined source name; both rely on the outer-joins added in get_list so the
 # clause can reach those columns.
+_LEAD_NAME_SORT_KEY = func.lower(
+    func.coalesce(
+        func.nullif(func.trim(Lead.last_name), ""),
+        func.nullif(func.trim(Lead.first_name), ""),
+        func.trim(Lead.company_name),
+    )
+)
 LEAD_SORTABLE_FIELDS: dict[str, Any] = {
-    "name": (Lead.last_name, Lead.first_name),
+    "name": (_LEAD_NAME_SORT_KEY, func.lower(func.coalesce(func.trim(Lead.first_name), ""))),
     "company": Lead.company_name,
     "status": Lead.status,
     "stage": PipelineStage.order,
