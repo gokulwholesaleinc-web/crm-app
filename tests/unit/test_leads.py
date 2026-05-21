@@ -238,7 +238,7 @@ class TestLeadsListOrdering:
         auth_headers: dict,
         test_user: User,
     ):
-        # `name` sorts by (last_name, first_name) per LEAD_SORTABLE_FIELDS.
+        # `name` sorts by COALESCE(last_name, first_name, company_name) lowercased.
         for last in ("Zenith", "Alvarez", "Marquez"):
             db_session.add(
                 Lead(
@@ -264,6 +264,62 @@ class TestLeadsListOrdering:
             if lead.get("last_name") in {"Zenith", "Alvarez", "Marquez"}
         ]
         assert last_names == ["Alvarez", "Marquez", "Zenith"]
+
+    @pytest.mark.asyncio
+    async def test_list_leads_order_by_name_falls_back_to_first_or_company(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+    ):
+        """Sort key falls back: last_name -> first_name -> company_name.
+
+        Mirrors `Lead.full_name` so list ordering matches what users see.
+        Mixed casing must collate case-insensitively.
+        """
+        fixtures = [
+            # (first, last, company, email) — expected sort slot in parens
+            ("N", "Schonfeld", None, "sch@l.example"),       # 'schonfeld'
+            ("N", "alexander", None, "alx@l.example"),       # 'alexander'
+            ("Beukinga-Solo", None, None, "beu@l.example"),  # 'beukinga-solo'  via first_name
+            (None, None, "Cabrera Corp", "cab@l.example"),   # 'cabrera corp'   via company
+            (None, None, "Powell LLC", "pow@l.example"),     # 'powell llc'     via company
+        ]
+        for fn, ln, co, em in fixtures:
+            db_session.add(
+                Lead(
+                    first_name=fn,
+                    last_name=ln,
+                    company_name=co,
+                    email=em,
+                    status="new",
+                    owner_id=test_user.id,
+                    created_by_id=test_user.id,
+                )
+            )
+        await db_session.commit()
+
+        response = await client.get(
+            "/api/leads",
+            headers=auth_headers,
+            params={"order_by": "name", "order_dir": "asc", "page_size": 100},
+        )
+        assert response.status_code == 200
+
+        target = {em for *_, em in fixtures}
+        emails_in_order = [
+            lead["email"]
+            for lead in response.json()["items"]
+            if lead["email"] in target
+        ]
+        assert emails_in_order == [
+            "alx@l.example",  # alexander
+            "beu@l.example",  # beukinga-solo (from first_name)
+            "cab@l.example",  # cabrera corp (from company)
+            "pow@l.example",  # powell llc (from company)
+            "sch@l.example",  # schonfeld
+        ]
 
     @pytest.mark.asyncio
     async def test_list_leads_order_by_company(
