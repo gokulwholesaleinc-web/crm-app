@@ -99,7 +99,11 @@ function isConditionComplete(condition: ConditionRow, fieldOptions: readonly Fie
   if (!getAllowedOperators(fieldDef).some((operator) => operator.value === condition.op)) return false;
   if (NO_VALUE_OPS.includes(condition.op)) return true;
   if (condition.value.trim() === '') return false;
-  if (condition.op === 'between') return condition.valueTo.trim() !== '';
+  if (fieldDef.type === 'number' && !Number.isFinite(Number(condition.value))) return false;
+  if (condition.op === 'between') {
+    if (condition.valueTo.trim() === '') return false;
+    if (fieldDef.type === 'number' && !Number.isFinite(Number(condition.valueTo))) return false;
+  }
   return true;
 }
 

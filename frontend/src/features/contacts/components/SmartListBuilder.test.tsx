@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderWithProviders, screen } from '../../../test-utils/renderWithProviders';
 import userEvent from '@testing-library/user-event';
+import { fireEvent } from '@testing-library/react';
 import { SmartListBuilder } from './SmartListBuilder';
 
 const createSavedFilterMutateAsync = vi.fn();
@@ -93,5 +94,21 @@ describe('SmartListBuilder', () => {
       operator: 'and',
       conditions: [{ field: 'annual_revenue', op: 'gt', value: 500000 }],
     });
+  });
+
+  it('blocks Apply when a numeric field has a non-numeric value (paste/injection)', async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(
+      <SmartListBuilder entityType="companies" onApplyFilters={vi.fn()} onClose={vi.fn()} />,
+    );
+
+    await user.selectOptions(screen.getByLabelText('Field'), 'annual_revenue');
+    await user.selectOptions(screen.getByLabelText('Operator'), 'gt');
+    // Bypass <input type="number"> keyboard gating to simulate paste / programmatic injection.
+    fireEvent.change(screen.getByLabelText('Value'), { target: { value: 'abc' } });
+
+    expect(screen.getByRole('button', { name: 'Apply Filters' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Save as Smart List' })).toBeDisabled();
   });
 });

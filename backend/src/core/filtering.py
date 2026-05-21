@@ -66,6 +66,22 @@ def apply_filter_condition(model: type, field_name: str, op: str, value: Any):
         raise ValueError(f"Unknown operator: {op}")
 
 
+def _looks_like_legacy_filter_mapping(filter_def: dict[str, Any]) -> bool:
+    """Detect the legacy {field: {op/operator, value}} shape via positive check.
+
+    Returns True only when every value is a dict carrying an 'op' or 'operator'.
+    A malformed new-style group missing 'conditions' fails this check and falls
+    through to a clearer error rather than being parsed as a sea of "Unknown
+    field" failures.
+    """
+    if not filter_def:
+        return False
+    return all(
+        isinstance(v, dict) and ("op" in v or "operator" in v)
+        for v in filter_def.values()
+    )
+
+
 def _parse_legacy_filter_mapping(model: type, filter_def: dict[str, Any]):
     """Parse older saved-filter JSON keyed by field name.
 
@@ -112,8 +128,13 @@ def parse_filter_group(model: type, filter_def: dict[str, Any]):
             filter_def.get("value"),
         )
 
-    if "conditions" not in filter_def and "operator" not in filter_def:
+    if _looks_like_legacy_filter_mapping(filter_def):
         return _parse_legacy_filter_mapping(model, filter_def)
+
+    if "conditions" not in filter_def:
+        raise ValueError(
+            "Filter group must include a 'conditions' list (with optional 'operator' of 'and'/'or')"
+        )
 
     operator = filter_def.get("operator", "and")
     if operator not in ("and", "or"):

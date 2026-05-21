@@ -169,6 +169,19 @@ class TestParseFilterGroup:
         assert "AND" in sql
         assert "OR" in sql
 
+    def test_legacy_field_keyed_mapping_still_parses(self):
+        """Backward compat: legacy {field: {op/operator, value}} shape still parses."""
+        expr = parse_filter_group(Contact, {
+            "status": {"op": "eq", "value": "active"},
+            "first_name": {"operator": "contains", "value": "john"},
+        })
+        assert _is_clause(expr)
+
+    def test_malformed_new_style_group_raises_clear_error(self):
+        """Missing 'conditions' in a new-style group no longer falls through to legacy parsing."""
+        with pytest.raises(ValueError, match="conditions"):
+            parse_filter_group(Contact, {"operator": "and"})
+
 
 # ---------------------------------------------------------------------------
 # TestApplyFiltersToQuery — identity and DB integration

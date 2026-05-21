@@ -474,6 +474,43 @@ class TestFilterUpdate:
 
         assert response.status_code == 404
 
+    @pytest.mark.asyncio
+    async def test_update_filter_rejects_entity_change_with_incompatible_filters(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+    ):
+        """Changing entity_type must validate against existing filters and roll back on mismatch."""
+        create_response = await client.post(
+            "/api/filters",
+            headers=auth_headers,
+            json={
+                "name": "Contacts Only",
+                "entity_type": "contacts",
+                "filters": {
+                    "operator": "and",
+                    "conditions": [{"field": "email", "op": "eq", "value": "x@y.com"}],
+                },
+            },
+        )
+        filter_id = create_response.json()["id"]
+
+        # Activities has no `email` column — entity_type swap must 400 and not persist.
+        response = await client.patch(
+            f"/api/filters/{filter_id}",
+            headers=auth_headers,
+            json={"entity_type": "activities"},
+        )
+        assert response.status_code == 400
+
+        get_response = await client.get(
+            f"/api/filters/{filter_id}",
+            headers=auth_headers,
+        )
+        assert get_response.status_code == 200
+        assert get_response.json()["entity_type"] == "contacts"
+
 
 class TestFilterDelete:
     """Tests for deleting saved filters."""

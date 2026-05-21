@@ -295,16 +295,17 @@ async def update_saved_filter(
     if not saved_filter:
         raise_not_found("Saved filter", filter_id)
 
-    if data.entity_type is not None:
-        saved_filter.entity_type = data.entity_type
     if data.filters is not None or data.entity_type is not None:
+        target_entity_type = data.entity_type if data.entity_type is not None else saved_filter.entity_type
         target_filters = data.filters if data.filters is not None else (
             json.loads(saved_filter.filters)
             if isinstance(saved_filter.filters, str)
             else saved_filter.filters
         )
-        _validate_filter_definition(saved_filter.entity_type, target_filters)
+        _validate_filter_definition(target_entity_type, target_filters)
 
+    if data.entity_type is not None:
+        saved_filter.entity_type = data.entity_type
     if data.name is not None:
         saved_filter.name = data.name
     if data.filters is not None:
