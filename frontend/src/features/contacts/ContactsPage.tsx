@@ -24,9 +24,10 @@ import { formatDate, formatPhoneNumber } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { showSuccess, showError } from '../../utils/toast';
+import { useAuthStore } from '../../store/authStore';
 import type { Contact } from '../../types';
 import type { DuplicateMatch } from '../../api/dedup';
-import type { FilterGroup } from '../../api/filters';
+import type { FilterGroup, SavedFilter } from '../../api/filters';
 
 function ContactsPage() {
   usePageTitle('Contacts');
@@ -49,6 +50,7 @@ function ContactsPage() {
   // Fetch saved smart lists
   const { data: savedFilters } = useSavedFilters('contacts');
   const deleteFilterMutation = useDeleteSavedFilter();
+  const currentUserId = useAuthStore((state) => state.user?.id);
 
   // Handle URL query parameters for auto-opening form (e.g., from company detail page)
   useEffect(() => {
@@ -182,7 +184,7 @@ function ContactsPage() {
     setShowSmartListBuilder(false);
   };
 
-  const handleSelectSavedFilter = (filter: { name: string; filters: FilterGroup }) => {
+  const handleSelectSavedFilter = (filter: Pick<SavedFilter, 'name' | 'filters'>) => {
     setActiveFilters(filter.filters);
     setActiveSmartListName(filter.name);
     setCurrentPage(1);
@@ -249,7 +251,7 @@ function ContactsPage() {
                     <span className="ml-1 text-xs text-gray-400">(shared)</span>
                   )}
                 </button>
-                {filter.user_id && (
+                {currentUserId === filter.user_id && (
                   <button
                     onClick={async () => {
                       try {

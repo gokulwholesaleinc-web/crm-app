@@ -64,7 +64,7 @@ export const getSavedFilter = async (id: number): Promise<SavedFilter> => {
 };
 
 export const updateSavedFilter = async (id: number, filter: Partial<SavedFilterCreate>): Promise<SavedFilter> => {
-  const { data } = await apiClient.put(`/api/filters/${id}`, filter);
+  const { data } = await apiClient.patch(`/api/filters/${id}`, filter);
   return data;
 };
 

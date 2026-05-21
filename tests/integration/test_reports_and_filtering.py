@@ -10,10 +10,13 @@ Tests cover:
 """
 
 import json
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import select
+from src.contacts.models import Contact
 from src.core.filtering import apply_filter_condition, apply_filters_to_query, parse_filter_group
+from src.core.models import EntityShare
 from src.filters.models import SavedFilter
 from src.leads.models import Lead
 from src.reports.models import SavedReport
@@ -701,6 +704,19 @@ class TestAdvancedFilterOnListEndpoints:
         assert response.status_code == 200
         assert response.json()["total"] >= 1
 
+    async def test_contacts_invalid_filter_field_returns_400(self, client, auth_headers):
+        """Test GET /api/contacts returns 400 for invalid smart-list fields."""
+        filters = json.dumps({
+            "operator": "and",
+            "conditions": [{"field": "missing_field", "op": "eq", "value": "x"}],
+        })
+        response = await client.get(
+            "/api/contacts",
+            headers=auth_headers,
+            params={"filters": filters},
+        )
+        assert response.status_code == 400
+
 
 # ============================================================
 # Aggregate endpoint tests
@@ -802,6 +818,166 @@ class TestAggregateEndpoint:
             },
         )
         assert response.status_code == 400
+
+    async def test_aggregate_invalid_filter_field_returns_400(self, client, auth_headers):
+        """Test aggregate with an invalid filter field returns 400."""
+        response = await client.post(
+            "/api/filters/aggregate",
+            headers=auth_headers,
+            json={
+                "entity_type": "contacts",
+                "filters": {
+                    "operator": "and",
+                    "conditions": [{"field": "missing_field", "op": "eq", "value": "x"}],
+                },
+                "metrics": ["count"],
+            },
+        )
+        assert response.status_code == 400
+
+    async def test_aggregate_invalid_filter_operator_returns_400(self, client, auth_headers):
+        """Test aggregate with an invalid filter operator returns 400."""
+        response = await client.post(
+            "/api/filters/aggregate",
+            headers=auth_headers,
+            json={
+                "entity_type": "contacts",
+                "filters": {
+                    "operator": "and",
+                    "conditions": [{"field": "status", "op": "bogus", "value": "active"}],
+                },
+                "metrics": ["count"],
+            },
+        )
+        assert response.status_code == 400
+
+    async def test_aggregate_invalid_metric_field_returns_400(self, client, auth_headers):
+        """Test aggregate with an invalid metric field returns 400."""
+        response = await client.post(
+            "/api/filters/aggregate",
+            headers=auth_headers,
+            json={
+                "entity_type": "contacts",
+                "filters": {"operator": "and", "conditions": []},
+                "metrics": ["sum:missing_field"],
+            },
+        )
+        assert response.status_code == 400
+
+    async def test_aggregate_contact_scope_includes_shared_contacts(
+        self,
+        client,
+        db_session,
+        auth_headers,
+        test_user,
+        _sales_rep_user,
+    ):
+        """Test aggregate visibility matches contacts list: owned plus shared records."""
+        owned = Contact(
+            first_name="Scope",
+            last_name="Owned",
+            email="scope-owned@example.com",
+            status="active",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        shared = Contact(
+            first_name="Scope",
+            last_name="Shared",
+            email="scope-shared@example.com",
+            status="active",
+            owner_id=_sales_rep_user.id,
+            created_by_id=_sales_rep_user.id,
+        )
+        private = Contact(
+            first_name="Scope",
+            last_name="Private",
+            email="scope-private@example.com",
+            status="active",
+            owner_id=_sales_rep_user.id,
+            created_by_id=_sales_rep_user.id,
+        )
+        db_session.add_all([owned, shared, private])
+        await db_session.flush()
+        db_session.add(
+            EntityShare(
+                entity_type="contacts",
+                entity_id=shared.id,
+                shared_with_user_id=test_user.id,
+                shared_by_user_id=_sales_rep_user.id,
+                permission_level="view",
+            )
+        )
+        await db_session.commit()
+
+        response = await client.post(
+            "/api/filters/aggregate",
+            headers=auth_headers,
+            json={
+                "entity_type": "contacts",
+                "filters": {
+                    "operator": "and",
+                    "conditions": [{"field": "first_name", "op": "eq", "value": "Scope"}],
+                },
+                "metrics": ["count"],
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["count"] == 2
+        sample_ids = {item["id"] for item in data["sample_entities"]}
+        assert owned.id in sample_ids
+        assert shared.id in sample_ids
+        assert private.id not in sample_ids
+
+    async def test_aggregate_contacts_excludes_archived_contacts(
+        self,
+        client,
+        db_session,
+        auth_headers,
+        test_user,
+    ):
+        """Test contacts aggregate preview matches list visibility for archived rows."""
+        active = Contact(
+            first_name="ArchiveScope",
+            last_name="Active",
+            email="archive-scope-active@example.com",
+            status="active",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        archived = Contact(
+            first_name="ArchiveScope",
+            last_name="Archived",
+            email="archive-scope-archived@example.com",
+            status="archived",
+            deleted_at=datetime.now(UTC),
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add_all([active, archived])
+        await db_session.commit()
+
+        response = await client.post(
+            "/api/filters/aggregate",
+            headers=auth_headers,
+            json={
+                "entity_type": "contacts",
+                "filters": {
+                    "operator": "and",
+                    "conditions": [{"field": "first_name", "op": "eq", "value": "ArchiveScope"}],
+                },
+                "metrics": ["count"],
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["count"] == 1
+        sample_ids = {item["id"] for item in data["sample_entities"]}
+        assert active.id in sample_ids
+        assert archived.id not in sample_ids
 
     async def test_aggregate_unauthenticated(self, client):
         """Test aggregate endpoint requires authentication."""

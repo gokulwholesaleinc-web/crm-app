@@ -112,6 +112,49 @@ class TestFilterCreate:
 
         assert response.status_code == 401
 
+    @pytest.mark.asyncio
+    async def test_create_filter_rejects_unknown_entity_type(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+    ):
+        """Test creating a saved filter rejects unknown entity types."""
+        response = await client.post(
+            "/api/filters",
+            headers=auth_headers,
+            json={
+                "name": "Broken Entity Filter",
+                "entity_type": "spaceships",
+                "filters": {"operator": "and", "conditions": []},
+            },
+        )
+
+        assert response.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_create_filter_rejects_unknown_filter_field(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+    ):
+        """Test creating a saved filter validates fields against the entity."""
+        response = await client.post(
+            "/api/filters",
+            headers=auth_headers,
+            json={
+                "name": "Broken Field Filter",
+                "entity_type": "contacts",
+                "filters": {
+                    "operator": "and",
+                    "conditions": [{"field": "missing_field", "op": "eq", "value": "x"}],
+                },
+            },
+        )
+
+        assert response.status_code == 400
+
 
 class TestFilterList:
     """Tests for listing saved filters."""
@@ -355,6 +398,65 @@ class TestFilterUpdate:
 
         assert response.status_code == 200
         assert response.json()["is_default"] is True
+
+    @pytest.mark.asyncio
+    async def test_update_filter_rejects_unknown_entity_type(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+    ):
+        """Test updating a saved filter rejects unknown entity types."""
+        create_response = await client.post(
+            "/api/filters",
+            headers=auth_headers,
+            json={
+                "name": "To Update Entity",
+                "entity_type": "contacts",
+                "filters": {"operator": "and", "conditions": []},
+            },
+        )
+        filter_id = create_response.json()["id"]
+
+        response = await client.patch(
+            f"/api/filters/{filter_id}",
+            headers=auth_headers,
+            json={"entity_type": "spaceships"},
+        )
+
+        assert response.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_update_filter_rejects_unknown_filter_field(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+    ):
+        """Test updating a saved filter validates fields against the entity."""
+        create_response = await client.post(
+            "/api/filters",
+            headers=auth_headers,
+            json={
+                "name": "To Update Field",
+                "entity_type": "contacts",
+                "filters": {"operator": "and", "conditions": []},
+            },
+        )
+        filter_id = create_response.json()["id"]
+
+        response = await client.patch(
+            f"/api/filters/{filter_id}",
+            headers=auth_headers,
+            json={
+                "filters": {
+                    "operator": "and",
+                    "conditions": [{"field": "missing_field", "op": "eq", "value": "x"}],
+                },
+            },
+        )
+
+        assert response.status_code == 400
 
     @pytest.mark.asyncio
     async def test_update_filter_not_found(

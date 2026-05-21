@@ -66,6 +66,30 @@ def apply_filter_condition(model: type, field_name: str, op: str, value: Any):
         raise ValueError(f"Unknown operator: {op}")
 
 
+def _parse_legacy_filter_mapping(model: type, filter_def: dict[str, Any]):
+    """Parse older saved-filter JSON keyed by field name.
+
+    Early saved filters were stored as:
+    {"status": {"operator": "eq", "value": "active"}}
+
+    The smart-list builder now emits explicit condition groups, but accepting
+    this shape keeps existing saved lists functional when selected on list
+    pages.
+    """
+    parsed = []
+    for field_name, spec in filter_def.items():
+        if not isinstance(spec, dict):
+            raise ValueError(f"Legacy filter for field '{field_name}' must be an object")
+        op = spec.get("op") or spec.get("operator")
+        if not op:
+            raise ValueError(f"Legacy filter for field '{field_name}' requires an operator")
+        parsed.append(apply_filter_condition(model, field_name, op, spec.get("value")))
+
+    if not parsed:
+        return None
+    return and_(*parsed)
+
+
 def parse_filter_group(model: type, filter_def: dict[str, Any]):
     """Parse a filter group (AND/OR) recursively into SQLAlchemy conditions.
 
@@ -75,7 +99,12 @@ def parse_filter_group(model: type, filter_def: dict[str, Any]):
             - {"field": ..., "op": ..., "value": ...} for a single condition
             - {"operator": "and"/"or", "conditions": [...]} for a group
     """
+    if not isinstance(filter_def, dict):
+        raise ValueError("Filter definition must be an object")
+
     if "field" in filter_def:
+        if "op" not in filter_def:
+            raise ValueError("Filter condition requires an operator")
         return apply_filter_condition(
             model,
             filter_def["field"],
@@ -83,8 +112,16 @@ def parse_filter_group(model: type, filter_def: dict[str, Any]):
             filter_def.get("value"),
         )
 
+    if "conditions" not in filter_def and "operator" not in filter_def:
+        return _parse_legacy_filter_mapping(model, filter_def)
+
     operator = filter_def.get("operator", "and")
+    if operator not in ("and", "or"):
+        raise ValueError(f"Unknown filter group operator: {operator}")
+
     conditions = filter_def.get("conditions", [])
+    if not isinstance(conditions, list):
+        raise ValueError("Filter group conditions must be a list")
 
     if not conditions:
         return None

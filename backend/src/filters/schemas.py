@@ -16,6 +16,7 @@ class SavedFilterCreate(BaseModel):
 
 class SavedFilterUpdate(BaseModel):
     name: str | None = None
+    entity_type: str | None = None
     filters: dict[str, Any] | None = None
     is_default: bool | None = None
     is_public: bool | None = None
