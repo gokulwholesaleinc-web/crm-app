@@ -1092,14 +1092,18 @@ export function ProposalPackagesCard({ proposal, isDraft }: ProposalPackagesCard
 
   const removePackage = async (pkg: ProposalPackage) => {
     if (!isDraft) return;
+    // Soft-delete: the row stays so the audit trail can reference it; the
+    // staff Reactivate button can bring it back. Toast wording matches the
+    // actual semantic so users aren't surprised when the row reappears as
+    // inactive.
     try {
       await deletePackage.mutateAsync({
         proposalId: proposal.id,
         packageId: pkg.id,
       });
-      showSuccess('Package removed');
+      showSuccess('Package deactivated');
     } catch (err) {
-      showError(extractApiErrorDetail(err) ?? 'Failed to remove package');
+      showError(extractApiErrorDetail(err) ?? 'Failed to deactivate package');
     }
   };
 

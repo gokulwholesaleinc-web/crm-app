@@ -61,7 +61,6 @@ from src.notifications.models import Notification  # noqa: F401
 from src.opportunities.models import Opportunity, PipelineStage  # noqa: F401
 from src.payments.models import Payment, Price, Product, StripeCustomer, Subscription  # noqa: F401
 from src.proposals.models import Proposal, ProposalPackage, ProposalPackageItem
-from src.proposals.service import ProposalService
 from src.quotes.models import (  # noqa: F401
     ProductBundle,
     ProductBundleItem,
@@ -350,14 +349,11 @@ class TestProposalPackages:
         client: AsyncClient,
         db_session: AsyncSession,
         test_user: User,
-        monkeypatch: pytest.MonkeyPatch,
     ):
-        async def no_op(*args, **kwargs):
-            return None
-
-        monkeypatch.setattr(ProposalService, "_maybe_stamp_signing_documents", no_op)
-        monkeypatch.setattr(ProposalService, "send_signed_copy_to_client", no_op)
-
+        # No mocks — accept runs the real fail-soft stamp + send_signed_copy
+        # paths. R2 is unconfigured in tests so the stamp path captures the
+        # error onto signed_pdf_error (no exception leaks), and the email
+        # send is itself fail-soft (logged-warning when no owner Gmail/SMTP).
         proposal = await _make_proposal(db_session, test_user, status="sent")
         package = await _add_package(db_session, proposal, is_recommended=True)
         signature = "data:image/png;base64," + base64.b64encode(_ONE_PIXEL_PNG).decode()
@@ -406,6 +402,93 @@ class TestProposalPackages:
             )
         ).scalar_one_or_none()
         assert activity is not None
+
+    async def test_patch_package_updates_fields_and_recomputes_total(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        test_user: User,
+        auth_headers: dict,
+    ):
+        proposal = await _make_proposal(db_session, test_user)
+        package = await _add_package(db_session, proposal)
+
+        resp = await client.patch(
+            f"/api/proposals/{proposal.id}/packages/{package.id}",
+            json={
+                "name": "Renamed Package",
+                "is_recommended": True,
+                "items": [
+                    {
+                        "description": "Updated line",
+                        "quantity": "3.00",
+                        "unit_price": "200.00",
+                        "discount_amount": "0.00",
+                        "sort_order": 1,
+                    }
+                ],
+            },
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["name"] == "Renamed Package"
+        assert data["is_recommended"] is True
+        # Server recomputes; client-supplied subtotal/total are ignored.
+        assert data["total"] == "600.00"
+        assert data["items"][0]["description"] == "Updated line"
+
+    async def test_delete_package_deactivates_then_allows_new_recommended(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        test_user: User,
+        auth_headers: dict,
+    ):
+        """Regression: deleting a recommended package must not brick the
+        recommendation slot for the proposal. Deactivating a recommended
+        row drops it out of the partial unique index AND out of the
+        application-layer recommendation guard so a new recommended
+        package can be created."""
+        proposal = await _make_proposal(db_session, test_user)
+        original = await _add_package(db_session, proposal, is_recommended=True)
+
+        # Delete is a soft-delete: row stays, is_active flips to False.
+        delete_resp = await client.delete(
+            f"/api/proposals/{proposal.id}/packages/{original.id}",
+            headers=auth_headers,
+        )
+        assert delete_resp.status_code == 200
+        assert delete_resp.json()["is_active"] is False
+
+        # New recommended package must be allowed — the deactivated row
+        # no longer competes for the "one recommended" slot.
+        create_resp = await client.post(
+            f"/api/proposals/{proposal.id}/packages",
+            json=_package_payload(name="Replacement Recommended", is_recommended=True),
+            headers=auth_headers,
+        )
+        assert create_resp.status_code == 201, create_resp.text
+        assert create_resp.json()["is_recommended"] is True
+
+    async def test_patch_package_blocks_second_active_recommended(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        test_user: User,
+        auth_headers: dict,
+    ):
+        """The guard still kicks in for two ACTIVE recommended packages."""
+        proposal = await _make_proposal(db_session, test_user)
+        await _add_package(db_session, proposal, is_recommended=True)
+        runner_up = await _add_package(db_session, proposal, name="Runner Up")
+
+        resp = await client.patch(
+            f"/api/proposals/{proposal.id}/packages/{runner_up.id}",
+            json={"is_recommended": True},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 400
 
     async def test_legacy_billing_fields_remain_rejected_on_create_and_update(
         self,

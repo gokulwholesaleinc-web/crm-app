@@ -32,6 +32,50 @@ const publicClient = axios.create({
   timeout: 30000,
 });
 
+// Translate a raw axios error from the public client into a customer-
+// readable message. Status-branched so a transient 502 reads as
+// "try again" rather than the same generic "contact your account
+// manager" we surface when the server explicitly rejects. Uses duck
+// typing instead of `axios.isAxiosError` so the helper works under
+// Vitest module mocks that omit the static method.
+function publicErrorMessage(err: unknown, fallback: string): string {
+  if (err && typeof err === 'object') {
+    const e = err as {
+      response?: { status?: number; data?: { detail?: unknown } };
+      code?: string;
+      isAxiosError?: boolean;
+    };
+    const detail = e.response?.data?.detail;
+    if (typeof detail === 'string' && detail.trim()) return detail.trim();
+    // FastAPI 422 returns detail as an array of {loc, msg, type}. Surface
+    // the messages so the signer sees the actual validation failure
+    // ("signer_email: field required") instead of a generic fallback.
+    if (Array.isArray(detail) && detail.length > 0) {
+      const msgs = detail
+        .map((d) => (d && typeof d === 'object' && 'msg' in d ? (d as { msg?: unknown }).msg : null))
+        .filter((m): m is string => typeof m === 'string' && m.trim() !== '');
+      if (msgs.length > 0) return msgs.join('; ');
+    }
+    // Timeouts arrive with `code === 'ECONNABORTED'` and no response.
+    if (e.code === 'ECONNABORTED') {
+      return 'The request timed out. Please check your connection and try again.';
+    }
+    if ('response' in e || e.isAxiosError) {
+      const status = e.response?.status;
+      if (!status) {
+        return 'Network error — please check your connection and try again.';
+      }
+      if (status >= 500) {
+        return 'Our server hit a temporary error. Please try again in a moment.';
+      }
+    }
+  }
+  // Surface unexpected client-side errors at least to the console so the
+  // signer's browser devtools have a breadcrumb when reporting to support.
+  console.error('public proposal action failed', err);
+  return fallback;
+}
+
 interface ProposalBranding {
   company_name: string | null;
   logo_url: string | null;
@@ -255,10 +299,9 @@ function PublicProposalView() {
         setSignError(null);
         return null;
       } catch (err) {
-        return (
-          (typeof err === 'object' && err !== null && 'response' in err
-            ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-            : null) || 'Unable to record acceptance. Please contact your account manager.'
+        return publicErrorMessage(
+          err,
+          'Unable to record acceptance. Please contact your account manager.',
         );
       }
     },
@@ -283,10 +326,10 @@ function PublicProposalView() {
       setProposal((prev) => prev ? { ...prev, status: 'rejected' } : null);
       setActionDone('rejected');
     } catch (err) {
-      const detail =
-        (typeof err === 'object' && err !== null && 'response' in err
-          ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-          : null) || 'Unable to record rejection. Please contact your account manager.';
+      const detail = publicErrorMessage(
+        err,
+        'Unable to record rejection. Please contact your account manager.',
+      );
       setSignError(detail);
     } finally {
       setActionPending(false);

@@ -49,9 +49,13 @@ class _ProposalJSON(TypeDecorator):
     cache_ok = True
 
     def load_dialect_impl(self, dialect):
+        # ``none_as_null=True`` so a Python ``None`` writes as SQL NULL
+        # rather than the JSON string ``"null"``. Required for the
+        # ``ck_proposals_selected_package_pair`` CHECK constraint which
+        # compares NULL-ness of selected_package_id and selected_package_snapshot.
         if dialect.name == "postgresql":
-            return dialect.type_descriptor(JSONB())
-        return dialect.type_descriptor(JSON())
+            return dialect.type_descriptor(JSONB(none_as_null=True))
+        return dialect.type_descriptor(JSON(none_as_null=True))
 
 
 from src.core.mixins.auditable import AuditableMixin
@@ -235,7 +239,16 @@ class Proposal(Base, AuditableMixin):
     currency: Mapped[str] = mapped_column(String(3), default="USD", nullable=False)
     selected_package_id: Mapped[int | None] = mapped_column(
         Integer,
-        ForeignKey("proposal_packages.id", ondelete="SET NULL"),
+        # ``use_alter=True`` breaks the create/drop cycle between
+        # proposals.selected_package_id -> proposal_packages.id and
+        # proposal_packages.proposal_id -> proposals.id by emitting this FK
+        # as a post-CREATE ALTER. Required for tests' Base.metadata.drop_all.
+        ForeignKey(
+            "proposal_packages.id",
+            ondelete="SET NULL",
+            use_alter=True,
+            name="fk_proposals_selected_package_id",
+        ),
         index=True,
     )
     selected_package_snapshot: Mapped[dict | None] = mapped_column(_ProposalJSON)
@@ -366,6 +379,16 @@ class Proposal(Base, AuditableMixin):
         lazy="joined",
     )
 
+    __table_args__ = (
+        # Selection-vs-snapshot symmetry: both columns set or both NULL.
+        # Mirrored in migration 046_proposal_packages as
+        # `ck_proposals_selected_package_pair`.
+        CheckConstraint(
+            "(selected_package_id IS NULL) = (selected_package_snapshot IS NULL)",
+            name="ck_proposals_selected_package_pair",
+        ),
+    )
+
 
 class ProposalPackage(Base, AuditableMixin):
     """Selectable customer-facing package option on a proposal."""
@@ -438,8 +461,10 @@ class ProposalPackage(Base, AuditableMixin):
             "uq_proposal_packages_one_recommended",
             "proposal_id",
             unique=True,
-            postgresql_where=(is_recommended == True),  # noqa: E712
-            sqlite_where=(is_recommended == True),  # noqa: E712
+            # Only ACTIVE recommended packages compete for the slot; a
+            # deactivated recommended row must not block creating a new one.
+            postgresql_where=((is_recommended == True) & (is_active == True)),  # noqa: E712
+            sqlite_where=((is_recommended == True) & (is_active == True)),  # noqa: E712
         ),
     )
 

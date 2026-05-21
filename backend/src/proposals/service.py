@@ -16,7 +16,7 @@ import httpx
 from botocore.exceptions import ClientError
 from pypdf.errors import PdfReadError
 from sqlalchemy import func, or_, select, update
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import selectinload
 
 from src.activities.models import Activity
@@ -471,9 +471,13 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
     ) -> None:
         if not is_recommended:
             return
+        # Only active rows compete for the "one recommended" slot — a
+        # deactivated/soft-deleted recommended package must not permanently
+        # brick the recommendation feature for the proposal.
         query = (
             select(func.count(ProposalPackage.id))
             .where(ProposalPackage.proposal_id == proposal_id)
+            .where(ProposalPackage.is_active == True)  # noqa: E712
             .where(ProposalPackage.is_recommended == True)  # noqa: E712
         )
         if package_id is not None:
@@ -517,6 +521,27 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         )
         return result.scalar_one_or_none()
 
+    async def _lock_selected_package(
+        self,
+        proposal_id: int,
+        package_id: int,
+    ) -> ProposalPackage | None:
+        """Re-fetch + row-lock the selected package for the duration of accept.
+
+        Acquires `SELECT ... FOR UPDATE` (Postgres) so a concurrent staff
+        `update_package`/`delete_package` blocks until accept commits.
+        SQLite ignores the lock keyword — fine for tests, no concurrent
+        writers in that runtime.
+        """
+        result = await self.db.execute(
+            select(ProposalPackage)
+            .options(selectinload(ProposalPackage.items))
+            .where(ProposalPackage.proposal_id == proposal_id)
+            .where(ProposalPackage.id == package_id)
+            .with_for_update(of=ProposalPackage)
+        )
+        return result.scalar_one_or_none()
+
     async def get_active_packages_for_public(self, proposal_id: int) -> list[ProposalPackage]:
         result = await self.db.execute(
             select(ProposalPackage)
@@ -549,6 +574,12 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
             )
             for item in data.items
         ]
+        # _normalize_package_payload computes subtotal/discount/tax/total
+        # on the in-memory ORM object so the flush persists them. The
+        # outer _validate_proposal_packages call re-fetches all active
+        # packages as new ORM instances (so its normalize pass cannot
+        # mutate this one) — its real job is the cross-package currency
+        # and "one recommended" assertions.
         self._normalize_package_payload(package)
         await self._assert_recommended_available(
             proposal.id,
@@ -577,6 +608,8 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 for item in data.items
             ]
         package.updated_by_id = user_id
+        # See create_package: in-memory normalize is required so the flush
+        # persists recomputed totals on this specific ORM instance.
         self._normalize_package_payload(package)
         await self._assert_recommended_available(
             proposal.id,
@@ -597,7 +630,6 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         self._assert_packages_mutable(proposal)
         package.is_active = False
         package.updated_by_id = user_id
-        self._normalize_package_payload(package)
         await self.db.flush()
         await self._validate_proposal_packages(proposal.id)
         await self.db.refresh(package)
@@ -1049,11 +1081,18 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         if active_packages:
             if selected_package_id is None:
                 raise ValueError("Select a proposal package before signing")
-            selected_package = next(
-                (package for package in active_packages if package.id == selected_package_id),
-                None,
+            if not any(p.id == selected_package_id for p in active_packages):
+                raise ValueError("Selected package is not available for this proposal")
+            # Re-fetch + row-lock the chosen package so its items/totals can't
+            # drift under us between this read and the accept UPDATE. The
+            # lock blocks any concurrent staff update_package / delete_package
+            # until this transaction commits, and surfaces a deactivation
+            # that landed between our list query and now as the same
+            # "no longer available" error the signer sees today.
+            selected_package = await self._lock_selected_package(
+                proposal.id, selected_package_id,
             )
-            if selected_package is None:
+            if selected_package is None or not selected_package.is_active:
                 raise ValueError("Selected package is not available for this proposal")
             selected_package_snapshot = self.build_selected_package_snapshot(
                 selected_package,
@@ -1149,27 +1188,42 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         *,
         created_at: datetime,
     ) -> None:
+        summary = _package_snapshot_summary(snapshot)
+        if not summary:
+            return
+        # Wrap the activity insert in a SAVEPOINT: if it fails (constraint
+        # violation, schema drift, oversize subject), we roll back JUST this
+        # nested transaction and leave the outer accept-flow session in a
+        # healthy state — a corrupted session would otherwise fail the next
+        # commit and surface as a 500 even though the signature was already
+        # captured. owner_id may be NULL on legacy proposals; fall back to
+        # the proposal's creator so the activity row has a real actor.
+        actor_id = proposal.owner_id or proposal.created_by_id
         try:
-            summary = _package_snapshot_summary(snapshot)
-            if not summary:
-                return
-            activity = Activity(
-                activity_type="note",
-                subject=f"Package selected: {summary}",
-                description="Selected during public proposal acceptance.",
-                entity_type="proposals",
-                entity_id=proposal.id,
-                is_completed=True,
-                completed_at=created_at,
-                owner_id=proposal.owner_id,
-                created_by_id=proposal.owner_id,
-            )
-            self.db.add(activity)
-            await self.db.flush()
-        except Exception:
+            async with self.db.begin_nested():
+                activity = Activity(
+                    activity_type="note",
+                    subject=f"Package selected: {summary}",
+                    description="Selected during public proposal acceptance.",
+                    entity_type="proposals",
+                    entity_id=proposal.id,
+                    is_completed=True,
+                    completed_at=created_at,
+                    owner_id=actor_id,
+                    created_by_id=actor_id,
+                )
+                self.db.add(activity)
+        except (SQLAlchemyError, TypeError, AttributeError):
+            # SQLAlchemyError covers constraint violations + schema drift;
+            # TypeError/AttributeError catch snapshot dicts mutated into an
+            # unexpected shape (e.g. summary tripping a non-string concat).
+            # The signature is already captured — silently logging is
+            # preferable to 500ing the accept after a successful sign.
             logger.exception(
-                "Failed to record package selection activity for proposal %s",
+                "Failed to record package selection activity for proposal %s "
+                "(snapshot summary=%r)",
                 proposal.id,
+                summary,
             )
 
     async def _maybe_stamp_signing_documents(

@@ -80,8 +80,10 @@ def upgrade() -> None:
         "proposal_packages",
         ["proposal_id"],
         unique=True,
-        postgresql_where=sa.text("is_recommended = true"),
-        sqlite_where=sa.text("is_recommended = 1"),
+        # Only ACTIVE recommended packages compete for the slot; a
+        # deactivated recommended row must not block creating a new one.
+        postgresql_where=sa.text("is_recommended = true AND is_active = true"),
+        sqlite_where=sa.text("is_recommended = 1 AND is_active = 1"),
     )
 
     op.create_table(
@@ -150,9 +152,20 @@ def upgrade() -> None:
         "proposals",
         ["selected_package_id"],
     )
+    # Selection-vs-snapshot symmetry: both columns set or both NULL. Guards
+    # against the orphan-snapshot case where a hard-delete of a package row
+    # (via admin SQL or future code) nulls the FK via ON DELETE SET NULL
+    # but leaves the snapshot pointing at a non-existent package_id, and
+    # against the inverse where a snapshot was persisted without the FK.
+    op.create_check_constraint(
+        "ck_proposals_selected_package_pair",
+        "proposals",
+        "(selected_package_id IS NULL) = (selected_package_snapshot IS NULL)",
+    )
 
 
 def downgrade() -> None:
+    op.drop_constraint("ck_proposals_selected_package_pair", "proposals", type_="check")
     op.drop_index("ix_proposals_selected_package_id", table_name="proposals")
     op.drop_constraint("fk_proposals_selected_package_id", "proposals", type_="foreignkey")
     op.drop_column("proposals", "selected_package_snapshot")
