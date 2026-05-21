@@ -158,7 +158,8 @@ describe('AdminSharingPage bulk add', () => {
     fireEvent.click(screen.getByRole('button', { name: /apply/i }));
 
     expect(await screen.findByText('Bulk sharing finished with issues')).toBeTruthy();
-    expect(screen.getByText('Failed IDs: 999')).toBeTruthy();
+    expect(screen.getByText('#999')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /retry failed ids/i })).toBeTruthy();
     expect(mocks.showWarning).toHaveBeenCalledWith('Bulk sharing finished with 1 failed ID');
   });
 });

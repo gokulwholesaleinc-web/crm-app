@@ -31,6 +31,7 @@ import type {
   PermissionLevel,
 } from '../../api/sharing';
 import { formatDate } from '../../utils/formatters';
+import { extractApiErrorDetail } from '../../utils/errors';
 import { showError, showSuccess, showWarning } from '../../utils/toast';
 
 // ``quotes`` retired 2026-05-14 — quotes router unmounted. Historical
@@ -198,8 +199,8 @@ export default function AdminSharingPage() {
       setRevokeTarget(null);
       queryClient.invalidateQueries({ queryKey: ['admin', 'shares'] });
     },
-    onError: () => {
-      showError('Failed to revoke share');
+    onError: (err) => {
+      showError(extractApiErrorDetail(err) ?? 'Failed to revoke share');
     },
   });
 
@@ -223,8 +224,8 @@ export default function AdminSharingPage() {
         showSuccess('Bulk sharing complete');
       }
     },
-    onError: () => {
-      showError('Failed to bulk share records');
+    onError: (err) => {
+      showError(extractApiErrorDetail(err) ?? 'Failed to bulk share records');
     },
   });
 
@@ -290,11 +291,7 @@ export default function AdminSharingPage() {
     parsedBulkIds.invalid.length === 0 &&
     !parsedBulkIds.tooMany &&
     !bulkMutation.isPending;
-  const failedIds =
-    bulkResult?.items
-      .filter((item) => item.status === 'failed')
-      .map((item) => item.entity_id)
-      .join(', ') ?? '';
+  const failedItems = bulkResult?.items.filter((item) => item.status === 'failed') ?? [];
   const bulkTone = resultTone(bulkResult);
 
   return (
@@ -391,11 +388,13 @@ export default function AdminSharingPage() {
               >
                 {parsedBulkIds.invalid.length > 0 ? (
                   <span className="text-red-600 dark:text-red-400">
-                    Invalid: {parsedBulkIds.invalid.join(', ')}
+                    Invalid: {parsedBulkIds.invalid.join(', ')}. Use
+                    comma- or space-separated IDs ≥ 1, or ranges like 100-120.
                   </span>
                 ) : parsedBulkIds.tooMany ? (
                   <span className="text-red-600 dark:text-red-400">
-                    Limit is {BULK_MAX} records.
+                    Limit is {BULK_MAX} records — narrow the range or split
+                    into smaller batches.
                   </span>
                 ) : (
                   <span>{parsedBulkIds.ids.length} unique record ID(s)</span>
@@ -428,7 +427,30 @@ export default function AdminSharingPage() {
                       Created {bulkResult.created}, updated {bulkResult.updated}, skipped{' '}
                       {bulkResult.skipped}, failed {bulkResult.failed}.
                     </p>
-                    {failedIds && <p className="mt-1 text-sm">Failed IDs: {failedIds}</p>}
+                    {failedItems.length > 0 && (
+                      <div className="mt-2 space-y-2">
+                        <ul className="max-h-40 space-y-1 overflow-y-auto rounded border border-yellow-200 bg-white/60 p-2 text-xs dark:border-yellow-900/60 dark:bg-yellow-950/30">
+                          {failedItems.map((item) => (
+                            <li key={item.entity_id} className="font-mono">
+                              <span className="font-semibold">#{item.entity_id}</span>
+                              <span className="ml-2 font-normal">{item.detail}</span>
+                            </li>
+                          ))}
+                        </ul>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setBulkRecordIds(
+                              failedItems.map((item) => item.entity_id).join(', '),
+                            );
+                            setBulkResult(null);
+                          }}
+                          className="text-xs font-medium underline hover:no-underline"
+                        >
+                          Retry failed IDs
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

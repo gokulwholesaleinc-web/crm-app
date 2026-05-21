@@ -6,6 +6,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import func, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import aliased
 
 from src.audit.service import AuditService
@@ -365,98 +366,151 @@ async def admin_bulk_share(
     created_entity_ids: list[int] = []
 
     for entity_id in entity_ids:
-        entity, resolved_plural = await _resolve_entity(db, requested_entity_type, entity_id)
-        if entity is None:
+        # Per-row savepoint so a single bad row (FK violation, constraint
+        # error, audit failure) doesn't 500 the whole batch and discard the
+        # `AdminBulkShareResult` rows we've already accumulated.
+        try:
+            async with db.begin_nested():
+                entity, resolved_plural = await _resolve_entity(db, requested_entity_type, entity_id)
+                if entity is None:
+                    failed_count += 1
+                    results.append(AdminBulkShareResult(
+                        entity_id=entity_id,
+                        status="failed",
+                        detail=f"{requested_entity_type} {entity_id} not found",
+                    ))
+                    continue
+
+                existing_share = existing_by_entity_id.get(entity_id)
+                if existing_share is not None:
+                    if existing_share.permission_level == request.permission_level:
+                        skipped_count += 1
+                        results.append(AdminBulkShareResult(
+                            entity_id=entity_id,
+                            status="skipped",
+                            detail="User already has this permission",
+                        ))
+                        continue
+
+                    old_permission = existing_share.permission_level
+                    existing_share.entity_type = resolved_plural
+                    existing_share.permission_level = request.permission_level
+                    existing_share.shared_by_user_id = current_user.id
+                    await audit.log_change(
+                        entity_type=canonical_singular(resolved_plural),
+                        entity_id=entity_id,
+                        user_id=current_user.id,
+                        action="share_permission_update",
+                        changes=[{
+                            "field": "permission_level",
+                            "old": old_permission,
+                            "new": request.permission_level,
+                            "shared_with_user_id": request.shared_with_user_id,
+                        }],
+                    )
+                    updated_count += 1
+                    changed_entity_ids.append(entity_id)
+                    results.append(AdminBulkShareResult(
+                        entity_id=entity_id,
+                        status="updated",
+                        detail=f"Permission changed from {old_permission} to {request.permission_level}",
+                    ))
+                    continue
+
+                share = EntityShare(
+                    entity_type=resolved_plural,
+                    entity_id=entity_id,
+                    shared_with_user_id=request.shared_with_user_id,
+                    shared_by_user_id=current_user.id,
+                    permission_level=request.permission_level,
+                )
+                db.add(share)
+                await db.flush()
+                await audit.log_change(
+                    entity_type=canonical_singular(resolved_plural),
+                    entity_id=entity_id,
+                    user_id=current_user.id,
+                    action="share",
+                    changes=[{
+                        "field": "shared_with_user_id",
+                        "old": None,
+                        "new": request.shared_with_user_id,
+                        "permission_level": request.permission_level,
+                    }],
+                )
+                created_count += 1
+                changed_entity_ids.append(entity_id)
+                created_entity_ids.append(entity_id)
+                results.append(AdminBulkShareResult(
+                    entity_id=entity_id,
+                    status="created",
+                    detail="Share created",
+                ))
+        except SQLAlchemyError as exc:
+            # Savepoint already rolled back this iteration. Remove any result
+            # row we appended before the failure (the count-and-append happen
+            # together inside the savepoint, but Python list mutations outside
+            # the SQL session are not rolled back by begin_nested).
+            if results and results[-1].entity_id == entity_id:
+                last_status = results[-1].status
+                results.pop()
+                if last_status == "created":
+                    created_count -= 1
+                    if created_entity_ids and created_entity_ids[-1] == entity_id:
+                        created_entity_ids.pop()
+                    if changed_entity_ids and changed_entity_ids[-1] == entity_id:
+                        changed_entity_ids.pop()
+                elif last_status == "updated":
+                    updated_count -= 1
+                    if changed_entity_ids and changed_entity_ids[-1] == entity_id:
+                        changed_entity_ids.pop()
+                elif last_status == "skipped":
+                    skipped_count -= 1
             failed_count += 1
             results.append(AdminBulkShareResult(
                 entity_id=entity_id,
                 status="failed",
-                detail=f"{requested_entity_type} {entity_id} not found",
+                detail=f"Database error: {type(exc).__name__}",
             ))
-            continue
 
-        existing_share = existing_by_entity_id.get(entity_id)
-        if existing_share is not None:
-            if existing_share.permission_level == request.permission_level:
-                skipped_count += 1
-                results.append(AdminBulkShareResult(
-                    entity_id=entity_id,
-                    status="skipped",
-                    detail="User already has this permission",
-                ))
-                continue
-
-            old_permission = existing_share.permission_level
-            existing_share.entity_type = resolved_plural
-            existing_share.permission_level = request.permission_level
-            existing_share.shared_by_user_id = current_user.id
-            await audit.log_change(
-                entity_type=canonical_singular(resolved_plural),
-                entity_id=entity_id,
-                user_id=current_user.id,
-                action="share_permission_update",
-                changes=[{
-                    "field": "permission_level",
-                    "old": old_permission,
-                    "new": request.permission_level,
-                    "shared_with_user_id": request.shared_with_user_id,
-                }],
-            )
-            updated_count += 1
-            changed_entity_ids.append(entity_id)
-            results.append(AdminBulkShareResult(
-                entity_id=entity_id,
-                status="updated",
-                detail=f"Permission changed from {old_permission} to {request.permission_level}",
-            ))
-            continue
-
-        share = EntityShare(
-            entity_type=resolved_plural,
-            entity_id=entity_id,
-            shared_with_user_id=request.shared_with_user_id,
-            shared_by_user_id=current_user.id,
-            permission_level=request.permission_level,
-        )
-        db.add(share)
-        await db.flush()
-        await audit.log_change(
-            entity_type=canonical_singular(resolved_plural),
-            entity_id=entity_id,
-            user_id=current_user.id,
-            action="share",
-            changes=[{
-                "field": "shared_with_user_id",
-                "old": None,
-                "new": request.shared_with_user_id,
-                "permission_level": request.permission_level,
-            }],
-        )
-        created_count += 1
-        changed_entity_ids.append(entity_id)
-        created_entity_ids.append(entity_id)
-        results.append(AdminBulkShareResult(
-            entity_id=entity_id,
-            status="created",
-            detail="Share created",
-        ))
-
-    if created_count > 0:
+    # Notify on both creates and updates: a permission upgrade (e.g. view →
+    # assignee) is at least as impactful as a first-time grant, so silently
+    # leaving the recipient in the dark for the upgrade path is wrong.
+    if created_count > 0 or updated_count > 0:
         sharer_name = current_user.full_name or current_user.email
         entity_singular = canonical_singular(entity_plural)
         if request.permission_level == "assignee":
             notif_type = "record_assigned_to_you"
-            title = f"{sharer_name} assigned {created_count} {entity_singular} records to you"
+            verb = "assigned"
         else:
             notif_type = "entity_shared_with_you"
-            title = f"{sharer_name} shared {created_count} {entity_singular} records with you"
+            verb = "shared"
+        if created_count > 0 and updated_count > 0:
+            title = (
+                f"{sharer_name} {verb} {created_count} new and updated "
+                f"{updated_count} existing {entity_singular} records"
+            )
+        elif created_count > 0:
+            title = f"{sharer_name} {verb} {created_count} {entity_singular} records with you"
+        else:
+            title = (
+                f"{sharer_name} updated your access to {updated_count} "
+                f"{entity_singular} records"
+            )
+        # Deep-link to a representative record: prefer a newly-created one so
+        # the recipient lands somewhere they didn't have access to before;
+        # fall back to any changed record on an update-only batch.
+        deep_link_id = created_entity_ids[0] if created_entity_ids else changed_entity_ids[0]
         await NotificationService(db).create_notification(
             user_id=target_user.id,
             type=notif_type,
             title=title,
-            message=f"{created_count} {entity_singular} record(s) were shared with you.",
+            message=(
+                f"{created_count + updated_count} {entity_singular} record(s) "
+                f"now have updated access for you."
+            ),
             entity_type=entity_plural,
-            entity_id=created_entity_ids[0],
+            entity_id=deep_link_id,
         )
 
     await db.commit()

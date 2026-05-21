@@ -70,7 +70,12 @@ export function EntitySharing({
   ownerName,
   canManage,
 }: EntitySharingProps) {
-  const { data: sharesData, isLoading } = useEntityShares(entityType, entityId);
+  const {
+    data: sharesData,
+    isLoading,
+    isError: sharesFetchFailed,
+    refetch: refetchShares,
+  } = useEntityShares(entityType, entityId);
   const { data: users } = useUsers();
   const shareMutation = useShareEntity();
   const revokeMutation = useRevokeShare();
@@ -261,6 +266,20 @@ export function EntitySharing({
           {isLoading ? (
             <div className="flex justify-center py-6">
               <Spinner size="sm" />
+            </div>
+          ) : sharesFetchFailed ? (
+            <div
+              role="alert"
+              className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-900/20 dark:text-red-300"
+            >
+              <p>Failed to load sharing for this record.</p>
+              <button
+                type="button"
+                onClick={() => void refetchShares()}
+                className="mt-2 text-xs font-medium underline hover:no-underline"
+              >
+                Retry
+              </button>
             </div>
           ) : shares.length === 0 ? (
             <p className="rounded-lg border border-dashed border-gray-200 px-4 py-6 text-center text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">
