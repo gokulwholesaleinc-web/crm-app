@@ -11,6 +11,15 @@ import {
 } from '@heroicons/react/24/outline';
 
 // Field definitions for the contacts entity
+type FieldType = 'text' | 'select' | 'number';
+
+interface FieldOption {
+  value: string;
+  label: string;
+  type: FieldType;
+  options?: readonly string[];
+}
+
 const FIELD_OPTIONS = [
   { value: 'first_name', label: 'First Name', type: 'text' },
   { value: 'last_name', label: 'Last Name', type: 'text' },
@@ -21,7 +30,7 @@ const FIELD_OPTIONS = [
   { value: 'sales_code', label: 'Sales Code', type: 'text' },
   { value: 'job_title', label: 'Job Title', type: 'text' },
   { value: 'department', label: 'Department', type: 'text' },
-] as const;
+] as const satisfies readonly FieldOption[];
 
 const COMPANY_FIELD_OPTIONS = [
   { value: 'name', label: 'Company Name', type: 'text' },
@@ -33,7 +42,7 @@ const COMPANY_FIELD_OPTIONS = [
   { value: 'industry', label: 'Industry', type: 'text' },
   { value: 'status', label: 'Status', type: 'select', options: ['prospect', 'customer', 'churned'] },
   { value: 'employee_count', label: 'Employee Count', type: 'number' },
-] as const;
+] as const satisfies readonly FieldOption[];
 
 const OPERATOR_OPTIONS = [
   { value: 'eq', label: 'Equals' },
@@ -50,6 +59,11 @@ const OPERATOR_OPTIONS = [
 ];
 
 const NO_VALUE_OPS = ['is_empty', 'is_not_empty'];
+const OPERATOR_OPTIONS_BY_FIELD_TYPE: Record<FieldType, string[]> = {
+  text: ['eq', 'neq', 'contains', 'not_contains', 'is_empty', 'is_not_empty'],
+  select: ['eq', 'neq', 'is_empty', 'is_not_empty'],
+  number: ['eq', 'neq', 'gt', 'lt', 'gte', 'lte', 'between', 'is_empty', 'is_not_empty'],
+};
 
 interface ConditionRow {
   id: number;
@@ -67,10 +81,41 @@ interface SmartListBuilderProps {
 
 let nextConditionId = 1;
 
-function buildFilterGroup(conditions: ConditionRow[], groupOperator: 'and' | 'or'): FilterGroup {
+function getAllowedOperators(fieldDef?: FieldOption): typeof OPERATOR_OPTIONS {
+  const allowed = fieldDef
+    ? OPERATOR_OPTIONS_BY_FIELD_TYPE[fieldDef.type]
+    : ['eq', 'neq', 'is_empty', 'is_not_empty'];
+
+  return OPERATOR_OPTIONS.filter((operator) => allowed.includes(operator.value));
+}
+
+function getFieldDef(fieldOptions: readonly FieldOption[], fieldValue: string) {
+  return fieldOptions.find((f) => f.value === fieldValue);
+}
+
+function isConditionComplete(condition: ConditionRow, fieldOptions: readonly FieldOption[]): boolean {
+  const fieldDef = getFieldDef(fieldOptions, condition.field);
+  if (!fieldDef || !condition.op) return false;
+  if (!getAllowedOperators(fieldDef).some((operator) => operator.value === condition.op)) return false;
+  if (NO_VALUE_OPS.includes(condition.op)) return true;
+  if (condition.value.trim() === '') return false;
+  if (fieldDef.type === 'number' && !Number.isFinite(Number(condition.value))) return false;
+  if (condition.op === 'between') {
+    if (condition.valueTo.trim() === '') return false;
+    if (fieldDef.type === 'number' && !Number.isFinite(Number(condition.valueTo))) return false;
+  }
+  return true;
+}
+
+function buildFilterGroup(
+  conditions: ConditionRow[],
+  groupOperator: 'and' | 'or',
+  fieldOptions: readonly FieldOption[] = FIELD_OPTIONS,
+): FilterGroup {
   const parsedConditions: FilterCondition[] = conditions
-    .filter((c) => c.field && c.op)
+    .filter((c) => isConditionComplete(c, fieldOptions))
     .map((c) => {
+      const fieldDef = getFieldDef(fieldOptions, c.field);
       const condition: FilterCondition = {
         field: c.field,
         op: c.op,
@@ -78,14 +123,11 @@ function buildFilterGroup(conditions: ConditionRow[], groupOperator: 'and' | 'or
 
       if (!NO_VALUE_OPS.includes(c.op)) {
         if (c.op === 'between') {
-          condition.value = [
-            isNaN(Number(c.value)) ? c.value : Number(c.value),
-            isNaN(Number(c.valueTo)) ? c.valueTo : Number(c.valueTo),
-          ];
+          condition.value = fieldDef?.type === 'number'
+            ? [Number(c.value), Number(c.valueTo)]
+            : [c.value, c.valueTo];
         } else {
-          // Try to parse as number if the value looks numeric
-          const numVal = Number(c.value);
-          condition.value = isNaN(numVal) || c.value === '' ? c.value : numVal;
+          condition.value = fieldDef?.type === 'number' ? Number(c.value) : c.value;
         }
       }
 
@@ -129,15 +171,11 @@ export function SmartListBuilder({ entityType, onApplyFilters, onClose }: SmartL
     );
   };
 
-  const getFieldDef = (fieldValue: string) => {
-    return fieldOptions.find((f) => f.value === fieldValue);
-  };
-
-  const hasValidConditions = conditions.some((c) => c.field && c.op);
+  const hasValidConditions = conditions.length > 0 && conditions.every((c) => isConditionComplete(c, fieldOptions));
 
   const handleViewResults = async () => {
     if (!hasValidConditions) return;
-    const filters = buildFilterGroup(conditions, groupOperator);
+    const filters = buildFilterGroup(conditions, groupOperator, fieldOptions);
     const metricsToRequest = ['count'];
     if (entityType === 'companies') {
       metricsToRequest.push('sum:annual_revenue');
@@ -156,13 +194,13 @@ export function SmartListBuilder({ entityType, onApplyFilters, onClose }: SmartL
 
   const handleApplyFilters = () => {
     if (!hasValidConditions) return;
-    const filters = buildFilterGroup(conditions, groupOperator);
+    const filters = buildFilterGroup(conditions, groupOperator, fieldOptions);
     onApplyFilters(filters);
   };
 
   const handleSave = async () => {
     if (!filterName.trim() || !hasValidConditions) return;
-    const filters = buildFilterGroup(conditions, groupOperator);
+    const filters = buildFilterGroup(conditions, groupOperator, fieldOptions);
     try {
       await createFilterMutation.mutateAsync({
         name: filterName.trim(),
@@ -205,9 +243,10 @@ export function SmartListBuilder({ entityType, onApplyFilters, onClose }: SmartL
       {/* Condition Rows */}
       <div className="space-y-3">
         {conditions.map((condition, index) => {
-          const fieldDef = getFieldDef(condition.field);
+          const fieldDef = getFieldDef(fieldOptions, condition.field);
           const isNoValueOp = NO_VALUE_OPS.includes(condition.op);
           const isBetween = condition.op === 'between';
+          const allowedOperators = getAllowedOperators(fieldDef);
 
           return (
             <div
@@ -224,7 +263,19 @@ export function SmartListBuilder({ entityType, onApplyFilters, onClose }: SmartL
               <select
                 aria-label="Field"
                 value={condition.field}
-                onChange={(e) => updateCondition(condition.id, { field: e.target.value, value: '', valueTo: '' })}
+                onChange={(e) => {
+                  const nextField = e.target.value;
+                  const nextFieldDef = getFieldDef(fieldOptions, nextField);
+                  const nextOperators = getAllowedOperators(nextFieldDef);
+                  updateCondition(condition.id, {
+                    field: nextField,
+                    op: nextOperators.some((operator) => operator.value === condition.op)
+                      ? condition.op
+                      : (nextOperators[0]?.value ?? 'eq'),
+                    value: '',
+                    valueTo: '',
+                  });
+                }}
                 className="flex-1 min-w-[140px] rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm px-2 py-2 text-gray-900 dark:text-gray-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary-500"
               >
                 <option value="">Select field...</option>
@@ -239,10 +290,14 @@ export function SmartListBuilder({ entityType, onApplyFilters, onClose }: SmartL
               <select
                 aria-label="Operator"
                 value={condition.op}
-                onChange={(e) => updateCondition(condition.id, { op: e.target.value })}
+                onChange={(e) => updateCondition(condition.id, {
+                  op: e.target.value,
+                  value: NO_VALUE_OPS.includes(e.target.value) ? '' : condition.value,
+                  valueTo: e.target.value === 'between' ? condition.valueTo : '',
+                })}
                 className="flex-1 min-w-[140px] rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm px-2 py-2 text-gray-900 dark:text-gray-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary-500"
               >
-                {OPERATOR_OPTIONS.map((o) => (
+                {allowedOperators.map((o) => (
                   <option key={o.value} value={o.value}>
                     {o.label}
                   </option>

@@ -41,6 +41,7 @@ from src.core.router_utils import (
     get_entity_or_404,
     parse_json_filters,
     parse_tag_ids,
+    raise_bad_request,
 )
 from src.events.service import CONTACT_CREATED, CONTACT_UPDATED, emit
 from src.notifications.service import notify_on_assignment
@@ -73,20 +74,24 @@ async def list_contacts(
 ):
     """List contacts with pagination and filters."""
     service = ContactService(db)
+    parsed_filters = parse_json_filters(filters)
 
-    contacts, total = await service.get_list(
-        page=page,
-        page_size=page_size,
-        search=search,
-        company_id=company_id,
-        status=status,
-        owner_id=effective_owner_id(data_scope, owner_id),
-        tag_ids=parse_tag_ids(tag_ids),
-        filters=parse_json_filters(filters),
-        shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_CONTACTS),
-        order_by=order_by,
-        order_dir=order_dir,
-    )
+    try:
+        contacts, total = await service.get_list(
+            page=page,
+            page_size=page_size,
+            search=search,
+            company_id=company_id,
+            status=status,
+            owner_id=effective_owner_id(data_scope, owner_id),
+            tag_ids=parse_tag_ids(tag_ids),
+            filters=parsed_filters,
+            shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_CONTACTS),
+            order_by=order_by,
+            order_dir=order_dir,
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise_bad_request(str(exc))
 
     tags_map = await service.get_tags_for_entities([c.id for c in contacts])
 
