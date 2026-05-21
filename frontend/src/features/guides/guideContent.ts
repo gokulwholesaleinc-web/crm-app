@@ -605,10 +605,15 @@ export const GUIDE_REGISTRY: readonly Guide[] = [
   {
     id: 'admin-sharing-tour',
     title: 'Admin sharing',
-    description: 'Audit record-level shares and revoke stale access.',
+    description: 'Bulk grant, audit, and revoke record-level access.',
     roles: adminRoles,
     path: '/admin/sharing',
     steps: [
+      {
+        title: 'Bulk add access',
+        body: 'Admins can grant one teammate access to many contacts, companies, leads, or proposals in one pass.',
+        selector: target('admin-sharing-bulk-add'),
+      },
       {
         title: 'Tenant-wide sharing audit',
         body: 'Admins can filter every record share by entity type, sender, recipient, and permission.',
