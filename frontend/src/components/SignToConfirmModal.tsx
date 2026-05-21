@@ -20,12 +20,6 @@ export interface SignToConfirmModalProps {
    *  countersigned PDF will arrive by email after submission. */
   hasMasterContract: boolean;
   signingDocumentCount?: number;
-  selectedPackageId?: number | null;
-  selectedPackageSummary?: {
-    name: string;
-    total: string;
-    cadence: string;
-  } | null;
   /**
    * Returns `null` on success, or an error message string to display
    * inline. The modal handles all submit-disabled / pending state.
@@ -34,7 +28,6 @@ export interface SignToConfirmModalProps {
     signatureDataUrl: string;
     email: string;
     agreedToTerms: boolean;
-    selectedPackageId?: number | null;
   }) => Promise<string | null>;
 }
 
@@ -45,8 +38,6 @@ export function SignToConfirmModal({
   termsAndConditions,
   hasMasterContract,
   signingDocumentCount = 0,
-  selectedPackageId = null,
-  selectedPackageSummary = null,
   onSubmit,
 }: SignToConfirmModalProps) {
   const sigRef = useRef<SignatureCanvasHandle | null>(null);
@@ -101,7 +92,6 @@ export function SignToConfirmModal({
       signatureDataUrl: dataUrl,
       email: recipientEmail,
       agreedToTerms,
-      selectedPackageId,
     });
     if (message) {
       setError(message);
@@ -109,7 +99,7 @@ export function SignToConfirmModal({
       return;
     }
     setSubmitting(false);
-  }, [agreedToTerms, canSubmit, onSubmit, recipientEmail, selectedPackageId]);
+  }, [agreedToTerms, canSubmit, onSubmit, recipientEmail]);
 
   return (
     <Transition appear show={isOpen} as={Fragment}>
@@ -206,27 +196,6 @@ export function SignToConfirmModal({
                     </button>
                   </div>
                 </div>
-
-                {selectedPackageSummary && (
-                  <div className="mt-5 rounded-2xl bg-white/[0.04] ring-1 ring-white/10 px-4 py-3">
-                    <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-white/45">
-                      Selected package
-                    </p>
-                    <div className="mt-1 flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-white">
-                          {selectedPackageSummary.name}
-                        </p>
-                        <p className="text-xs text-white/55">
-                          {selectedPackageSummary.cadence}
-                        </p>
-                      </div>
-                      <p className="shrink-0 text-sm font-semibold tabular-nums text-white">
-                        {selectedPackageSummary.total}
-                      </p>
-                    </div>
-                  </div>
-                )}
 
                 {termsAndConditions && (
                   <div className="mt-5 rounded-2xl bg-white/[0.04] ring-1 ring-white/10">

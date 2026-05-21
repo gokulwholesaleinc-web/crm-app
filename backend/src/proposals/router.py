@@ -49,18 +49,17 @@ from src.proposals.attachment_views import (
     record_attachment_view,
     record_signing_document_view,
 )
-from src.proposals.models import ProposalSigningDocumentView
+from src.proposals.models import Proposal, ProposalSigningDocumentView
 from src.proposals.schemas import (
     CreateFromTemplateRequest,
     ProposalAcceptRequest,
     ProposalAttachmentPublicItem,
     ProposalBranding,
+    ProposalBundleCreate,
+    ProposalBundleResponse,
+    ProposalBundleUpdate,
     ProposalCreate,
     ProposalListResponse,
-    ProposalPackageCreate,
-    ProposalPackagePublicResponse,
-    ProposalPackageResponse,
-    ProposalPackageUpdate,
     ProposalPublicResponse,
     ProposalRejectRequest,
     ProposalResponse,
@@ -214,6 +213,103 @@ async def create_proposal(
     await audit_entity_create(db, "proposal", proposal.id, current_user.id, ip_address)
 
     return ProposalResponse.model_validate(proposal)
+
+
+@router.post(
+    "/bundles",
+    response_model=ProposalBundleResponse,
+    status_code=HTTPStatus.CREATED,
+)
+async def create_proposal_bundle(
+    bundle_data: ProposalBundleCreate,
+    request: Request,
+    current_user: ProposalUpdateUser,
+    db: DBSession,
+):
+    """Create a customer-facing bundle from two or more draft proposals."""
+    await _require_proposals_write_access(db, bundle_data.proposal_ids, current_user)
+    service = ProposalService(db)
+    with value_error_as_400():
+        bundle = await service.create_bundle(bundle_data, current_user.id)
+
+    ip_address = get_client_ip(request)
+    await audit_entity_create(db, "proposal_bundle", bundle.id, current_user.id, ip_address)
+    return ProposalBundleResponse.model_validate(bundle)
+
+
+@router.get("/bundles/{bundle_id}", response_model=ProposalBundleResponse)
+async def get_proposal_bundle(
+    bundle_id: int,
+    current_user: CurrentUser,
+    db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
+):
+    """Get a proposal bundle by ID."""
+    service = ProposalService(db)
+    bundle = await service.get_bundle(bundle_id)
+    if bundle is None:
+        raise_not_found("Proposal bundle")
+    _check_bundle_read_access(bundle, current_user, data_scope)
+    return ProposalBundleResponse.model_validate(bundle)
+
+
+@router.patch("/bundles/{bundle_id}", response_model=ProposalBundleResponse)
+async def update_proposal_bundle(
+    bundle_id: int,
+    bundle_data: ProposalBundleUpdate,
+    request: Request,
+    current_user: ProposalUpdateUser,
+    db: DBSession,
+):
+    """Update a draft proposal bundle."""
+    if bundle_data.proposal_ids is not None:
+        await _require_proposals_write_access(db, bundle_data.proposal_ids, current_user)
+    service = ProposalService(db)
+    bundle = await service.get_bundle(bundle_id)
+    if bundle is None:
+        raise_not_found("Proposal bundle")
+    _require_bundle_write_access(bundle, current_user)
+    update_fields = list(bundle_data.model_dump(exclude_unset=True).keys())
+    old_data = snapshot_entity(bundle, update_fields)
+    with value_error_as_400():
+        bundle = await service.update_bundle(bundle, bundle_data, current_user.id)
+    new_data = snapshot_entity(bundle, update_fields)
+    ip_address = get_client_ip(request)
+    await audit_entity_update(
+        db,
+        "proposal_bundle",
+        bundle.id,
+        current_user.id,
+        old_data,
+        new_data,
+        ip_address,
+    )
+    return ProposalBundleResponse.model_validate(bundle)
+
+
+@router.post("/bundles/{bundle_id}/send", response_model=ProposalBundleResponse)
+async def send_proposal_bundle(
+    bundle_id: int,
+    current_user: ProposalUpdateUser,
+    db: DBSession,
+):
+    """Send one public chooser link for a proposal bundle."""
+    service = ProposalService(db)
+    bundle = await service.get_bundle(bundle_id)
+    if bundle is None:
+        raise_not_found("Proposal bundle")
+    _require_bundle_write_access(bundle, current_user)
+    with value_error_as_400():
+        bundle = await service.send_bundle_email(bundle_id, current_user.id)
+
+    await emit(PROPOSAL_SENT, {
+        "entity_id": bundle.id,
+        "entity_type": "proposal_bundle",
+        "user_id": current_user.id,
+        "data": {"bundle_number": bundle.bundle_number, "status": bundle.status},
+    })
+
+    return ProposalBundleResponse.model_validate(bundle)
 
 
 @router.get("/templates", response_model=list[ProposalTemplateResponse])
@@ -489,15 +585,6 @@ async def _attach_public_signing_documents(
 
 def _scope_public_payment_fields(response: ProposalPublicResponse) -> None:
     """Keep public payment compatibility only for active legacy pay links."""
-    if response.packages or response.selected_package_snapshot:
-        response.payment_type = None
-        response.recurring_interval = None
-        response.recurring_interval_count = None
-        response.amount = None
-        response.currency = None
-        response.stripe_payment_url = None
-        response.paid_at = None
-        return
     has_public_payment_flow = (
         response.status in {"awaiting_payment", "paid"}
         or bool(response.stripe_payment_url)
@@ -515,29 +602,44 @@ def _scope_public_payment_fields(response: ProposalPublicResponse) -> None:
     response.paid_at = None
 
 
-async def _attach_public_packages(
-    service: ProposalService,
-    response: ProposalPublicResponse,
-    proposal,
-) -> None:
-    if proposal.selected_package_snapshot:
-        response.packages = []
-        return
-    active_packages = await service.get_active_packages_for_public(proposal.id)
-    response.packages = [
-        ProposalPackagePublicResponse.model_validate(package)
-        for package in active_packages
-    ]
-
-
-async def _get_owned_proposal_for_package_write(
-    service: ProposalService,
-    proposal_id: int,
+async def _require_proposals_write_access(
+    db: DBSession,
+    proposal_ids: list[int],
     current_user: User,
-):
-    proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
-    check_ownership(proposal, current_user, EntityNames.PROPOSAL)
-    return proposal
+) -> None:
+    unique_ids = list(dict.fromkeys(proposal_ids))
+    rows = await db.execute(select(Proposal).where(Proposal.id.in_(unique_ids)))
+    proposals_by_id = {proposal.id: proposal for proposal in rows.scalars().all()}
+    for proposal_id in unique_ids:
+        proposal = proposals_by_id.get(proposal_id)
+        if proposal is None:
+            raise_not_found("Proposal")
+        check_ownership(proposal, current_user, EntityNames.PROPOSAL)
+
+
+def _require_bundle_write_access(bundle, current_user: User) -> None:
+    if not bundle.proposals:
+        if bundle.owner_id not in (None, current_user.id) and bundle.created_by_id != current_user.id:
+            raise HTTPException(status_code=HTTPStatus.FORBIDDEN, detail="Access denied")
+        return
+    for proposal in bundle.proposals:
+        check_ownership(proposal, current_user, EntityNames.PROPOSAL)
+
+
+def _check_bundle_read_access(
+    bundle,
+    current_user: User,
+    data_scope: DataScope,
+) -> None:
+    if data_scope.can_see_all():
+        return
+    if current_user.id in {bundle.owner_id, bundle.created_by_id}:
+        return
+    shared_proposal_ids = set(data_scope.get_shared_ids(ENTITY_TYPE_PROPOSALS))
+    for proposal in bundle.proposals or []:
+        if proposal.owner_id == current_user.id or proposal.id in shared_proposal_ids:
+            return
+    raise HTTPException(status_code=HTTPStatus.FORBIDDEN, detail="Access denied")
 
 
 async def _check_proposal_reference_access(
@@ -888,6 +990,67 @@ async def get_public_proposal(
     import hmac as _hmac
 
     service = ProposalService(db)
+    bundle = await service.get_public_bundle(token)
+    if bundle and _hmac.compare_digest(bundle.public_token or "", token):
+        await service.record_bundle_view(bundle)
+        proposals = list(bundle.proposals or [])
+        branding_data = (
+            await service.get_branding_for_proposal(proposals[0])
+            if proposals
+            else {}
+        )
+        branding = ProposalBranding(
+            company_name=branding_data.get("company_name"),
+            logo_url=branding_data.get("logo_url"),
+            primary_color=branding_data.get("primary_color", "#6366f1"),
+            secondary_color=branding_data.get("secondary_color", "#8b5cf6"),
+            accent_color=branding_data.get("accent_color", "#22c55e"),
+            bg_color_light=branding_data.get("bg_color_light", "#f9fafb"),
+            surface_color_light=branding_data.get("surface_color_light", "#ffffff"),
+            footer_text=branding_data.get("footer_text"),
+            privacy_policy_url=branding_data.get("privacy_policy_url"),
+            terms_of_service_url=branding_data.get("terms_of_service_url"),
+        )
+
+        option_responses: list[ProposalPublicResponse] = []
+        for option in proposals:
+            option_response = ProposalPublicResponse.model_validate(option)
+            option_response.bundle_id = bundle.id
+            option_response.bundle_title = bundle.title
+            option_response.bundle_description = bundle.description
+            option_response.bundle_selected_proposal_id = bundle.selected_proposal_id
+            option_response.designated_signer_email = (
+                option.designated_signer_email
+                or (option.contact.email if option.contact else None)
+            )
+            option_response.has_master_contract = bool(
+                option.master_contract_pdf_path or option.signing_documents
+            )
+            option_response.signing_document_count = len(option.signing_documents or [])
+            option_response.attachments = []
+            option_response.signing_documents = []
+            _scope_public_payment_fields(option_response)
+            option_responses.append(option_response)
+
+        response = ProposalPublicResponse(
+            id=None,
+            proposal_number=bundle.bundle_number,
+            public_token=bundle.public_token,
+            title=bundle.title,
+            content=bundle.description,
+            status=bundle.status,
+            bundle_id=bundle.id,
+            bundle_title=bundle.title,
+            bundle_description=bundle.description,
+            bundle_selected_proposal_id=bundle.selected_proposal_id,
+            proposal_options=option_responses,
+            company=bundle.company,
+            contact=bundle.contact,
+            branding=branding,
+        )
+        _scope_public_payment_fields(response)
+        return response
+
     proposal = await service.get_public_proposal(token)
     if not proposal or not _hmac.compare_digest(proposal.public_token or "", token):
         raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Proposal not found")
@@ -913,7 +1076,6 @@ async def get_public_proposal(
     )
 
     response = ProposalPublicResponse.model_validate(proposal)
-    await _attach_public_packages(service, response, proposal)
     _scope_public_payment_fields(response)
     response.branding = branding
     response.terms_and_conditions = await service.get_effective_terms_and_conditions(
@@ -1004,7 +1166,7 @@ async def accept_proposal_public(
             signer_ip=signer_ip,
             signer_user_agent=signer_user_agent,
             signer_timezone=accept_data.signer_timezone,
-            selected_package_id=accept_data.selected_package_id,
+            selected_proposal_id=accept_data.selected_proposal_id,
         )
 
     # proposal_signed notification + email is dispatched by ProposalService.accept_proposal_public
@@ -1012,7 +1174,6 @@ async def accept_proposal_public(
 
     branding_data = await service.get_branding_for_proposal(proposal)
     response = ProposalPublicResponse.model_validate(proposal)
-    await _attach_public_packages(service, response, proposal)
     _scope_public_payment_fields(response)
     response.branding = ProposalBranding(
         company_name=branding_data.get("company_name"),
@@ -1086,7 +1247,6 @@ async def reject_proposal_public(
 
     branding_data = await service.get_branding_for_proposal(proposal)
     response = ProposalPublicResponse.model_validate(proposal)
-    await _attach_public_packages(service, response, proposal)
     _scope_public_payment_fields(response)
     response.branding = ProposalBranding(
         company_name=branding_data.get("company_name"),
@@ -1493,141 +1653,6 @@ async def download_signed_pdf(
     return Response(content=content, media_type="application/pdf")
 
 
-@router.get("/{proposal_id}/packages", response_model=list[ProposalPackageResponse])
-async def list_proposal_packages(
-    proposal_id: int,
-    current_user: CurrentUser,
-    db: DBSession,
-    data_scope: Annotated[DataScope, Depends(get_data_scope)],
-):
-    """List staff-visible package definitions for a proposal."""
-    service = ProposalService(db)
-    proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
-    check_record_access_or_shared(
-        proposal, current_user, data_scope.role_name,
-        shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_PROPOSALS),
-    )
-    packages = await service.list_packages(proposal_id)
-    return [ProposalPackageResponse.model_validate(package) for package in packages]
-
-
-@router.post(
-    "/{proposal_id}/packages",
-    response_model=ProposalPackageResponse,
-    status_code=HTTPStatus.CREATED,
-)
-async def create_proposal_package(
-    proposal_id: int,
-    package_data: ProposalPackageCreate,
-    request: Request,
-    current_user: ProposalUpdateUser,
-    db: DBSession,
-):
-    """Create a selectable package on a draft proposal."""
-    service = ProposalService(db)
-    proposal = await _get_owned_proposal_for_package_write(
-        service,
-        proposal_id,
-        current_user,
-    )
-    with value_error_as_400():
-        package = await service.create_package(proposal, package_data, current_user.id)
-
-    ip_address = get_client_ip(request)
-    await audit_entity_update(
-        db,
-        "proposal",
-        proposal.id,
-        current_user.id,
-        {},
-        {"package_id": package.id, "action": "create_package"},
-        ip_address,
-    )
-    return ProposalPackageResponse.model_validate(package)
-
-
-@router.patch(
-    "/{proposal_id}/packages/{package_id}",
-    response_model=ProposalPackageResponse,
-)
-async def update_proposal_package(
-    proposal_id: int,
-    package_id: int,
-    package_data: ProposalPackageUpdate,
-    request: Request,
-    current_user: ProposalUpdateUser,
-    db: DBSession,
-):
-    """Update a selectable package on a draft proposal."""
-    service = ProposalService(db)
-    proposal = await _get_owned_proposal_for_package_write(
-        service,
-        proposal_id,
-        current_user,
-    )
-    package = await service.get_package(proposal_id, package_id)
-    if package is None:
-        raise_not_found("Proposal package")
-    old_data = snapshot_entity(package, list(package_data.model_dump(exclude_unset=True).keys()))
-    with value_error_as_400():
-        package = await service.update_package(
-            proposal,
-            package,
-            package_data,
-            current_user.id,
-        )
-    new_data = snapshot_entity(package, list(package_data.model_dump(exclude_unset=True).keys()))
-    ip_address = get_client_ip(request)
-    await audit_entity_update(
-        db,
-        "proposal",
-        proposal.id,
-        current_user.id,
-        old_data,
-        new_data,
-        ip_address,
-    )
-    return ProposalPackageResponse.model_validate(package)
-
-
-@router.delete(
-    "/{proposal_id}/packages/{package_id}",
-    response_model=ProposalPackageResponse,
-)
-async def delete_proposal_package(
-    proposal_id: int,
-    package_id: int,
-    request: Request,
-    current_user: ProposalUpdateUser,
-    db: DBSession,
-):
-    """Deactivate a selectable package on a draft proposal."""
-    service = ProposalService(db)
-    proposal = await _get_owned_proposal_for_package_write(
-        service,
-        proposal_id,
-        current_user,
-    )
-    package = await service.get_package(proposal_id, package_id)
-    if package is None:
-        raise_not_found("Proposal package")
-    old_data = snapshot_entity(package, ["is_active"])
-    with value_error_as_400():
-        package = await service.delete_package(proposal, package, current_user.id)
-    new_data = snapshot_entity(package, ["is_active"])
-    ip_address = get_client_ip(request)
-    await audit_entity_update(
-        db,
-        "proposal",
-        proposal.id,
-        current_user.id,
-        old_data,
-        new_data,
-        ip_address,
-    )
-    return ProposalPackageResponse.model_validate(package)
-
-
 @router.get("/{proposal_id}", response_model=ProposalResponse)
 async def get_proposal(
     proposal_id: int,
@@ -1866,7 +1891,6 @@ async def duplicate_proposal(
     clone.recurring_interval_count = proposal.recurring_interval_count
     clone.amount = proposal.amount
     clone.currency = proposal.currency
-    await service.copy_packages_to_proposal(proposal, clone, current_user.id)
     await db.flush()
     await db.refresh(clone)
 

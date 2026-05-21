@@ -15,9 +15,9 @@ import type {
   CreateFromTemplateRequest,
   ProposalAttachment,
   ProposalSigningDocument,
-  ProposalPackage,
-  ProposalPackageCreate,
-  ProposalPackageUpdate,
+  ProposalBundle,
+  ProposalBundleCreate,
+  ProposalBundleUpdate,
   SignatureFieldCoordsValue,
 } from '../types';
 
@@ -83,43 +83,34 @@ export const acceptProposal = async (proposalId: number): Promise<Proposal> => {
   return response.data;
 };
 
-export const listProposalPackages = async (
-  proposalId: number,
-): Promise<ProposalPackage[]> => {
-  const response = await apiClient.get<ProposalPackage[]>(
-    `${PROPOSALS_BASE}/${proposalId}/packages`,
-  );
+export const createProposalBundle = async (
+  data: ProposalBundleCreate,
+): Promise<ProposalBundle> => {
+  const response = await apiClient.post<ProposalBundle>(`${PROPOSALS_BASE}/bundles`, data);
   return response.data;
 };
 
-export const createProposalPackage = async (
-  proposalId: number,
-  data: ProposalPackageCreate,
-): Promise<ProposalPackage> => {
-  const response = await apiClient.post<ProposalPackage>(
-    `${PROPOSALS_BASE}/${proposalId}/packages`,
+export const getProposalBundle = async (bundleId: number): Promise<ProposalBundle> => {
+  const response = await apiClient.get<ProposalBundle>(`${PROPOSALS_BASE}/bundles/${bundleId}`);
+  return response.data;
+};
+
+export const updateProposalBundle = async (
+  bundleId: number,
+  data: ProposalBundleUpdate,
+): Promise<ProposalBundle> => {
+  const response = await apiClient.patch<ProposalBundle>(
+    `${PROPOSALS_BASE}/bundles/${bundleId}`,
     data,
   );
   return response.data;
 };
 
-export const updateProposalPackage = async (
-  proposalId: number,
-  packageId: number,
-  data: ProposalPackageUpdate,
-): Promise<ProposalPackage> => {
-  const response = await apiClient.patch<ProposalPackage>(
-    `${PROPOSALS_BASE}/${proposalId}/packages/${packageId}`,
-    data,
+export const sendProposalBundle = async (bundleId: number): Promise<ProposalBundle> => {
+  const response = await apiClient.post<ProposalBundle>(
+    `${PROPOSALS_BASE}/bundles/${bundleId}/send`,
   );
   return response.data;
-};
-
-export const deleteProposalPackage = async (
-  proposalId: number,
-  packageId: number,
-): Promise<void> => {
-  await apiClient.delete(`${PROPOSALS_BASE}/${proposalId}/packages/${packageId}`);
 };
 
 /**
@@ -489,10 +480,10 @@ export const proposalsApi = {
   send: sendProposal,
   sendWithEmail: sendProposalWithEmail,
   accept: acceptProposal,
-  listPackages: listProposalPackages,
-  createPackage: createProposalPackage,
-  updatePackage: updateProposalPackage,
-  deletePackage: deleteProposalPackage,
+  createBundle: createProposalBundle,
+  getBundle: getProposalBundle,
+  updateBundle: updateProposalBundle,
+  sendBundle: sendProposalBundle,
   reject: rejectProposal,
   restampSignedPdf: restampProposalSignedPdf,
   listTemplates: listProposalTemplates,

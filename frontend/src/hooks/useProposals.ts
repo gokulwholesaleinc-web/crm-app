@@ -11,8 +11,8 @@ import type {
   ProposalCreate,
   ProposalUpdate,
   ProposalFilters,
-  ProposalPackageCreate,
-  ProposalPackageUpdate,
+  ProposalBundleCreate,
+  ProposalBundleUpdate,
   ProposalTemplateCreate,
   ProposalTemplateUpdate,
   CreateFromTemplateRequest,
@@ -131,69 +131,60 @@ export function useAcceptProposal() {
   });
 }
 
-export function useProposalPackages(proposalId: number | undefined) {
+export function useProposalBundle(bundleId: number | undefined) {
   return useAuthQuery({
-    queryKey: ['proposals', proposalId, 'packages'],
-    queryFn: () => proposalsApi.listPackages(proposalId!),
-    enabled: Boolean(proposalId),
+    queryKey: ['proposal-bundles', bundleId],
+    queryFn: () => proposalsApi.getBundle(bundleId!),
+    enabled: Boolean(bundleId),
   });
 }
 
-export function useCreateProposalPackage() {
+export function useCreateProposalBundle() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({
-      proposalId,
-      data,
-    }: {
-      proposalId: number;
-      data: ProposalPackageCreate;
-    }) => proposalsApi.createPackage(proposalId, data),
-    onSuccess: (_data, { proposalId }) => {
+    mutationFn: (data: ProposalBundleCreate) => proposalsApi.createBundle(data),
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: proposalKeys.lists() });
-      queryClient.invalidateQueries({ queryKey: proposalKeys.detail(proposalId) });
-      queryClient.invalidateQueries({ queryKey: ['proposals', proposalId, 'packages'] });
+      for (const proposal of data.proposals ?? []) {
+        queryClient.invalidateQueries({ queryKey: proposalKeys.detail(proposal.id) });
+      }
     },
   });
 }
 
-export function useUpdateProposalPackage() {
+export function useUpdateProposalBundle() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: ({
-      proposalId,
-      packageId,
+      bundleId,
       data,
     }: {
-      proposalId: number;
-      packageId: number;
-      data: ProposalPackageUpdate;
-    }) => proposalsApi.updatePackage(proposalId, packageId, data),
-    onSuccess: (_data, { proposalId }) => {
+      bundleId: number;
+      data: ProposalBundleUpdate;
+    }) => proposalsApi.updateBundle(bundleId, data),
+    onSuccess: (data, { bundleId }) => {
       queryClient.invalidateQueries({ queryKey: proposalKeys.lists() });
-      queryClient.invalidateQueries({ queryKey: proposalKeys.detail(proposalId) });
-      queryClient.invalidateQueries({ queryKey: ['proposals', proposalId, 'packages'] });
+      queryClient.invalidateQueries({ queryKey: ['proposal-bundles', bundleId] });
+      for (const proposal of data.proposals ?? []) {
+        queryClient.invalidateQueries({ queryKey: proposalKeys.detail(proposal.id) });
+      }
     },
   });
 }
 
-export function useDeleteProposalPackage() {
+export function useSendProposalBundle() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({
-      proposalId,
-      packageId,
-    }: {
-      proposalId: number;
-      packageId: number;
-    }) => proposalsApi.deletePackage(proposalId, packageId),
-    onSuccess: (_data, { proposalId }) => {
+    mutationFn: (bundleId: number) => proposalsApi.sendBundle(bundleId),
+    onSuccess: (data, bundleId) => {
       queryClient.invalidateQueries({ queryKey: proposalKeys.lists() });
-      queryClient.invalidateQueries({ queryKey: proposalKeys.detail(proposalId) });
-      queryClient.invalidateQueries({ queryKey: ['proposals', proposalId, 'packages'] });
+      queryClient.invalidateQueries({ queryKey: ['proposal-bundles', bundleId] });
+      for (const proposal of data.proposals ?? []) {
+        queryClient.invalidateQueries({ queryKey: proposalKeys.detail(proposal.id) });
+      }
     },
   });
 }

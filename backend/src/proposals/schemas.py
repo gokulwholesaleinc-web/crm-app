@@ -10,15 +10,10 @@ from pydantic import (
     ConfigDict,
     EmailStr,
     Field,
-    field_serializer,
-    field_validator,
-    model_validator,
 )
 
 PaymentType = Literal["one_time", "subscription"]
 RecurringInterval = Literal["month", "year"]
-MoneyDecimal: TypeAlias = Annotated[Decimal, Field(max_digits=12, decimal_places=2, ge=0)]
-QuantityDecimal: TypeAlias = Annotated[Decimal, Field(max_digits=10, decimal_places=2, gt=0)]
 
 
 class SignatureFieldCoords(BaseModel):
@@ -97,243 +92,6 @@ class ProposalBillingFields(BaseModel):
     currency: str = "USD"
 
 
-class _FixedDecimalResponse(BaseModel):
-    @field_serializer(
-        "subtotal",
-        "discount_amount",
-        "tax_amount",
-        "total",
-        "quantity",
-        "unit_price",
-        when_used="json",
-        check_fields=False,
-    )
-    def _serialize_decimal(self, value: Decimal | None) -> str | None:
-        if value is None:
-            return None
-        return f"{value.quantize(Decimal('0.01'))}"
-
-
-class ProposalPackageItemBase(BaseModel):
-    product_id: int | None = None
-    price_id: int | None = None
-    description: str = Field(min_length=1)
-    quantity: QuantityDecimal
-    unit_price: MoneyDecimal
-    discount_amount: MoneyDecimal = Decimal("0.00")
-    total: MoneyDecimal | None = None
-    sort_order: int = 0
-
-    model_config = ConfigDict(extra="forbid")
-
-    @field_validator("description")
-    @classmethod
-    def _trim_description(cls, value: str) -> str:
-        value = value.strip()
-        if not value:
-            raise ValueError("Item description is required")
-        return value
-
-
-class ProposalPackageItemCreate(ProposalPackageItemBase):
-    pass
-
-
-class ProposalPackageItemUpdate(BaseModel):
-    product_id: int | None = None
-    price_id: int | None = None
-    description: str | None = Field(default=None, min_length=1)
-    quantity: QuantityDecimal | None = None
-    unit_price: MoneyDecimal | None = None
-    discount_amount: MoneyDecimal | None = None
-    total: MoneyDecimal | None = None
-    sort_order: int | None = None
-
-    model_config = ConfigDict(extra="forbid")
-
-    @field_validator("description")
-    @classmethod
-    def _trim_description(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        value = value.strip()
-        if not value:
-            raise ValueError("Item description is required")
-        return value
-
-
-class ProposalPackageItemResponse(_FixedDecimalResponse):
-    id: int
-    package_id: int
-    product_id: int | None = None
-    price_id: int | None = None
-    description: str
-    quantity: Decimal
-    unit_price: Decimal
-    discount_amount: Decimal
-    total: Decimal
-    sort_order: int
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class ProposalPackagePublicItemResponse(_FixedDecimalResponse):
-    description: str
-    quantity: Decimal
-    unit_price: Decimal
-    discount_amount: Decimal
-    total: Decimal
-    sort_order: int
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class ProposalPackageBase(BaseModel):
-    name: str = Field(min_length=1)
-    description: str | None = None
-    currency: str = Field(default="USD", min_length=3, max_length=3)
-    payment_type: PaymentType = "one_time"
-    recurring_interval: RecurringInterval | None = None
-    recurring_interval_count: int | None = Field(default=None, ge=1)
-    subtotal: MoneyDecimal | None = None
-    discount_amount: MoneyDecimal | None = None
-    tax_amount: MoneyDecimal | None = None
-    total: MoneyDecimal | None = None
-    sort_order: int = 0
-    is_recommended: bool = False
-    is_active: bool = True
-    items: list[ProposalPackageItemCreate] = Field(min_length=1)
-
-    model_config = ConfigDict(extra="forbid")
-
-    @field_validator("name")
-    @classmethod
-    def _trim_name(cls, value: str) -> str:
-        value = value.strip()
-        if not value:
-            raise ValueError("Package name is required")
-        return value
-
-    @field_validator("currency")
-    @classmethod
-    def _normalize_currency(cls, value: str) -> str:
-        value = value.strip().upper()
-        if len(value) != 3 or not value.isalpha():
-            raise ValueError("Currency must be a 3-letter ISO code")
-        return value
-
-    @model_validator(mode="after")
-    def _validate_cadence(self):
-        if self.payment_type == "subscription":
-            if self.recurring_interval is None or self.recurring_interval_count is None:
-                raise ValueError("Subscription packages require recurring cadence")
-        elif self.recurring_interval is not None or self.recurring_interval_count is not None:
-            raise ValueError("One-time packages cannot include recurring cadence")
-        return self
-
-
-class ProposalPackageCreate(ProposalPackageBase):
-    pass
-
-
-class ProposalPackageUpdate(BaseModel):
-    name: str | None = Field(default=None, min_length=1)
-    description: str | None = None
-    currency: str | None = Field(default=None, min_length=3, max_length=3)
-    payment_type: PaymentType | None = None
-    recurring_interval: RecurringInterval | None = None
-    recurring_interval_count: int | None = Field(default=None, ge=1)
-    subtotal: MoneyDecimal | None = None
-    discount_amount: MoneyDecimal | None = None
-    tax_amount: MoneyDecimal | None = None
-    total: MoneyDecimal | None = None
-    sort_order: int | None = None
-    is_recommended: bool | None = None
-    is_active: bool | None = None
-    items: list[ProposalPackageItemCreate] | None = Field(default=None, min_length=1)
-
-    model_config = ConfigDict(extra="forbid")
-
-    @field_validator("name")
-    @classmethod
-    def _trim_name(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        value = value.strip()
-        if not value:
-            raise ValueError("Package name is required")
-        return value
-
-    @field_validator("currency")
-    @classmethod
-    def _normalize_currency(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        value = value.strip().upper()
-        if len(value) != 3 or not value.isalpha():
-            raise ValueError("Currency must be a 3-letter ISO code")
-        return value
-
-
-class ProposalPackageResponse(_FixedDecimalResponse):
-    id: int
-    proposal_id: int
-    name: str
-    description: str | None = None
-    currency: str
-    payment_type: PaymentType
-    recurring_interval: RecurringInterval | None = None
-    recurring_interval_count: int | None = None
-    subtotal: Decimal
-    discount_amount: Decimal
-    tax_amount: Decimal
-    total: Decimal
-    sort_order: int
-    is_recommended: bool
-    is_active: bool
-    items: list[ProposalPackageItemResponse] = []
-    created_at: datetime
-    updated_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class ProposalPackagePublicResponse(_FixedDecimalResponse):
-    id: int
-    name: str
-    description: str | None = None
-    currency: str
-    payment_type: PaymentType
-    recurring_interval: RecurringInterval | None = None
-    recurring_interval_count: int | None = None
-    subtotal: Decimal
-    discount_amount: Decimal
-    tax_amount: Decimal
-    total: Decimal
-    sort_order: int
-    is_recommended: bool
-    items: list[ProposalPackagePublicItemResponse] = []
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class SelectedPackageSnapshot(BaseModel):
-    package_id: int
-    name: str
-    description: str | None = None
-    currency: str
-    payment_type: PaymentType
-    recurring_interval: RecurringInterval | None = None
-    recurring_interval_count: int | None = None
-    subtotal: str
-    discount_amount: str
-    tax_amount: str
-    total: str
-    is_recommended: bool
-    captured_at: str
-    items: list[dict]
-
-
 # Proposal Schemas
 
 
@@ -405,12 +163,28 @@ class ProposalAcceptRequest(BaseModel):
     signature_image: str = Field(min_length=1, max_length=400_000)
     agreed_to_terms: bool
     signer_timezone: str | None = Field(default=None, max_length=100)
-    selected_package_id: int | None = None
+    selected_proposal_id: int | None = None
 
 
 class ProposalRejectRequest(BaseModel):
     signer_email: EmailStr
     reason: str | None = None
+
+
+class ProposalBundleCreate(BaseModel):
+    title: str = Field(min_length=1)
+    description: str | None = None
+    proposal_ids: list[int] = Field(min_length=2)
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class ProposalBundleUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=1)
+    description: str | None = None
+    proposal_ids: list[int] | None = Field(default=None, min_length=2)
+
+    model_config = ConfigDict(extra="forbid")
 
 
 from src.core.schemas import (  # noqa: E402
@@ -428,6 +202,23 @@ class ProposalViewResponse(BaseModel):
     viewed_at: datetime
     ip_address: str | None = None
     user_agent: str | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ProposalBundleBrief(BaseModel):
+    id: int
+    bundle_number: str
+    public_token: str | None = None
+    title: str
+    description: str | None = None
+    status: str
+    selected_proposal_id: int | None = None
+    selected_at: datetime | None = None
+    sent_at: datetime | None = None
+    accepted_at: datetime | None = None
+    contact: ContactBrief | None = None
+    company: CompanyBrief | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -471,9 +262,10 @@ class ProposalResponse(ProposalBase, ProposalBillingFields):
     signature_field_coords: SignatureFieldPlacementValue | None = None
     date_field_coords: SignatureFieldPlacementValue | None = None
     signing_documents: list[ProposalSigningDocumentResponse] = []
-    packages: list[ProposalPackageResponse] = []
-    selected_package_id: int | None = None
-    selected_package_snapshot: SelectedPackageSnapshot | None = None
+    proposal_bundle_id: int | None = None
+    bundle_sort_order: int = 0
+    bundle_is_recommended: bool = False
+    bundle: ProposalBundleBrief | None = None
     terms_and_conditions: str | None = None
     created_at: datetime
     updated_at: datetime
@@ -493,6 +285,19 @@ class ProposalResponse(ProposalBase, ProposalBillingFields):
     # the CRM can show "viewed 12 times from 3 IPs" + the raw log for
     # forensics, dispute resolution, and legal discovery.
     views: list[ProposalViewResponse] = []
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ProposalBundleResponse(ProposalBundleBrief):
+    proposals: list[ProposalResponse] = []
+    created_at: datetime
+    updated_at: datetime
+    created_by: UserBrief | None = Field(
+        default=None,
+        validation_alias=AliasChoices("created_by", "created_by_user"),
+    )
+    owner: UserBrief | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -551,7 +356,9 @@ class ProposalBranding(BaseModel):
 class ProposalPublicResponse(BaseModel):
     """Public view of a proposal (no auth required)."""
 
+    id: int | None = None
     proposal_number: str
+    public_token: str | None = None
     title: str
     content: str | None = None
     cover_letter: str | None = None
@@ -572,8 +379,14 @@ class ProposalPublicResponse(BaseModel):
     currency: str | None = None
     stripe_payment_url: str | None = None
     paid_at: datetime | None = None
-    packages: list[ProposalPackagePublicResponse] = []
-    selected_package_snapshot: SelectedPackageSnapshot | None = None
+    proposal_bundle_id: int | None = None
+    bundle_sort_order: int = 0
+    bundle_is_recommended: bool = False
+    bundle_id: int | None = None
+    bundle_title: str | None = None
+    bundle_description: str | None = None
+    bundle_selected_proposal_id: int | None = None
+    proposal_options: list["ProposalPublicResponse"] = []
     company: CompanyBrief | None = None
     contact: ContactBrief | None = None
     branding: ProposalBranding | None = None

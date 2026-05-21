@@ -1,10 +1,5 @@
 import { ShieldCheckIcon, EyeIcon } from '@heroicons/react/24/outline';
 import type { Proposal } from '../../types';
-import {
-  formatPackageCadence,
-  formatPackageCurrency,
-  isZeroMoney,
-} from './proposalPackages';
 
 /**
  * Detail-page sidebar card that surfaces the e-signature audit trail
@@ -51,7 +46,6 @@ export function ProposalAuditCard({ proposal }: ProposalAuditCardProps) {
   const uniqueIps = new Set(
     sortedViews.map((v) => v.ip_address).filter((ip): ip is string => Boolean(ip)),
   );
-  const selectedPackage = proposal.selected_package_snapshot;
 
   return (
     <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-transparent dark:border-gray-700">
@@ -102,50 +96,6 @@ export function ProposalAuditCard({ proposal }: ProposalAuditCardProps) {
               </div>
             )}
           </dl>
-        </div>
-      )}
-
-      {selectedPackage && (
-        <div className="mb-5 rounded-md border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900/40">
-          <h3 className="text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide">
-            Selected package
-          </h3>
-          <div className="mt-2 flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                {selectedPackage.name}
-              </p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                {formatPackageCadence(
-                  selectedPackage.payment_type,
-                  selectedPackage.recurring_interval,
-                  selectedPackage.recurring_interval_count,
-                )}
-              </p>
-            </div>
-            <p className="shrink-0 text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">
-              {formatPackageCurrency(selectedPackage.total, selectedPackage.currency)}
-            </p>
-          </div>
-          {selectedPackage.items.length > 0 && (
-            <ul className="mt-3 divide-y divide-gray-200 text-xs dark:divide-gray-700">
-              {selectedPackage.items.map((item, index) => (
-                <li key={`${selectedPackage.package_id}-${index}`} className="py-1.5">
-                  <div className="flex justify-between gap-3">
-                    <span className="text-gray-600 dark:text-gray-300">{item.description}</span>
-                    <span className="tabular-nums text-gray-900 dark:text-gray-100">
-                      {formatPackageCurrency(item.total, selectedPackage.currency)}
-                    </span>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-          {!isZeroMoney(selectedPackage.tax_amount) && (
-            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-              Tax included: {formatPackageCurrency(selectedPackage.tax_amount, selectedPackage.currency)}
-            </p>
-          )}
         </div>
       )}
 
