@@ -139,6 +139,37 @@ class TestStampMasterWithSignature:
         assert "203.0.113.7" in audit_text
         assert "PR-2026-STAMP-1" in audit_text
 
+    def test_audit_page_includes_selected_package_snapshot(self):
+        inputs = _inputs()
+        out = stamp_master_with_signature(
+            StampInputs(
+                **{
+                    **inputs.__dict__,
+                    "selected_package_snapshot": {
+                        "name": "Growth <Package>",
+                        "currency": "USD",
+                        "total": "900.00",
+                        "items": [
+                            {
+                                "description": "Implementation\nSupport",
+                                "quantity": "1.00",
+                                "total": "900.00",
+                            }
+                        ],
+                    },
+                }
+            )
+        )
+        audit_text = PdfReader(io.BytesIO(out)).pages[-1].extract_text() or ""
+        assert "Growth <Package>" in audit_text
+        assert "USD 900.00" in audit_text
+        assert "Implementation" in audit_text
+
+    def test_audit_page_skips_missing_selected_package_snapshot(self):
+        out = stamp_master_with_signature(_inputs())
+        audit_text = PdfReader(io.BytesIO(out)).pages[-1].extract_text() or ""
+        assert "Selected package" not in audit_text
+
     def test_date_label_only_renders_when_date_coords_are_supplied(self):
         out_without_date = stamp_master_with_signature(_inputs())
         no_date_text = "\n".join(

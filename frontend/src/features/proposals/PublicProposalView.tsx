@@ -7,9 +7,19 @@ import { useForceLightMode } from '../../hooks/useForceLightMode';
 import { formatDate } from '../../utils/formatters';
 import { setPublicPageMeta } from './publicMeta';
 import { ProposalAttachmentsSection } from './ProposalAttachmentsSection';
-import type { ProposalAttachmentPublic } from '../../types';
+import type {
+  ProposalAttachmentPublic,
+  ProposalPackagePublic,
+  SelectedPackageSnapshot,
+} from '../../types';
 import { ScrollToSignIndicator } from '../../components/ui/ScrollToSignIndicator';
 import { SignToConfirmModal } from '../../components/SignToConfirmModal';
+import {
+  formatPackageCadence,
+  formatPackageCurrency,
+  isZeroMoney,
+  sortPackages,
+} from './proposalPackages';
 
 // Bare axios instance for public (unauthenticated) proposal endpoints.
 // Deliberately does NOT attach the CRM Bearer token or X-Tenant-Slug
@@ -65,6 +75,8 @@ interface PublicProposal {
   designated_signer_email: string | null;
   has_master_contract: boolean;
   signing_document_count?: number;
+  packages?: ProposalPackagePublic[];
+  selected_package_snapshot?: SelectedPackageSnapshot | null;
 }
 
 const DEFAULT_BRANDING: ProposalBranding = {
@@ -90,6 +102,7 @@ function PublicProposalView() {
   const [logoError, setLogoError] = useState(false);
   const [signModalOpen, setSignModalOpen] = useState(false);
   const [signError, setSignError] = useState<string | null>(null);
+  const [selectedPackageId, setSelectedPackageId] = useState<number | null>(null);
   // Tracks which attachment IDs the customer has opened on this device.
   // Seeded from the public response (server-side `viewed` flag) the first
   // time we see the proposal so a returning customer doesn't have to
@@ -215,10 +228,12 @@ function PublicProposalView() {
       signatureDataUrl,
       email,
       agreedToTerms,
+      selectedPackageId: selectedPackageIdForAccept,
     }: {
       signatureDataUrl: string;
       email: string;
       agreedToTerms: boolean;
+      selectedPackageId?: number | null;
     }): Promise<string | null> => {
       if (!proposal) return 'Proposal is no longer available.';
       const recipient = proposal.contact?.full_name ?? email;
@@ -231,6 +246,7 @@ function PublicProposalView() {
             signature_image: signatureDataUrl,
             agreed_to_terms: agreedToTerms,
             signer_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            selected_package_id: selectedPackageIdForAccept,
           },
         );
         setProposal(response.data);
@@ -321,6 +337,11 @@ function PublicProposalView() {
 
   const attachments = proposal.attachments ?? [];
   const signingDocuments = proposal.signing_documents ?? [];
+  const packages = sortPackages(proposal.packages ?? []);
+  const hasPackageOptions = packages.length > 0;
+  const selectedPackage =
+    packages.find((pkg) => pkg.id === selectedPackageId) ?? null;
+  const packageSelectionReady = !hasPackageOptions || selectedPackage !== null;
 
   const handleAttachmentViewed = (id: number) => {
     // startTransition so the section re-render is treated as
@@ -369,7 +390,9 @@ function PublicProposalView() {
   const canCompleteLegacyPayment = Boolean(
     proposal.stripe_payment_url &&
     proposal.status === 'awaiting_payment' &&
-    !proposal.paid_at,
+    !proposal.paid_at &&
+    !hasPackageOptions &&
+    !proposal.selected_package_snapshot,
   );
 
   const statusPill = actionDone ?? (
@@ -526,6 +549,25 @@ function PublicProposalView() {
           </section>
         )}
 
+        {hasPackageOptions && canRespond && (
+          <PackageSelectionFieldset
+            packages={packages}
+            selectedPackageId={selectedPackageId}
+            onChange={(packageId) => {
+              setSelectedPackageId(packageId);
+              setSignError(null);
+            }}
+            accent={primary}
+          />
+        )}
+
+        {proposal.selected_package_snapshot && !canRespond && (
+          <SelectedPackageSummary
+            snapshot={proposal.selected_package_snapshot}
+            accent={primary}
+          />
+        )}
+
         {/* Content fallback */}
         {proposal.content &&
           contentSections.length === 0 &&
@@ -569,6 +611,15 @@ function PublicProposalView() {
               </p>
             )}
 
+            {hasPackageOptions && !packageSelectionReady && (
+              <p
+                role="status"
+                className="mb-4 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2"
+              >
+                Choose a package before signing.
+              </p>
+            )}
+
             <div className="flex flex-col sm:flex-row gap-3">
               <button
                 type="button"
@@ -579,9 +630,13 @@ function PublicProposalView() {
                     setSignError(`Open every document before signing (${unopenedDocumentCount} remaining).`);
                     return;
                   }
+                  if (!packageSelectionReady) {
+                    setSignError('Choose a package before signing.');
+                    return;
+                  }
                   setSignModalOpen(true);
                 }}
-                disabled={actionPending || !allRequiredDocumentsOpened}
+                disabled={actionPending || !allRequiredDocumentsOpened || !packageSelectionReady}
                 className="inline-flex items-center justify-center gap-2 rounded px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50 transition-opacity"
                 style={{ backgroundColor: accent, outlineColor: accent }}
               >
@@ -628,6 +683,23 @@ function PublicProposalView() {
           termsAndConditions={proposal.terms_and_conditions}
           hasMasterContract={proposal.has_master_contract}
           signingDocumentCount={proposal.signing_document_count ?? 0}
+          selectedPackageId={selectedPackageId}
+          selectedPackageSummary={
+            selectedPackage
+              ? {
+                  name: selectedPackage.name,
+                  total: formatPackageCurrency(
+                    selectedPackage.total,
+                    selectedPackage.currency,
+                  ),
+                  cadence: formatPackageCadence(
+                    selectedPackage.payment_type,
+                    selectedPackage.recurring_interval,
+                    selectedPackage.recurring_interval_count,
+                  ),
+                }
+              : null
+          }
           onSubmit={submitSignature}
         />
 
@@ -770,6 +842,171 @@ function PublicProposalView() {
 // -----------------------------------------------------------------
 // Local components
 // -----------------------------------------------------------------
+
+interface PackageSelectionFieldsetProps {
+  packages: ProposalPackagePublic[];
+  selectedPackageId: number | null;
+  onChange: (packageId: number) => void;
+  accent: string;
+}
+
+function PackageSelectionFieldset({
+  packages,
+  selectedPackageId,
+  onChange,
+  accent,
+}: PackageSelectionFieldsetProps) {
+  return (
+    <section className="mt-10 sm:mt-12">
+      <fieldset>
+        <PlainSectionHeader title="Packages" accent={accent} />
+        <legend className="sr-only">Choose one proposal package</legend>
+        <div className="grid gap-4 sm:grid-cols-2">
+          {packages.map((pkg) => {
+            const checked = selectedPackageId === pkg.id;
+            const inputId = `proposal-package-${pkg.id}`;
+            return (
+              <label
+                key={pkg.id}
+                htmlFor={inputId}
+                className={`relative flex cursor-pointer flex-col rounded border p-4 transition-colors ${
+                  checked
+                    ? 'border-gray-900 bg-white shadow-sm'
+                    : 'border-gray-200 bg-white hover:border-gray-300'
+                }`}
+                style={checked ? { borderColor: accent } : undefined}
+              >
+                <div className="flex items-start gap-3">
+                  <input
+                    id={inputId}
+                    type="radio"
+                    name="proposal-package"
+                    value={pkg.id}
+                    checked={checked}
+                    onChange={() => onChange(pkg.id)}
+                    className="mt-1 h-4 w-4 border-gray-300 text-gray-900 focus:ring-2"
+                    style={{ accentColor: accent }}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-semibold text-gray-900">
+                        {pkg.name}
+                      </span>
+                      {pkg.is_recommended && (
+                        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-gray-600">
+                          Recommended
+                        </span>
+                      )}
+                    </div>
+                    {pkg.description && (
+                      <p className="mt-1 text-sm leading-relaxed text-gray-600">
+                        {pkg.description}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <p className="text-xl font-semibold tabular-nums text-gray-900">
+                    {formatPackageCurrency(pkg.total, pkg.currency)}
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    {formatPackageCadence(
+                      pkg.payment_type,
+                      pkg.recurring_interval,
+                      pkg.recurring_interval_count,
+                    )}
+                  </p>
+                </div>
+
+                {pkg.items.length > 0 && (
+                  <ul className="mt-4 divide-y divide-gray-100 border-y border-gray-100 text-sm">
+                    {pkg.items.map((item, index) => (
+                      <li key={`${pkg.id}-${index}`} className="py-2">
+                        <div className="flex items-start justify-between gap-3">
+                          <span className="text-gray-700">{item.description}</span>
+                          <span className="shrink-0 tabular-nums text-gray-900">
+                            {formatPackageCurrency(item.total, pkg.currency)}
+                          </span>
+                        </div>
+                        <p className="mt-0.5 text-xs text-gray-500 tabular-nums">
+                          {item.quantity} x {formatPackageCurrency(item.unit_price, pkg.currency)}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                <dl className="mt-4 grid grid-cols-2 gap-y-1 text-sm">
+                  <dt className="text-gray-500">Subtotal</dt>
+                  <dd className="text-right tabular-nums text-gray-900">
+                    {formatPackageCurrency(pkg.subtotal, pkg.currency)}
+                  </dd>
+                  {!isZeroMoney(pkg.discount_amount) && (
+                    <>
+                      <dt className="text-gray-500">Discount</dt>
+                      <dd className="text-right tabular-nums text-gray-900">
+                        -{formatPackageCurrency(pkg.discount_amount, pkg.currency)}
+                      </dd>
+                    </>
+                  )}
+                  {!isZeroMoney(pkg.tax_amount) && (
+                    <>
+                      <dt className="text-gray-500">Tax</dt>
+                      <dd className="text-right tabular-nums text-gray-900">
+                        {formatPackageCurrency(pkg.tax_amount, pkg.currency)}
+                      </dd>
+                    </>
+                  )}
+                  <dt className="font-medium text-gray-700">Total</dt>
+                  <dd className="text-right font-semibold tabular-nums text-gray-900">
+                    {formatPackageCurrency(pkg.total, pkg.currency)}
+                  </dd>
+                </dl>
+              </label>
+            );
+          })}
+        </div>
+      </fieldset>
+    </section>
+  );
+}
+
+function SelectedPackageSummary({
+  snapshot,
+  accent,
+}: {
+  snapshot: SelectedPackageSnapshot;
+  accent: string;
+}) {
+  return (
+    <section className="mt-10 sm:mt-12">
+      <PlainSectionHeader title="Selected Package" accent={accent} />
+      <div className="rounded border border-gray-200 bg-white p-4">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900">{snapshot.name}</h3>
+            {snapshot.description && (
+              <p className="mt-1 text-sm text-gray-600">{snapshot.description}</p>
+            )}
+          </div>
+          <div className="text-left sm:text-right">
+            <p className="text-lg font-semibold tabular-nums text-gray-900">
+              {formatPackageCurrency(snapshot.total, snapshot.currency)}
+            </p>
+            <p className="text-sm text-gray-500">
+              {formatPackageCadence(
+                snapshot.payment_type,
+                snapshot.recurring_interval,
+                snapshot.recurring_interval_count,
+              )}
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
 
 interface PlainSectionHeaderProps {
   title: string;

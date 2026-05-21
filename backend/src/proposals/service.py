@@ -19,6 +19,7 @@ from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
+from src.activities.models import Activity
 from src.attachments.models import Attachment
 from src.attachments.object_storage import (
     delete_object,
@@ -43,6 +44,8 @@ from src.email.service import EmailService, assert_gmail_connected
 from src.email.types import EmailAttachment
 from src.proposals.models import (
     Proposal,
+    ProposalPackage,
+    ProposalPackageItem,
     ProposalSigningDocument,
     ProposalTemplate,
     ProposalView,
@@ -50,6 +53,8 @@ from src.proposals.models import (
 from src.proposals.pdf_stamper import StampInputs, stamp_master_with_signature
 from src.proposals.schemas import (
     ProposalCreate,
+    ProposalPackageCreate,
+    ProposalPackageUpdate,
     ProposalUpdate,
     SignatureFieldCoords,
     SignatureFieldPlacementValue,
@@ -66,6 +71,34 @@ class _UnsetType:
 
 
 _UNSET = _UnsetType()
+_MONEY_ZERO = Decimal("0.00")
+_MONEY_QUANT = Decimal("0.01")
+
+
+def _money(value: Any) -> Decimal:
+    try:
+        return Decimal(str(value if value is not None else "0")).quantize(_MONEY_QUANT)
+    except Exception as exc:
+        raise ValueError("Invalid money amount") from exc
+
+
+def _decimal_text(value: Any) -> str:
+    return f"{_money(value):.2f}"
+
+
+def _html_money(currency: str, value: Any) -> str:
+    return f"{escape((currency or 'USD').upper())} {_money(value):,.2f}"
+
+
+def _package_snapshot_summary(snapshot: dict | None) -> str | None:
+    if not snapshot:
+        return None
+    name = str(snapshot.get("name") or "").strip()
+    currency = str(snapshot.get("currency") or "USD").upper()
+    total = snapshot.get("total")
+    if not name or total is None:
+        return None
+    return f"{name} ({currency} {_money(total):,.2f})"
 
 
 def _single_coords_for_stamper(coords: dict) -> dict | None:
@@ -250,6 +283,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
             selectinload(Proposal.created_by_user),
             selectinload(Proposal.owner),
             selectinload(Proposal.signing_documents),
+            selectinload(Proposal.packages).selectinload(ProposalPackage.items),
         ]
 
     async def _generate_proposal_number(self) -> str:
@@ -311,6 +345,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 selectinload(Proposal.created_by_user),
                 selectinload(Proposal.owner),
                 selectinload(Proposal.signing_documents),
+                selectinload(Proposal.packages).selectinload(ProposalPackage.items),
             )
         )
 
@@ -359,6 +394,370 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         proposals = list(result.scalars().all())
 
         return proposals, total
+
+    def _assert_packages_mutable(self, proposal: Proposal) -> None:
+        if proposal.status != "draft" or proposal.signed_at is not None:
+            raise ValueError("Proposal packages can only be changed while the proposal is draft")
+
+    def _normalize_package_payload(self, package: ProposalPackage) -> None:
+        package.name = (package.name or "").strip()
+        if not package.name:
+            raise ValueError("Package name is required")
+        package.currency = (package.currency or "USD").strip().upper()
+        if len(package.currency) != 3 or not package.currency.isalpha():
+            raise ValueError("Currency must be a 3-letter ISO code")
+        if package.payment_type not in ("one_time", "subscription"):
+            raise ValueError("Package payment_type must be one_time or subscription")
+        if package.payment_type == "subscription":
+            if package.recurring_interval not in ("month", "year"):
+                raise ValueError("Subscription packages require a month or year interval")
+            if not package.recurring_interval_count or package.recurring_interval_count < 1:
+                raise ValueError("Subscription packages require recurring_interval_count >= 1")
+        else:
+            package.recurring_interval = None
+            package.recurring_interval_count = None
+
+        subtotal = _MONEY_ZERO
+        discount = _MONEY_ZERO
+        for index, item in enumerate(package.items or []):
+            item.description = (item.description or "").strip()
+            if not item.description:
+                raise ValueError("Package item description is required")
+            quantity = _money(item.quantity)
+            unit_price = _money(item.unit_price)
+            item_discount = _money(item.discount_amount)
+            if quantity <= 0:
+                raise ValueError("Package item quantity must be greater than 0")
+            if unit_price < 0 or item_discount < 0:
+                raise ValueError("Package item money amounts must be non-negative")
+            gross = (quantity * unit_price).quantize(_MONEY_QUANT)
+            if item_discount > gross:
+                raise ValueError("Package item discount cannot exceed line amount")
+            item.quantity = quantity
+            item.unit_price = unit_price
+            item.discount_amount = item_discount
+            item.total = (gross - item_discount).quantize(_MONEY_QUANT)
+            if item.sort_order is None:
+                item.sort_order = index
+            subtotal += gross
+            discount += item_discount
+
+        if not package.items:
+            raise ValueError("Package must include at least one item")
+        package.subtotal = subtotal.quantize(_MONEY_QUANT)
+        package.discount_amount = discount.quantize(_MONEY_QUANT)
+        package.tax_amount = _MONEY_ZERO
+        package.total = (package.subtotal - package.discount_amount).quantize(_MONEY_QUANT)
+        if package.is_active and package.total <= 0:
+            raise ValueError("Active package total must be greater than 0")
+
+    async def _validate_proposal_packages(self, proposal_id: int) -> None:
+        packages = await self.list_packages(proposal_id)
+        active = [package for package in packages if package.is_active]
+        currencies = {package.currency for package in active}
+        if len(currencies) > 1:
+            raise ValueError("All active proposal packages must use the same currency")
+        if sum(1 for package in active if package.is_recommended) > 1:
+            raise ValueError("Only one active proposal package can be recommended")
+        for package in active:
+            self._normalize_package_payload(package)
+
+    async def _assert_recommended_available(
+        self,
+        proposal_id: int,
+        *,
+        package_id: int | None = None,
+        is_recommended: bool,
+    ) -> None:
+        if not is_recommended:
+            return
+        query = (
+            select(func.count(ProposalPackage.id))
+            .where(ProposalPackage.proposal_id == proposal_id)
+            .where(ProposalPackage.is_recommended == True)  # noqa: E712
+        )
+        if package_id is not None:
+            query = query.where(ProposalPackage.id != package_id)
+        with self.db.no_autoflush:
+            result = await self.db.execute(query)
+        if result.scalar() or 0:
+            raise ValueError("Only one proposal package can be recommended")
+
+    async def validate_packages_ready(self, proposal: Proposal) -> None:
+        packages = await self.list_packages(proposal.id)
+        if not packages:
+            return
+        active = [package for package in packages if package.is_active]
+        if not active:
+            raise ValueError("Proposal has package rows but no active packages")
+        await self._validate_proposal_packages(proposal.id)
+
+    async def list_packages(self, proposal_id: int) -> list[ProposalPackage]:
+        result = await self.db.execute(
+            select(ProposalPackage)
+            .options(selectinload(ProposalPackage.items))
+            .where(ProposalPackage.proposal_id == proposal_id)
+            .order_by(
+                ProposalPackage.sort_order.asc(),
+                ProposalPackage.id.asc(),
+            )
+        )
+        return list(result.scalars().all())
+
+    async def get_package(
+        self,
+        proposal_id: int,
+        package_id: int,
+    ) -> ProposalPackage | None:
+        result = await self.db.execute(
+            select(ProposalPackage)
+            .options(selectinload(ProposalPackage.items))
+            .where(ProposalPackage.proposal_id == proposal_id)
+            .where(ProposalPackage.id == package_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_active_packages_for_public(self, proposal_id: int) -> list[ProposalPackage]:
+        result = await self.db.execute(
+            select(ProposalPackage)
+            .options(selectinload(ProposalPackage.items))
+            .where(ProposalPackage.proposal_id == proposal_id)
+            .where(ProposalPackage.is_active == True)  # noqa: E712
+            .order_by(
+                ProposalPackage.sort_order.asc(),
+                ProposalPackage.id.asc(),
+            )
+        )
+        return list(result.scalars().all())
+
+    async def create_package(
+        self,
+        proposal: Proposal,
+        data: ProposalPackageCreate,
+        user_id: int,
+    ) -> ProposalPackage:
+        self._assert_packages_mutable(proposal)
+        values = data.model_dump(exclude={"items", "subtotal", "discount_amount", "tax_amount", "total"})
+        package = ProposalPackage(
+            proposal_id=proposal.id,
+            created_by_id=user_id,
+            **values,
+        )
+        package.items = [
+            ProposalPackageItem(
+                **item.model_dump(exclude={"total"}),
+            )
+            for item in data.items
+        ]
+        self._normalize_package_payload(package)
+        await self._assert_recommended_available(
+            proposal.id,
+            is_recommended=package.is_recommended,
+        )
+        self.db.add(package)
+        await self.db.flush()
+        await self._validate_proposal_packages(proposal.id)
+        await self.db.refresh(package)
+        return package
+
+    async def update_package(
+        self,
+        proposal: Proposal,
+        package: ProposalPackage,
+        data: ProposalPackageUpdate,
+        user_id: int,
+    ) -> ProposalPackage:
+        self._assert_packages_mutable(proposal)
+        values = data.model_dump(exclude_unset=True, exclude={"items", "subtotal", "discount_amount", "tax_amount", "total"})
+        for key, value in values.items():
+            setattr(package, key, value)
+        if data.items is not None:
+            package.items = [
+                ProposalPackageItem(**item.model_dump(exclude={"total"}))
+                for item in data.items
+            ]
+        package.updated_by_id = user_id
+        self._normalize_package_payload(package)
+        await self._assert_recommended_available(
+            proposal.id,
+            package_id=package.id,
+            is_recommended=package.is_recommended,
+        )
+        await self.db.flush()
+        await self._validate_proposal_packages(proposal.id)
+        await self.db.refresh(package)
+        return package
+
+    async def delete_package(
+        self,
+        proposal: Proposal,
+        package: ProposalPackage,
+        user_id: int,
+    ) -> ProposalPackage:
+        self._assert_packages_mutable(proposal)
+        package.is_active = False
+        package.updated_by_id = user_id
+        self._normalize_package_payload(package)
+        await self.db.flush()
+        await self._validate_proposal_packages(proposal.id)
+        await self.db.refresh(package)
+        return package
+
+    def build_selected_package_snapshot(
+        self,
+        package: ProposalPackage,
+        *,
+        captured_at: datetime,
+    ) -> dict:
+        self._normalize_package_payload(package)
+        return {
+            "package_id": package.id,
+            "name": package.name,
+            "description": package.description,
+            "currency": package.currency,
+            "payment_type": package.payment_type,
+            "recurring_interval": package.recurring_interval,
+            "recurring_interval_count": package.recurring_interval_count,
+            "subtotal": _decimal_text(package.subtotal),
+            "discount_amount": _decimal_text(package.discount_amount),
+            "tax_amount": _decimal_text(package.tax_amount),
+            "total": _decimal_text(package.total),
+            "is_recommended": bool(package.is_recommended),
+            "captured_at": captured_at.isoformat().replace("+00:00", "Z"),
+            "items": [
+                {
+                    "description": item.description,
+                    "quantity": _decimal_text(item.quantity),
+                    "unit_price": _decimal_text(item.unit_price),
+                    "discount_amount": _decimal_text(item.discount_amount),
+                    "total": _decimal_text(item.total),
+                }
+                for item in sorted(package.items, key=lambda item: (item.sort_order, item.id or 0))
+            ],
+        }
+
+    async def copy_packages_to_proposal(
+        self,
+        source: Proposal,
+        target: Proposal,
+        user_id: int,
+    ) -> None:
+        packages = await self.list_packages(source.id)
+        for source_package in packages:
+            clone = ProposalPackage(
+                proposal_id=target.id,
+                name=source_package.name,
+                description=source_package.description,
+                currency=source_package.currency,
+                payment_type=source_package.payment_type,
+                recurring_interval=source_package.recurring_interval,
+                recurring_interval_count=source_package.recurring_interval_count,
+                sort_order=source_package.sort_order,
+                is_recommended=source_package.is_recommended,
+                is_active=source_package.is_active,
+                created_by_id=user_id,
+            )
+            clone.items = [
+                ProposalPackageItem(
+                    product_id=item.product_id,
+                    price_id=item.price_id,
+                    description=item.description,
+                    quantity=item.quantity,
+                    unit_price=item.unit_price,
+                    discount_amount=item.discount_amount,
+                    sort_order=item.sort_order,
+                )
+                for item in source_package.items
+            ]
+            self._normalize_package_payload(clone)
+            self.db.add(clone)
+        target.selected_package_id = None
+        target.selected_package_snapshot = None
+        await self.db.flush()
+
+    def _render_package_options_html(self, packages: list[ProposalPackage]) -> str:
+        if not packages:
+            return ""
+        cards = []
+        for package in packages:
+            items_html = "".join(
+                "<tr>"
+                f"<td>{escape(item.description)}</td>"
+                f"<td class=\"tabular\">{_decimal_text(item.quantity)}</td>"
+                f"<td class=\"tabular\">{_html_money(package.currency, item.unit_price)}</td>"
+                f"<td class=\"tabular\">{_html_money(package.currency, item.total)}</td>"
+                "</tr>"
+                for item in sorted(package.items, key=lambda item: (item.sort_order, item.id or 0))
+            )
+            cadence = ""
+            if package.payment_type == "subscription":
+                count = package.recurring_interval_count or 1
+                cadence = f" / every {count} {escape(package.recurring_interval or 'month')}"
+            recommended = (
+                '<span class="pkg-recommended">Recommended</span>'
+                if package.is_recommended
+                else ""
+            )
+            description = (
+                f'<p class="pkg-desc">{escape(package.description)}</p>'
+                if package.description
+                else ""
+            )
+            cards.append(
+                '<div class="pkg-card">'
+                f'<h3>{escape(package.name)} {recommended}</h3>'
+                f'<p class="pkg-total">{_html_money(package.currency, package.total)}{cadence}</p>'
+                f"{description}"
+                '<table class="pkg-table"><thead><tr><th>Item</th><th>Qty</th>'
+                '<th>Unit</th><th>Total</th></tr></thead>'
+                f"<tbody>{items_html}</tbody></table>"
+                "</div>"
+            )
+        return (
+            '<section class="doc-section">'
+            '<div class="doc-section-rule"></div>'
+            '<h2 class="doc-section-title">Packages</h2>'
+            + "".join(cards)
+            + "</section>"
+        )
+
+    def _render_selected_package_snapshot_html(self, snapshot: dict | None) -> str:
+        if not snapshot:
+            return ""
+        currency = str(snapshot.get("currency") or "USD").upper()
+        items = snapshot.get("items") or []
+        rows = "".join(
+            "<tr>"
+            f"<td>{escape(str(item.get('description') or ''))}</td>"
+            f"<td class=\"tabular\">{escape(str(item.get('quantity') or '0.00'))}</td>"
+            f"<td class=\"tabular\">{_html_money(currency, item.get('unit_price'))}</td>"
+            f"<td class=\"tabular\">{_html_money(currency, item.get('total'))}</td>"
+            "</tr>"
+            for item in items
+            if isinstance(item, dict)
+        )
+        cadence = ""
+        if snapshot.get("payment_type") == "subscription":
+            count = snapshot.get("recurring_interval_count") or 1
+            cadence = f" / every {escape(str(count))} {escape(str(snapshot.get('recurring_interval') or 'month'))}"
+        description = (
+            f'<p class="pkg-desc">{escape(str(snapshot.get("description") or ""))}</p>'
+            if snapshot.get("description")
+            else ""
+        )
+        return (
+            '<section class="doc-section">'
+            '<div class="doc-section-rule"></div>'
+            '<h2 class="doc-section-title">Selected Package</h2>'
+            '<div class="pkg-card">'
+            f'<h3>{escape(str(snapshot.get("name") or ""))}</h3>'
+            f'<p class="pkg-total">{_html_money(currency, snapshot.get("total"))}{cadence}</p>'
+            f"{description}"
+            '<table class="pkg-table"><thead><tr><th>Item</th><th>Qty</th>'
+            '<th>Unit</th><th>Total</th></tr></thead>'
+            f"<tbody>{rows}</tbody></table>"
+            "</div></section>"
+        )
 
     async def update(
         self,
@@ -592,6 +991,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         signer_ip: str | None = None,
         signer_user_agent: str | None = None,
         signer_timezone: str | None = None,
+        selected_package_id: int | None = None,
     ) -> Proposal:
         """Accept a proposal via the public Sign-to-Confirm modal.
 
@@ -610,6 +1010,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         email doesn't match, consent isn't given, or the proposal is
         past its ``valid_until`` date.
         """
+        now = datetime.now(UTC)
         if proposal.status not in ("sent", "viewed"):
             raise ValueError(f"Cannot accept proposal in '{proposal.status}' status")
 
@@ -617,7 +1018,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         # already shows "Expired" in the UI, but without this a signer
         # could craft a direct POST and sign past the expiry, which
         # undermines the "Valid until" commitment they saw.
-        if proposal.valid_until and proposal.valid_until < datetime.now(UTC).date():
+        if proposal.valid_until and proposal.valid_until < now.date():
             raise ValueError(
                 f"This proposal expired on {proposal.valid_until.isoformat()} "
                 "and can no longer be accepted",
@@ -642,13 +1043,30 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
             raise ValueError("Signature image is required")
 
         normalized_signer_email = _assert_signer_matches(proposal, signer_email)
+        active_packages = await self.get_active_packages_for_public(proposal.id)
+        selected_package: ProposalPackage | None = None
+        selected_package_snapshot: dict | None = None
+        if active_packages:
+            if selected_package_id is None:
+                raise ValueError("Select a proposal package before signing")
+            selected_package = next(
+                (package for package in active_packages if package.id == selected_package_id),
+                None,
+            )
+            if selected_package is None:
+                raise ValueError("Selected package is not available for this proposal")
+            selected_package_snapshot = self.build_selected_package_snapshot(
+                selected_package,
+                captured_at=now,
+            )
+        elif selected_package_id is not None:
+            raise ValueError("Selected package is not available for this proposal")
 
         # Atomic status transition: conditional UPDATE guarded by the
         # same (sent|viewed) whitelist. If two accept requests arrive
         # concurrently, only one row update will match — the other
         # returns rowcount=0 and we raise instead of double-stamping
         # the master PDF.
-        now = datetime.now(UTC)
         stmt = (
             update(Proposal)
             .where(Proposal.id == proposal.id)
@@ -663,6 +1081,8 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 signer_timezone=signer_timezone,
                 signed_at=now,
                 signature_image=signature_image,
+                selected_package_id=selected_package.id if selected_package else None,
+                selected_package_snapshot=selected_package_snapshot,
             )
         )
         result = await self.db.execute(stmt)
@@ -672,6 +1092,12 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
             )
         await self.db.flush()
         await self.db.refresh(proposal)
+        if selected_package_snapshot:
+            await self._record_package_selected_activity(
+                proposal,
+                selected_package_snapshot,
+                created_at=now,
+            )
 
         # Stamp + upload the master PDF if Lorenzo attached one. Failure
         # is logged but does not unwind the acceptance — the signed-row
@@ -693,7 +1119,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         # outside the try so an ImportError surfaces loudly rather than
         # masquerading as a runtime swallow.
         if proposal.owner_id:
-            from src.notifications.service import notify_on_proposal_signed
+            from src.notifications.service import notify_on_proposal_signed  # noqa: PLC0415
 
             try:
                 await notify_on_proposal_signed(
@@ -715,6 +1141,36 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
 
         await self.db.refresh(proposal)
         return proposal
+
+    async def _record_package_selected_activity(
+        self,
+        proposal: Proposal,
+        snapshot: dict,
+        *,
+        created_at: datetime,
+    ) -> None:
+        try:
+            summary = _package_snapshot_summary(snapshot)
+            if not summary:
+                return
+            activity = Activity(
+                activity_type="note",
+                subject=f"Package selected: {summary}",
+                description="Selected during public proposal acceptance.",
+                entity_type="proposals",
+                entity_id=proposal.id,
+                is_completed=True,
+                completed_at=created_at,
+                owner_id=proposal.owner_id,
+                created_by_id=proposal.owner_id,
+            )
+            self.db.add(activity)
+            await self.db.flush()
+        except Exception:
+            logger.exception(
+                "Failed to record package selection activity for proposal %s",
+                proposal.id,
+            )
 
     async def _maybe_stamp_signing_documents(
         self,
@@ -762,6 +1218,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                         signer_user_agent=signer_user_agent,
                         signed_at=signed_at,
                         proposal_number=proposal.proposal_number,
+                        selected_package_snapshot=proposal.selected_package_snapshot,
                     ),
                 )
                 timestamp = int(signed_at.timestamp())
@@ -870,6 +1327,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                     signer_user_agent=signer_user_agent,
                     signed_at=signed_at,
                     proposal_number=proposal.proposal_number,
+                    selected_package_snapshot=proposal.selected_package_snapshot,
                 ),
             )
             timestamp = int(signed_at.timestamp())
@@ -1044,6 +1502,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 selectinload(Proposal.contact),
                 selectinload(Proposal.company),
                 selectinload(Proposal.signing_documents),
+                selectinload(Proposal.packages).selectinload(ProposalPackage.items),
             )
             .where(Proposal.public_token == token)
         )
@@ -1061,11 +1520,12 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         proposal = await self.get_by_id(proposal_id)
         if not proposal:
             raise ValueError(f"Proposal {proposal_id} not found")
+        await self.validate_packages_ready(proposal)
         await self.validate_signing_documents_ready(proposal)
         if not proposal.contact_id:
             raise ValueError("Proposal has no associated contact")
 
-        from src.contacts.models import Contact
+        from src.contacts.models import Contact  # noqa: PLC0415
         contact_result = await self.db.execute(
             select(Contact).where(Contact.id == proposal.contact_id)
         )
@@ -1249,10 +1709,25 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 f'<p class="doc-prose">{escape(pricing_free_text)}</p>',
             )
 
+        package_section_html = ""
+        if include_signature and proposal.signed_at and proposal.selected_package_snapshot:
+            package_section_html = self._render_selected_package_snapshot_html(
+                proposal.selected_package_snapshot,
+            )
+        elif not include_signature:
+            active_packages = [
+                package for package in (proposal.packages or []) if package.is_active
+            ]
+            if active_packages:
+                package_section_html = self._render_package_options_html(active_packages)
+        if package_section_html:
+            sections_html += package_section_html
+
         legacy_payment_snapshot_html = ""
         if (
             include_signature
             and proposal.signed_at
+            and not proposal.selected_package_snapshot
             and proposal.amount is not None
             and (
                 proposal.status in ("awaiting_payment", "paid")
@@ -1282,6 +1757,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
             proposal.content
             and not populated_content
             and not pricing_free_text
+            and not package_section_html
             and not legacy_payment_snapshot_html
         ):
             sections_html += _section(
@@ -1482,6 +1958,48 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
     max-width: 44em;
   }}
 
+  .pkg-card {{
+    border: 0.75pt solid #d1d5db;
+    padding: 12pt;
+    margin: 0 0 12pt;
+    page-break-inside: avoid;
+  }}
+  .pkg-card h3 {{
+    font-size: 12pt;
+    margin: 0 0 4pt;
+    color: #111827;
+  }}
+  .pkg-recommended {{
+    font-size: 8pt;
+    color: #065f46;
+    font-weight: 600;
+  }}
+  .pkg-total {{
+    font-size: 11pt;
+    font-weight: 600;
+    margin: 0 0 6pt;
+  }}
+  .pkg-desc {{
+    font-size: 9.5pt;
+    color: #4b5563;
+    margin: 0 0 8pt;
+  }}
+  .pkg-table {{
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 9pt;
+  }}
+  .pkg-table th,
+  .pkg-table td {{
+    text-align: left;
+    padding: 5pt 0;
+    border-bottom: 0.5pt solid #e5e7eb;
+  }}
+  .pkg-table th {{
+    color: #6b7280;
+    font-weight: 500;
+  }}
+
   /* ---------- Signatory section ---------- */
   .page-break-before {{ page-break-before: always; }}
   .doc-signatory-table {{
@@ -1582,6 +2100,13 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 "signer_name": proposal.signer_name,
             },
         )
+        selected_summary = _package_snapshot_summary(proposal.selected_package_snapshot)
+        if selected_summary:
+            package_note = (
+                "<p><strong>Selected package:</strong> "
+                f"{escape(selected_summary)}</p>"
+            )
+            body = body.replace("</body>", package_note + "</body>", 1)
 
         # Render + queue are both best-effort: a failure in either leaves
         # the proposal accepted but without a signed-copy email. The CRM
@@ -1833,7 +2358,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
             return proposal.terms_and_conditions
         if not proposal.owner_id:
             return None
-        from src.whitelabel.models import Tenant, TenantSettings, TenantUser
+        from src.whitelabel.models import Tenant, TenantSettings, TenantUser  # noqa: PLC0415
 
         # Prefer the user's primary tenant but fall back to ANY
         # membership when no row carries is_primary=True. The strict

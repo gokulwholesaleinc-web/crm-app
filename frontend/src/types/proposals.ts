@@ -6,6 +6,7 @@ import type { PaginatedResponse } from './common';
 
 export type PaymentType = 'one_time' | 'subscription';
 export type RecurringInterval = 'month' | 'year';
+export type ProposalMoney = string;
 
 /** Saved placement of the signer's signature box on the master contract PDF.
  *  Coordinates are PDF points with origin = bottom-left of the page;
@@ -39,6 +40,127 @@ export interface ProposalSigningDocument {
   display_order: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface ProposalPackageItemBase {
+  description: string;
+  quantity: ProposalMoney;
+  unit_price: ProposalMoney;
+  discount_amount?: ProposalMoney;
+  sort_order?: number;
+}
+
+export interface ProposalPackageItemCreate extends ProposalPackageItemBase {
+  product_id?: number | null;
+  price_id?: number | null;
+}
+
+export interface ProposalPackageItemUpdate {
+  id?: number;
+  product_id?: number | null;
+  price_id?: number | null;
+  description?: string | null;
+  quantity?: ProposalMoney | null;
+  unit_price?: ProposalMoney | null;
+  discount_amount?: ProposalMoney | null;
+  sort_order?: number | null;
+}
+
+export interface ProposalPackageItem extends ProposalPackageItemBase {
+  id: number;
+  package_id: number;
+  product_id?: number | null;
+  price_id?: number | null;
+  discount_amount: ProposalMoney;
+  total: ProposalMoney;
+}
+
+export interface ProposalPackageBase {
+  name: string;
+  description?: string | null;
+  currency: string;
+  payment_type: PaymentType;
+  recurring_interval?: RecurringInterval | null;
+  recurring_interval_count?: number | null;
+  discount_amount?: ProposalMoney;
+  sort_order?: number;
+  is_recommended?: boolean;
+  is_active?: boolean;
+}
+
+export interface ProposalPackageCreate extends ProposalPackageBase {
+  items: ProposalPackageItemCreate[];
+}
+
+export interface ProposalPackageUpdate {
+  name?: string | null;
+  description?: string | null;
+  currency?: string | null;
+  payment_type?: PaymentType | null;
+  recurring_interval?: RecurringInterval | null;
+  recurring_interval_count?: number | null;
+  discount_amount?: ProposalMoney | null;
+  sort_order?: number | null;
+  is_recommended?: boolean | null;
+  is_active?: boolean | null;
+  items?: ProposalPackageItemUpdate[] | null;
+}
+
+export interface ProposalPackage extends ProposalPackageBase {
+  id: number;
+  proposal_id: number;
+  subtotal: ProposalMoney;
+  discount_amount: ProposalMoney;
+  tax_amount: ProposalMoney;
+  total: ProposalMoney;
+  sort_order: number;
+  is_recommended: boolean;
+  is_active: boolean;
+  items: ProposalPackageItem[];
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ProposalPackagePublicItem {
+  description: string;
+  quantity: ProposalMoney;
+  unit_price: ProposalMoney;
+  discount_amount: ProposalMoney;
+  total: ProposalMoney;
+}
+
+export interface ProposalPackagePublic {
+  id: number;
+  name: string;
+  description?: string | null;
+  currency: string;
+  payment_type: PaymentType;
+  recurring_interval?: RecurringInterval | null;
+  recurring_interval_count?: number | null;
+  subtotal: ProposalMoney;
+  discount_amount: ProposalMoney;
+  tax_amount: ProposalMoney;
+  total: ProposalMoney;
+  sort_order: number;
+  is_recommended: boolean;
+  items: ProposalPackagePublicItem[];
+}
+
+export interface SelectedPackageSnapshot {
+  package_id: number;
+  name: string;
+  description?: string | null;
+  currency: string;
+  payment_type: PaymentType;
+  recurring_interval?: RecurringInterval | null;
+  recurring_interval_count?: number | null;
+  subtotal: ProposalMoney;
+  discount_amount: ProposalMoney;
+  tax_amount: ProposalMoney;
+  total: ProposalMoney;
+  is_recommended?: boolean;
+  captured_at: string;
+  items: ProposalPackagePublicItem[];
 }
 
 export interface ProposalLegacyBillingFields {
@@ -147,6 +269,10 @@ export interface Proposal extends ProposalBase, ProposalLegacyBillingFields {
   signed_pdf_error?: string | null;
   /** PDFs that require explicit signature/date placement before send. */
   signing_documents?: ProposalSigningDocument[];
+  /** Draft-time package options managed by staff. Locked once sent. */
+  packages?: ProposalPackage[];
+  selected_package_id?: number | null;
+  selected_package_snapshot?: SelectedPackageSnapshot | null;
   /** Per-view audit log. Populated on every public-link GET. */
   views?: ProposalView[];
   created_at: string;

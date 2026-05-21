@@ -11,6 +11,8 @@ import type {
   ProposalCreate,
   ProposalUpdate,
   ProposalFilters,
+  ProposalPackageCreate,
+  ProposalPackageUpdate,
   ProposalTemplateCreate,
   ProposalTemplateUpdate,
   CreateFromTemplateRequest,
@@ -125,6 +127,73 @@ export function useAcceptProposal() {
     onSuccess: (_data, proposalId) => {
       queryClient.invalidateQueries({ queryKey: proposalKeys.lists() });
       queryClient.invalidateQueries({ queryKey: proposalKeys.detail(proposalId) });
+    },
+  });
+}
+
+export function useProposalPackages(proposalId: number | undefined) {
+  return useAuthQuery({
+    queryKey: ['proposals', proposalId, 'packages'],
+    queryFn: () => proposalsApi.listPackages(proposalId!),
+    enabled: Boolean(proposalId),
+  });
+}
+
+export function useCreateProposalPackage() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      proposalId,
+      data,
+    }: {
+      proposalId: number;
+      data: ProposalPackageCreate;
+    }) => proposalsApi.createPackage(proposalId, data),
+    onSuccess: (_data, { proposalId }) => {
+      queryClient.invalidateQueries({ queryKey: proposalKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: proposalKeys.detail(proposalId) });
+      queryClient.invalidateQueries({ queryKey: ['proposals', proposalId, 'packages'] });
+    },
+  });
+}
+
+export function useUpdateProposalPackage() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      proposalId,
+      packageId,
+      data,
+    }: {
+      proposalId: number;
+      packageId: number;
+      data: ProposalPackageUpdate;
+    }) => proposalsApi.updatePackage(proposalId, packageId, data),
+    onSuccess: (_data, { proposalId }) => {
+      queryClient.invalidateQueries({ queryKey: proposalKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: proposalKeys.detail(proposalId) });
+      queryClient.invalidateQueries({ queryKey: ['proposals', proposalId, 'packages'] });
+    },
+  });
+}
+
+export function useDeleteProposalPackage() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      proposalId,
+      packageId,
+    }: {
+      proposalId: number;
+      packageId: number;
+    }) => proposalsApi.deletePackage(proposalId, packageId),
+    onSuccess: (_data, { proposalId }) => {
+      queryClient.invalidateQueries({ queryKey: proposalKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: proposalKeys.detail(proposalId) });
+      queryClient.invalidateQueries({ queryKey: ['proposals', proposalId, 'packages'] });
     },
   });
 }
