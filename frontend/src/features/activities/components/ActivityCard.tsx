@@ -68,7 +68,7 @@ export function ActivityCard({
     activity.due_date &&
     parseLocalDate(activity.due_date) < new Date();
 
-  const formatDate = (dateString: string | null | undefined) => {
+  const formatDateTime = (dateString: string | null | undefined) => {
     if (!dateString) return null;
     try {
       return new Intl.DateTimeFormat(undefined, {
@@ -78,6 +78,21 @@ export function ActivityCard({
         hour: 'numeric',
         minute: '2-digit',
       }).format(new Date(dateString));
+    } catch {
+      return dateString;
+    }
+  };
+
+  // due_date is a bare YYYY-MM-DD; parse as local midnight and render without
+  // a clock component so we don't print a phantom time from the UTC→local shift.
+  const formatDueDate = (dateString: string | null | undefined) => {
+    if (!dateString) return null;
+    try {
+      return new Intl.DateTimeFormat(undefined, {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+      }).format(parseLocalDate(dateString));
     } catch {
       return dateString;
     }
@@ -198,13 +213,13 @@ export function ActivityCard({
             {activity.scheduled_at && (
               <span className="flex items-center gap-0.5 sm:gap-1">
                 <ClockIcon className="h-3 w-3 sm:h-3.5 sm:w-3.5" aria-hidden="true" />
-                <span className="truncate max-w-[100px] sm:max-w-none">{formatDate(activity.scheduled_at)}</span>
+                <span className="truncate max-w-[100px] sm:max-w-none">{formatDateTime(activity.scheduled_at)}</span>
               </span>
             )}
             {activity.due_date && (
               <span className={clsx('flex items-center gap-0.5 sm:gap-1', isOverdue && 'text-red-600')}>
                 <CalendarIcon className="h-3 w-3 sm:h-3.5 sm:w-3.5" aria-hidden="true" />
-                <span className="truncate max-w-[100px] sm:max-w-none">Due: {formatDate(activity.due_date)}</span>
+                <span className="truncate max-w-[100px] sm:max-w-none">Due: {formatDueDate(activity.due_date)}</span>
               </span>
             )}
             {renderCallDetails()}
@@ -214,7 +229,7 @@ export function ActivityCard({
           {activity.completed_at && (
             <p className="text-[10px] sm:text-xs text-green-600 mt-2 flex items-center gap-0.5 sm:gap-1">
               <CheckCircleSolidIcon className="h-3 w-3 sm:h-3.5 sm:w-3.5" aria-hidden="true" />
-              Completed {formatDate(activity.completed_at)}
+              Completed {formatDateTime(activity.completed_at)}
             </p>
           )}
         </div>
