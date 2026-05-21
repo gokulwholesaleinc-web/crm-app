@@ -119,9 +119,11 @@ function ProposalDetailPage() {
   const acceptProposalMutation = useAcceptProposal();
   const rejectProposalMutation = useRejectProposal();
   const restampSignedPdfMutation = useRestampProposalSignedPdf();
-  const { data: proposalBundle, isLoading: isBundleLoading } = useProposalBundle(
-    proposal?.proposal_bundle_id ?? undefined,
-  );
+  const {
+    data: proposalBundle,
+    isLoading: isBundleLoading,
+    error: bundleLoadError,
+  } = useProposalBundle(proposal?.proposal_bundle_id ?? undefined);
   const createBundleMutation = useCreateProposalBundle();
   const updateBundleMutation = useUpdateProposalBundle();
   const sendBundleMutation = useSendProposalBundle();
@@ -171,6 +173,17 @@ function ProposalDetailPage() {
     }
   }, [currentStatus]);
 
+  // Surface bundle-load failures so a 5xx on /proposal-bundles/:id doesn't
+  // leave the options card stuck in "Loading…" forever with Send permanently
+  // disabled (the button is gated on Boolean(proposalBundle)).
+  useEffect(() => {
+    if (bundleLoadError && proposal?.proposal_bundle_id) {
+      showError(
+        extractApiErrorDetail(bundleLoadError) ?? 'Failed to load proposal options',
+      );
+    }
+  }, [bundleLoadError, proposal?.proposal_bundle_id]);
+
   if (isLoading) {
     // Mirror the real 3-column layout so content loading doesn't jolt
     // the page width / sidebar position. `motion-reduce:animate-none`
@@ -214,6 +227,13 @@ function ProposalDetailPage() {
     Boolean(proposalBundle) && ['draft', 'sent', 'viewed'].includes(proposalBundle?.status ?? '');
   const handleSend = async () => {
     setSendFailure(null);
+    // If the proposal is part of a bundle, never fall through to a single
+    // send — the server will reject and the user will see an opaque error
+    // instead of a "still loading" hint.
+    if (proposal.proposal_bundle_id && !proposalBundle) {
+      showError('Proposal options are still loading');
+      return;
+    }
     try {
       if (proposalBundle) {
         await sendBundleMutation.mutateAsync(proposalBundle.id);
@@ -335,8 +355,14 @@ function ProposalDetailPage() {
       showError('Proposal options are still loading');
       return;
     }
+    let clone: Proposal;
     try {
-      const clone = await duplicateProposalMutation.mutateAsync(proposal.id);
+      clone = await duplicateProposalMutation.mutateAsync(proposal.id);
+    } catch (err) {
+      showError(extractApiErrorDetail(err) ?? 'Failed to add proposal option');
+      return;
+    }
+    try {
       if (proposalBundle) {
         const proposalIds = Array.from(
           new Set([...(proposalBundle.proposals ?? []).map((option) => option.id), clone.id]),
@@ -353,13 +379,24 @@ function ProposalDetailPage() {
           proposal_ids: [proposal.id, clone.id],
         });
       }
-      showSuccess('Proposal option added');
-      navigate(`/proposals/${clone.id}`, {
-        state: { focusSigningDocuments: true },
-      });
     } catch (err) {
-      showError(extractApiErrorDetail(err) ?? 'Failed to add proposal option');
+      // Bundle attach failed — roll back the orphan clone so the user can
+      // retry without accumulating phantom drafts. If cleanup itself fails,
+      // surface the clone's number so they can find and delete it manually.
+      try {
+        await deleteProposalMutation.mutateAsync(clone.id);
+        showError(extractApiErrorDetail(err) ?? 'Failed to add proposal option');
+      } catch {
+        showError(
+          `Created draft ${clone.proposal_number} but couldn't link it to the options bundle. Delete it from the proposals list to retry.`,
+        );
+      }
+      return;
     }
+    showSuccess('Proposal option added');
+    navigate(`/proposals/${clone.id}`, {
+      state: { focusSigningDocuments: true },
+    });
   };
 
   const currentUser = useAuthStore.getState().user;
@@ -379,7 +416,15 @@ function ProposalDetailPage() {
   const canSendStatus = isBundled
     ? bundleCanSendStatus
     : ['draft', 'sent', 'viewed'].includes(proposal.status ?? '');
-  const signingDocsBlockSend = hasSigningDocumentSendBlocker(proposal);
+  // When sending a bundle, every option must have its signing docs ready —
+  // not just the one whose detail page is open. Otherwise the server rejects
+  // late and the user has no signal which sibling is the problem.
+  const signingDocsBlockerSibling = isBundled
+    ? (proposalBundle?.proposals ?? [proposal]).find(hasSigningDocumentSendBlocker)
+    : undefined;
+  const signingDocsBlockSend = isBundled
+    ? Boolean(signingDocsBlockerSibling)
+    : hasSigningDocumentSendBlocker(proposal);
   const canSend = isBundled
     ? canSendStatus &&
       Boolean(proposalBundle) &&
@@ -397,7 +442,9 @@ function ProposalDetailPage() {
     : !proposalRecipient
     ? 'Set a designated signer email or attach a contact with an email before sending'
     : signingDocsBlockSend
-      ? 'Place signature and date areas on every uploaded signing document before sending'
+      ? signingDocsBlockerSibling && signingDocsBlockerSibling.id !== proposal.id
+        ? `Place signature and date areas on every uploaded signing document for option ${signingDocsBlockerSibling.proposal_number} before sending`
+        : 'Place signature and date areas on every uploaded signing document before sending'
       : undefined;
   const publicLinkToken = isBundled ? proposalBundle?.public_token : proposal.public_token;
   const copyLinkLabel = isBundled ? 'Copy Options Link' : 'Copy Link';
