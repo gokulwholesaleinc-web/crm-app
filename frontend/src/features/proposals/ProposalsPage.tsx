@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { PlusIcon, DocumentDuplicateIcon, PaperAirplaneIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, DocumentDuplicateIcon } from '@heroicons/react/24/outline';
 import { Button, EntityLink, Modal, ConfirmDialog, StatusBadge, PaginationBar } from '../../components/ui';
 import { SkeletonTable } from '../../components/ui/Skeleton';
 import { ProposalForm } from './ProposalForm';
@@ -11,8 +11,6 @@ import {
   useCreateProposal,
   useDeleteProposal,
   useDuplicateProposal,
-  useCreateProposalBundle,
-  useSendProposalBundle,
 } from '../../hooks/useProposals';
 import {
   useListPageSizeState,
@@ -54,11 +52,6 @@ function ProposalsPage() {
   // from a contact / company / quote detail page. The ProposalForm reads
   // the rest of the query string to prefill the Related Records dropdowns.
   const [showForm, setShowForm] = useState(searchParams.get('action') === 'new');
-  const [selectedProposalIds, setSelectedProposalIds] = useState<number[]>([]);
-  const [showBundleModal, setShowBundleModal] = useState(false);
-  const [bundleTitle, setBundleTitle] = useState('');
-  const [bundleDescription, setBundleDescription] = useState('');
-  const [sendBundleNow, setSendBundleNow] = useState(true);
   const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; proposal: Proposal | null }>({
     isOpen: false,
     proposal: null,
@@ -87,86 +80,10 @@ function ProposalsPage() {
   const createProposalMutation = useCreateProposal();
   const deleteProposalMutation = useDeleteProposal();
   const duplicateProposalMutation = useDuplicateProposal();
-  const createBundleMutation = useCreateProposalBundle();
-  const sendBundleMutation = useSendProposalBundle();
 
-  const proposals = useMemo(() => proposalsData?.items ?? [], [proposalsData?.items]);
-  const selectedProposals = useMemo(
-    () => proposals.filter((proposal) => selectedProposalIds.includes(proposal.id)),
-    [proposals, selectedProposalIds],
-  );
-  const eligibleProposals = useMemo(
-    () => proposals.filter((proposal) => proposal.status === 'draft' && !proposal.proposal_bundle_id),
-    [proposals],
-  );
+  const proposals = proposalsData?.items ?? [];
   const totalPages = proposalsData?.pages ?? 1;
   const total = proposalsData?.total ?? 0;
-
-  useEffect(() => {
-    const visibleEligibleIds = new Set(eligibleProposals.map((proposal) => proposal.id));
-    setSelectedProposalIds((current) => {
-      const next = current.filter((id) => visibleEligibleIds.has(id));
-      return next.length === current.length ? current : next;
-    });
-  }, [eligibleProposals]);
-
-  const toggleProposalSelection = (proposal: Proposal) => {
-    if (proposal.status !== 'draft' || proposal.proposal_bundle_id) return;
-    setSelectedProposalIds((current) =>
-      current.includes(proposal.id)
-        ? current.filter((id) => id !== proposal.id)
-        : [...current, proposal.id],
-    );
-  };
-
-  const toggleAllEligible = () => {
-    const eligibleIds = eligibleProposals.map((proposal) => proposal.id);
-    const allSelected = eligibleIds.length > 0 && eligibleIds.every((id) => selectedProposalIds.includes(id));
-    setSelectedProposalIds((current) =>
-      allSelected
-        ? current.filter((id) => !eligibleIds.includes(id))
-        : Array.from(new Set([...current, ...eligibleIds])),
-    );
-  };
-
-  const openBundleModal = () => {
-    const first = selectedProposals[0];
-    if (!bundleTitle && first) {
-      const clientName = first.contact?.full_name || first.company?.name;
-      setBundleTitle(clientName ? `Proposal options for ${clientName}` : 'Proposal options');
-    }
-    setShowBundleModal(true);
-  };
-
-  const handleBundleSubmit = async () => {
-    if (selectedProposalIds.length < 2) {
-      showError('Select at least two draft proposals');
-      return;
-    }
-    try {
-      const bundle = await createBundleMutation.mutateAsync({
-        title: bundleTitle.trim() || 'Proposal options',
-        description: bundleDescription.trim() || null,
-        proposal_ids: selectedProposalIds,
-      });
-      if (sendBundleNow) {
-        try {
-          await sendBundleMutation.mutateAsync(bundle.id);
-          showSuccess('Proposal options created and sent');
-        } catch (err) {
-          showError(extractApiErrorDetail(err) ?? 'Options created, but sending failed');
-        }
-      } else {
-        showSuccess('Proposal options created');
-      }
-      setSelectedProposalIds([]);
-      setBundleTitle('');
-      setBundleDescription('');
-      setShowBundleModal(false);
-    } catch (err) {
-      showError(extractApiErrorDetail(err) ?? 'Failed to create proposal options');
-    }
-  };
 
   const handleDeleteClick = (proposal: Proposal) => {
     setDeleteConfirm({ isOpen: true, proposal });
@@ -232,18 +149,6 @@ function ProposalsPage() {
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2">
-          {activeTab === 'proposals' && selectedProposalIds.length > 0 && (
-            <Button
-              variant="secondary"
-              leftIcon={<DocumentDuplicateIcon className="h-5 w-5" />}
-              onClick={openBundleModal}
-              disabled={selectedProposalIds.length < 2}
-              className="w-full sm:w-auto"
-              title={selectedProposalIds.length < 2 ? 'Select at least two draft proposals' : undefined}
-            >
-              Create options ({selectedProposalIds.length})
-            </Button>
-          )}
           <Button
             leftIcon={<PlusIcon className="h-5 w-5" />}
             onClick={() => setShowForm(true)}
@@ -402,30 +307,20 @@ function ProposalsPage() {
               {proposals.map((proposal: Proposal) => (
                 <div key={proposal.id} className="p-4 hover:bg-gray-50 dark:hover:bg-gray-700">
                   <div className="flex items-start justify-between gap-2">
-                    <div className="flex min-w-0 flex-1 gap-3">
-                      <input
-                        type="checkbox"
-                        aria-label={`Select ${proposal.title} for proposal options`}
-                        checked={selectedProposalIds.includes(proposal.id)}
-                        onChange={() => toggleProposalSelection(proposal)}
-                        disabled={proposal.status !== 'draft' || Boolean(proposal.proposal_bundle_id)}
-                        className="mt-1 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 disabled:opacity-40"
-                      />
-                      <Link
-                        to={`/proposals/${proposal.id}`}
-                        className="min-w-0 flex-1"
-                      >
-                        <p className="text-sm font-medium text-primary-600 hover:text-primary-900 dark:hover:text-primary-300 truncate">
-                          {proposal.title}
+                    <Link
+                      to={`/proposals/${proposal.id}`}
+                      className="flex-1 min-w-0"
+                    >
+                      <p className="text-sm font-medium text-primary-600 hover:text-primary-900 dark:hover:text-primary-300 truncate">
+                        {proposal.title}
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{proposal.proposal_number}</p>
+                      {proposal.bundle && (
+                        <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">
+                          Options {proposal.bundle.bundle_number}
                         </p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">{proposal.proposal_number}</p>
-                        {proposal.bundle && (
-                          <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">
-                            Options {proposal.bundle.bundle_number}
-                          </p>
-                        )}
-                      </Link>
-                    </div>
+                      )}
+                    </Link>
                     <StatusBadge status={proposal.status} size="sm" showDot={false} className="flex-shrink-0" />
                   </div>
                   <div className="mt-2 space-y-1 text-sm text-gray-500 dark:text-gray-400">
@@ -481,19 +376,6 @@ function ProposalsPage() {
               <table data-list-table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                 <thead className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-900">
                   <tr>
-                    <th scope="col" className="w-10 px-4 py-3">
-                      <input
-                        type="checkbox"
-                        aria-label="Select all draft proposals on this page"
-                        checked={
-                          eligibleProposals.length > 0 &&
-                          eligibleProposals.every((proposal) => selectedProposalIds.includes(proposal.id))
-                        }
-                        onChange={toggleAllEligible}
-                        disabled={eligibleProposals.length === 0}
-                        className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 disabled:opacity-40"
-                      />
-                    </th>
                     <SortableTh field="title" label="Proposal" sortBy={sortBy} sortDir={sortDir} onToggle={handleSortToggle} />
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Contact / Company
@@ -534,20 +416,6 @@ function ProposalsPage() {
                         }
                       }}
                     >
-                      <td className="px-4 py-4">
-                        <input
-                          type="checkbox"
-                          aria-label={`Select ${proposal.title} for proposal options`}
-                          checked={selectedProposalIds.includes(proposal.id)}
-                          onChange={(e) => {
-                            e.stopPropagation();
-                            toggleProposalSelection(proposal);
-                          }}
-                          onClick={(e) => e.stopPropagation()}
-                          disabled={proposal.status !== 'draft' || Boolean(proposal.proposal_bundle_id)}
-                          className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 disabled:opacity-40"
-                        />
-                      </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <Link
                           to={`/proposals/${proposal.id}`}
@@ -653,92 +521,6 @@ function ProposalsPage() {
       </div>
 
       </>}
-
-      <Modal
-        isOpen={showBundleModal}
-        onClose={() => setShowBundleModal(false)}
-        title="Create Proposal Options"
-        size="lg"
-        fullScreenOnMobile
-      >
-        <div className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <label className="block text-sm sm:col-span-2">
-              <span className="text-xs font-medium text-gray-600 dark:text-gray-300">Options title</span>
-              <input
-                value={bundleTitle}
-                onChange={(e) => setBundleTitle(e.target.value)}
-                className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
-                placeholder="Proposal options"
-              />
-            </label>
-            <label className="block text-sm sm:col-span-2">
-              <span className="text-xs font-medium text-gray-600 dark:text-gray-300">Short note</span>
-              <textarea
-                value={bundleDescription}
-                onChange={(e) => setBundleDescription(e.target.value)}
-                rows={3}
-                className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
-                placeholder="Pick the option that fits best."
-              />
-            </label>
-          </div>
-
-          <div className="rounded-md border border-gray-200 dark:border-gray-700">
-            <div className="border-b border-gray-200 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:border-gray-700 dark:text-gray-400">
-              Selected proposal options
-            </div>
-            <ul className="divide-y divide-gray-200 dark:divide-gray-700">
-              {selectedProposals.map((proposal) => (
-                <li key={proposal.id} className="flex items-center justify-between gap-3 px-3 py-2">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">
-                      {proposal.title}
-                    </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      {proposal.proposal_number}
-                    </p>
-                  </div>
-                  {proposal.bundle_is_recommended && (
-                    <span className="rounded-full bg-primary-50 px-2 py-0.5 text-xs font-medium text-primary-700 dark:bg-primary-900/30 dark:text-primary-300">
-                      Recommended
-                    </span>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <label className="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
-            <input
-              type="checkbox"
-              checked={sendBundleNow}
-              onChange={(e) => setSendBundleNow(e.target.checked)}
-              className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-            />
-            Send the options email now
-          </label>
-
-          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setShowBundleModal(false)}
-              disabled={createBundleMutation.isPending || sendBundleMutation.isPending}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              onClick={() => void handleBundleSubmit()}
-              isLoading={createBundleMutation.isPending || sendBundleMutation.isPending}
-              leftIcon={sendBundleNow ? <PaperAirplaneIcon className="h-4 w-4" /> : undefined}
-            >
-              {sendBundleNow ? 'Create & Send Options' : 'Create Options'}
-            </Button>
-          </div>
-        </div>
-      </Modal>
 
       {/* Create Form Modal */}
       <Modal
