@@ -73,13 +73,14 @@ async def _accept(
     """Call accept_proposal_public with PDF generation stubbed out."""
     svc = ProposalService(db)
     with patch.object(svc, "generate_proposal_pdf", new=AsyncMock(return_value=_DUMMY_PDF)):
-        return await svc.accept_proposal_public(
+        accepted, _siblings = await svc.accept_proposal_public(
             proposal,
             signer_name="Jane Signer",
             signer_email=signer_email,
             signature_image=_ONE_PIXEL_PNG,
             agreed_to_terms=True,
         )
+        return accepted
 
 
 # ---------------------------------------------------------------------------

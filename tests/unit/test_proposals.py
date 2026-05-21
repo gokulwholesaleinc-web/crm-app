@@ -513,7 +513,13 @@ class TestProposalsUpdate:
         auth_headers: dict,
         test_proposal: Proposal,
     ):
-        """PATCH must not let a caller rewind an accepted proposal via status."""
+        """PATCH must not let a caller rewind an accepted proposal via status.
+
+        ProposalUpdate now sets ``extra="forbid"``, so any request that
+        includes ``status`` in the body is rejected outright with 422 — there
+        is no silent-drop path anymore. The accepted-proposal status is
+        verified untouched after the rejected PATCH.
+        """
         test_proposal.status = "accepted"
         await db_session.commit()
 
@@ -523,6 +529,17 @@ class TestProposalsUpdate:
             json={"title": "Rewritten", "status": "draft"},
         )
 
+        assert response.status_code == 422
+        await db_session.refresh(test_proposal)
+        assert test_proposal.status == "accepted"
+        assert test_proposal.title != "Rewritten"
+
+        # And the legitimate path — patching only allowed fields — still works.
+        response = await client.patch(
+            f"/api/proposals/{test_proposal.id}",
+            headers=auth_headers,
+            json={"title": "Rewritten"},
+        )
         assert response.status_code == 200
         data = response.json()
         assert data["title"] == "Rewritten"
