@@ -65,7 +65,7 @@ class TestAcceptNeverSpawnsBilling:
     ):
         with patch("src.payments.service._get_stripe") as mock_stripe:
             service = ProposalService(db_session)
-            accepted = await service.accept_proposal_public(
+            accepted, _ = await service.accept_proposal_public(
                 billing_proposal,
                 signer_name="Jane Client",
                 signer_email=test_contact.email,
@@ -94,7 +94,7 @@ class TestAcceptNeverSpawnsBilling:
 
         with patch("src.payments.service._get_stripe") as mock_stripe:
             service = ProposalService(db_session)
-            accepted = await service.accept_proposal_public(
+            accepted, _ = await service.accept_proposal_public(
                 billing_proposal,
                 signer_name="Jane Client",
                 signer_email=test_contact.email,
@@ -120,7 +120,7 @@ class TestAcceptNeverSpawnsBilling:
 
         with patch("src.payments.service._get_stripe") as mock_stripe:
             service = ProposalService(db_session)
-            accepted = await service.accept_proposal_public(
+            accepted, _ = await service.accept_proposal_public(
                 billing_proposal,
                 signer_name="Jane Client",
                 signer_email=test_contact.email,

@@ -15,16 +15,13 @@ vi.mock('axios', () => ({
 vi.mock('../../components/SignToConfirmModal', () => ({
   SignToConfirmModal: ({
     isOpen,
-    selectedPackageId,
     onSubmit,
   }: {
     isOpen: boolean;
-    selectedPackageId?: number | null;
     onSubmit: (payload: {
       signatureDataUrl: string;
       email: string;
       agreedToTerms: boolean;
-      selectedPackageId?: number | null;
     }) => Promise<string | null>;
   }) =>
     isOpen ? (
@@ -35,7 +32,6 @@ vi.mock('../../components/SignToConfirmModal', () => ({
             signatureDataUrl: 'data:image/png;base64,abc',
             email: 'jane@example.com',
             agreedToTerms: true,
-            selectedPackageId,
           })
         }
       >
@@ -57,7 +53,9 @@ function renderAt(token = 'abc123', search = '') {
 }
 
 const baseProposal = {
+  id: 7,
   proposal_number: 'PROP-001',
+  public_token: 'abc123',
   title: 'Test Proposal Title',
   content: null,
   cover_letter: null,
@@ -75,57 +73,6 @@ const baseProposal = {
   terms_and_conditions: null,
   has_master_contract: false,
 };
-
-const packageOptions = [
-  {
-    id: 10,
-    name: 'Starter',
-    description: 'Baseline implementation.',
-    currency: 'USD',
-    payment_type: 'one_time',
-    recurring_interval: null,
-    recurring_interval_count: null,
-    subtotal: '1250.00',
-    discount_amount: '0.00',
-    tax_amount: '0.00',
-    total: '1250.00',
-    sort_order: 0,
-    is_recommended: false,
-    items: [
-      {
-        description: 'Implementation',
-        quantity: '1.00',
-        unit_price: '1250.00',
-        discount_amount: '0.00',
-        total: '1250.00',
-      },
-    ],
-  },
-  {
-    id: 11,
-    name: 'Growth',
-    description: 'Implementation plus monthly support.',
-    currency: 'USD',
-    payment_type: 'subscription',
-    recurring_interval: 'month',
-    recurring_interval_count: 1,
-    subtotal: '2500.00',
-    discount_amount: '0.00',
-    tax_amount: '200.00',
-    total: '2700.00',
-    sort_order: 1,
-    is_recommended: true,
-    items: [
-      {
-        description: 'Monthly support',
-        quantity: '1.00',
-        unit_price: '2500.00',
-        discount_amount: '0.00',
-        total: '2500.00',
-      },
-    ],
-  },
-];
 
 beforeEach(() => {
   vi.restoreAllMocks();
@@ -275,52 +222,62 @@ describe('PublicProposalView', () => {
     expect(screen.queryByText(/50000/i)).not.toBeInTheDocument();
   });
 
-  it('renders package radio cards with formatted currency and hides zero tax rows', async () => {
+  it('renders a proposal bundle chooser with real proposal links', async () => {
     mockGet.mockResolvedValue({
       data: {
         ...baseProposal,
-        packages: packageOptions,
+        id: null,
+        proposal_number: 'PB-2026-0001',
+        title: 'Choose your proposal',
+        content: 'Pick the proposal that fits best.',
+        status: 'sent',
+        bundle_id: 55,
+        proposal_options: [
+          {
+            ...baseProposal,
+            id: 10,
+            proposal_number: 'PR-2026-0001',
+            public_token: 'lean-token',
+            title: 'Lean proposal',
+            bundle_sort_order: 0,
+            bundle_is_recommended: true,
+          },
+          {
+            ...baseProposal,
+            id: 11,
+            proposal_number: 'PR-2026-0002',
+            public_token: 'full-token',
+            title: 'Full proposal',
+            bundle_sort_order: 1,
+          },
+        ],
       },
     });
 
     renderAt();
 
-    await waitFor(() => screen.getByRole('heading', { level: 1 }));
-    expect(screen.getByRole('radio', { name: /Starter/i })).toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: /Growth/i })).toBeInTheDocument();
-    expect(screen.getAllByText('$1,250.00').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('$2,700.00').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('$200.00').length).toBeGreaterThan(0);
-
-    const taxLabels = screen.getAllByText('Tax');
-    expect(taxLabels).toHaveLength(1);
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { level: 1, name: 'Choose your proposal' })).toBeInTheDocument(),
+    );
+    expect(screen.getByRole('link', { name: /Lean proposal/i })).toHaveAttribute(
+      'href',
+      '/proposals/public/lean-token',
+    );
+    expect(screen.getByRole('link', { name: /Full proposal/i })).toHaveAttribute(
+      'href',
+      '/proposals/public/full-token',
+    );
+    expect(screen.getByText('Recommended')).toBeInTheDocument();
   });
 
-  it('requires a package selection and sends selected_package_id on accept', async () => {
+  it('sends selected_proposal_id when signing a bundled proposal', async () => {
     mockGet.mockResolvedValue({
-      data: {
-        ...baseProposal,
-        packages: packageOptions,
-      },
+      data: { ...baseProposal, proposal_bundle_id: 55 },
     });
     mockPost.mockResolvedValue({
       data: {
         ...baseProposal,
         status: 'accepted',
-        selected_package_snapshot: {
-          package_id: 11,
-          name: 'Growth',
-          currency: 'USD',
-          payment_type: 'subscription',
-          recurring_interval: 'month',
-          recurring_interval_count: 1,
-          subtotal: '2500.00',
-          discount_amount: '0.00',
-          tax_amount: '0.00',
-          total: '2500.00',
-          captured_at: '2026-05-20T00:00:00Z',
-          items: [],
-        },
       },
     });
 
@@ -330,10 +287,6 @@ describe('PublicProposalView', () => {
     const signButton = screen.getByRole('button', {
       name: /Open the signing dialog to accept this proposal/i,
     });
-    expect(signButton).toBeDisabled();
-    expect(screen.getByText(/Choose a package before signing/i)).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('radio', { name: /Growth/i }));
     expect(signButton).not.toBeDisabled();
 
     fireEvent.click(signButton);
@@ -342,48 +295,23 @@ describe('PublicProposalView', () => {
     await waitFor(() =>
       expect(mockPost).toHaveBeenCalledWith(
         '/api/proposals/public/abc123/accept',
-        expect.objectContaining({ selected_package_id: 11 }),
+        expect.objectContaining({ selected_proposal_id: 7 }),
       ),
     );
   });
 
-  it('hides the legacy payment CTA when package options or a snapshot exist', async () => {
-    mockGet.mockResolvedValueOnce({
+  it('hides the legacy payment CTA on a bundle chooser response', async () => {
+    mockGet.mockResolvedValue({
       data: {
         ...baseProposal,
         status: 'awaiting_payment',
         stripe_payment_url: 'https://checkout.stripe.test/pay',
-        packages: packageOptions,
-      },
-    });
-    const { unmount } = renderAt();
-    await waitFor(() => screen.getByRole('heading', { level: 1 }));
-    expect(screen.queryByRole('link', { name: /Complete Payment/i })).not.toBeInTheDocument();
-    unmount();
-
-    mockGet.mockResolvedValueOnce({
-      data: {
-        ...baseProposal,
-        status: 'awaiting_payment',
-        stripe_payment_url: 'https://checkout.stripe.test/pay',
-        selected_package_snapshot: {
-          package_id: 10,
-          name: 'Starter',
-          currency: 'USD',
-          payment_type: 'one_time',
-          subtotal: '1250.00',
-          discount_amount: '0.00',
-          tax_amount: '0.00',
-          total: '1250.00',
-          captured_at: '2026-05-20T00:00:00Z',
-          items: [],
-        },
+        proposal_options: [{ ...baseProposal, id: 10, public_token: 'option-token' }],
       },
     });
     renderAt();
     await waitFor(() => screen.getByRole('heading', { level: 1 }));
     expect(screen.queryByRole('link', { name: /Complete Payment/i })).not.toBeInTheDocument();
-    expect(screen.getByText('Selected Package')).toBeInTheDocument();
   });
 
   it('requires opening public documents before enabling Sign to Accept', async () => {

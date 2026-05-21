@@ -25,7 +25,7 @@ vi.mock('./SignatureCanvas', () => ({
 }));
 
 describe('SignToConfirmModal', () => {
-  it('renders the selected package summary and submits its id', async () => {
+  it('submits signer email, consent, and signature', async () => {
     const onSubmit = vi.fn().mockResolvedValue(null);
 
     render(
@@ -35,19 +35,9 @@ describe('SignToConfirmModal', () => {
         recipientEmail="jane@example.com"
         termsAndConditions="Standard terms."
         hasMasterContract={false}
-        selectedPackageId={42}
-        selectedPackageSummary={{
-          name: 'Growth Package',
-          total: '$2,500.00',
-          cadence: 'Every month',
-        }}
         onSubmit={onSubmit}
       />,
     );
-
-    expect(screen.getByText('Selected package')).toBeInTheDocument();
-    expect(screen.getByText('Growth Package')).toBeInTheDocument();
-    expect(screen.getByText('$2,500.00')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /Draw signature/i }));
     fireEvent.click(screen.getByRole('checkbox'));
@@ -58,7 +48,6 @@ describe('SignToConfirmModal', () => {
         expect.objectContaining({
           email: 'jane@example.com',
           agreedToTerms: true,
-          selectedPackageId: 42,
         }),
       ),
     );

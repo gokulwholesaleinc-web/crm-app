@@ -16,7 +16,7 @@ import httpx
 from botocore.exceptions import ClientError
 from pypdf.errors import PdfReadError
 from sqlalchemy import func, or_, select, update
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
 from src.activities.models import Activity
@@ -44,17 +44,16 @@ from src.email.service import EmailService, assert_gmail_connected
 from src.email.types import EmailAttachment
 from src.proposals.models import (
     Proposal,
-    ProposalPackage,
-    ProposalPackageItem,
+    ProposalBundle,
     ProposalSigningDocument,
     ProposalTemplate,
     ProposalView,
 )
 from src.proposals.pdf_stamper import StampInputs, stamp_master_with_signature
 from src.proposals.schemas import (
+    ProposalBundleCreate,
+    ProposalBundleUpdate,
     ProposalCreate,
-    ProposalPackageCreate,
-    ProposalPackageUpdate,
     ProposalUpdate,
     SignatureFieldCoords,
     SignatureFieldPlacementValue,
@@ -71,36 +70,6 @@ class _UnsetType:
 
 
 _UNSET = _UnsetType()
-_MONEY_ZERO = Decimal("0.00")
-_MONEY_QUANT = Decimal("0.01")
-
-
-def _money(value: Any) -> Decimal:
-    try:
-        return Decimal(str(value if value is not None else "0")).quantize(_MONEY_QUANT)
-    except Exception as exc:
-        raise ValueError("Invalid money amount") from exc
-
-
-def _decimal_text(value: Any) -> str:
-    return f"{_money(value):.2f}"
-
-
-def _html_money(currency: str, value: Any) -> str:
-    return f"{escape((currency or 'USD').upper())} {_money(value):,.2f}"
-
-
-def _package_snapshot_summary(snapshot: dict | None) -> str | None:
-    if not snapshot:
-        return None
-    name = str(snapshot.get("name") or "").strip()
-    currency = str(snapshot.get("currency") or "USD").upper()
-    total = snapshot.get("total")
-    if not name or total is None:
-        return None
-    return f"{name} ({currency} {_money(total):,.2f})"
-
-
 def _single_coords_for_stamper(coords: dict) -> dict | None:
     try:
         page = int(coords["page"])
@@ -283,7 +252,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
             selectinload(Proposal.created_by_user),
             selectinload(Proposal.owner),
             selectinload(Proposal.signing_documents),
-            selectinload(Proposal.packages).selectinload(ProposalPackage.items),
+            selectinload(Proposal.bundle).selectinload(ProposalBundle.proposals),
         ]
 
     async def _generate_proposal_number(self) -> str:
@@ -345,7 +314,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 selectinload(Proposal.created_by_user),
                 selectinload(Proposal.owner),
                 selectinload(Proposal.signing_documents),
-                selectinload(Proposal.packages).selectinload(ProposalPackage.items),
+                selectinload(Proposal.bundle).selectinload(ProposalBundle.proposals),
             )
         )
 
@@ -395,401 +364,224 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
 
         return proposals, total
 
-    def _assert_packages_mutable(self, proposal: Proposal) -> None:
-        if proposal.status != "draft" or proposal.signed_at is not None:
-            raise ValueError("Proposal packages can only be changed while the proposal is draft")
-
-    def _normalize_package_payload(self, package: ProposalPackage) -> None:
-        package.name = (package.name or "").strip()
-        if not package.name:
-            raise ValueError("Package name is required")
-        package.currency = (package.currency or "USD").strip().upper()
-        if len(package.currency) != 3 or not package.currency.isalpha():
-            raise ValueError("Currency must be a 3-letter ISO code")
-        if package.payment_type not in ("one_time", "subscription"):
-            raise ValueError("Package payment_type must be one_time or subscription")
-        if package.payment_type == "subscription":
-            if package.recurring_interval not in ("month", "year"):
-                raise ValueError("Subscription packages require a month or year interval")
-            if not package.recurring_interval_count or package.recurring_interval_count < 1:
-                raise ValueError("Subscription packages require recurring_interval_count >= 1")
-        else:
-            package.recurring_interval = None
-            package.recurring_interval_count = None
-
-        subtotal = _MONEY_ZERO
-        discount = _MONEY_ZERO
-        for index, item in enumerate(package.items or []):
-            item.description = (item.description or "").strip()
-            if not item.description:
-                raise ValueError("Package item description is required")
-            quantity = _money(item.quantity)
-            unit_price = _money(item.unit_price)
-            item_discount = _money(item.discount_amount)
-            if quantity <= 0:
-                raise ValueError("Package item quantity must be greater than 0")
-            if unit_price < 0 or item_discount < 0:
-                raise ValueError("Package item money amounts must be non-negative")
-            gross = (quantity * unit_price).quantize(_MONEY_QUANT)
-            if item_discount > gross:
-                raise ValueError("Package item discount cannot exceed line amount")
-            item.quantity = quantity
-            item.unit_price = unit_price
-            item.discount_amount = item_discount
-            item.total = (gross - item_discount).quantize(_MONEY_QUANT)
-            if item.sort_order is None:
-                item.sort_order = index
-            subtotal += gross
-            discount += item_discount
-
-        if not package.items:
-            raise ValueError("Package must include at least one item")
-        package.subtotal = subtotal.quantize(_MONEY_QUANT)
-        package.discount_amount = discount.quantize(_MONEY_QUANT)
-        package.tax_amount = _MONEY_ZERO
-        package.total = (package.subtotal - package.discount_amount).quantize(_MONEY_QUANT)
-        if package.is_active and package.total <= 0:
-            raise ValueError("Active package total must be greater than 0")
-
-    async def _validate_proposal_packages(self, proposal_id: int) -> None:
-        packages = await self.list_packages(proposal_id)
-        active = [package for package in packages if package.is_active]
-        currencies = {package.currency for package in active}
-        if len(currencies) > 1:
-            raise ValueError("All active proposal packages must use the same currency")
-        if sum(1 for package in active if package.is_recommended) > 1:
-            raise ValueError("Only one active proposal package can be recommended")
-        for package in active:
-            self._normalize_package_payload(package)
-
-    async def _assert_recommended_available(
-        self,
-        proposal_id: int,
-        *,
-        package_id: int | None = None,
-        is_recommended: bool,
-    ) -> None:
-        if not is_recommended:
-            return
-        # Only active rows compete for the "one recommended" slot — a
-        # deactivated/soft-deleted recommended package must not permanently
-        # brick the recommendation feature for the proposal.
-        query = (
-            select(func.count(ProposalPackage.id))
-            .where(ProposalPackage.proposal_id == proposal_id)
-            .where(ProposalPackage.is_active == True)  # noqa: E712
-            .where(ProposalPackage.is_recommended == True)  # noqa: E712
-        )
-        if package_id is not None:
-            query = query.where(ProposalPackage.id != package_id)
-        with self.db.no_autoflush:
-            result = await self.db.execute(query)
-        if result.scalar() or 0:
-            raise ValueError("Only one proposal package can be recommended")
-
-    async def validate_packages_ready(self, proposal: Proposal) -> None:
-        packages = await self.list_packages(proposal.id)
-        if not packages:
-            return
-        active = [package for package in packages if package.is_active]
-        if not active:
-            raise ValueError("Proposal has package rows but no active packages")
-        await self._validate_proposal_packages(proposal.id)
-
-    async def list_packages(self, proposal_id: int) -> list[ProposalPackage]:
-        result = await self.db.execute(
-            select(ProposalPackage)
-            .options(selectinload(ProposalPackage.items))
-            .where(ProposalPackage.proposal_id == proposal_id)
-            .order_by(
-                ProposalPackage.sort_order.asc(),
-                ProposalPackage.id.asc(),
+    async def _generate_bundle_number(self) -> str:
+        year = datetime.now(UTC).year
+        prefix = f"PB-{year}-"
+        # Match _generate_proposal_number's shape: count-based, predictable, no
+        # silent-fallback branch. A malformed bundle_number on the latest row
+        # should fail loud (the prior fallback would have silently re-issued a
+        # non-monotonic sequence on top of corrupted data).
+        count_result = await self.db.execute(
+            select(func.count(ProposalBundle.id)).where(
+                ProposalBundle.bundle_number.like(f"{prefix}%")
             )
         )
-        return list(result.scalars().all())
+        seq = (count_result.scalar() or 0) + 1
+        return f"{prefix}{seq:04d}"
 
-    async def get_package(
-        self,
-        proposal_id: int,
-        package_id: int,
-    ) -> ProposalPackage | None:
+    async def get_bundle(self, bundle_id: int) -> ProposalBundle | None:
         result = await self.db.execute(
-            select(ProposalPackage)
-            .options(selectinload(ProposalPackage.items))
-            .where(ProposalPackage.proposal_id == proposal_id)
-            .where(ProposalPackage.id == package_id)
+            select(ProposalBundle)
+            .options(
+                selectinload(ProposalBundle.proposals).selectinload(Proposal.signing_documents),
+                selectinload(ProposalBundle.proposals).selectinload(Proposal.contact),
+                selectinload(ProposalBundle.proposals).selectinload(Proposal.company),
+                selectinload(ProposalBundle.contact),
+                selectinload(ProposalBundle.company),
+                selectinload(ProposalBundle.created_by_user),
+                selectinload(ProposalBundle.owner),
+            )
+            .where(ProposalBundle.id == bundle_id)
         )
         return result.scalar_one_or_none()
 
-    async def _lock_selected_package(
-        self,
-        proposal_id: int,
-        package_id: int,
-    ) -> ProposalPackage | None:
-        """Re-fetch + row-lock the selected package for the duration of accept.
-
-        Acquires `SELECT ... FOR UPDATE` (Postgres) so a concurrent staff
-        `update_package`/`delete_package` blocks until accept commits.
-        SQLite ignores the lock keyword — fine for tests, no concurrent
-        writers in that runtime.
-        """
+    async def get_public_bundle(self, token: str) -> ProposalBundle | None:
+        if not token or len(token) < 16:
+            return None
         result = await self.db.execute(
-            select(ProposalPackage)
-            .options(selectinload(ProposalPackage.items))
-            .where(ProposalPackage.proposal_id == proposal_id)
-            .where(ProposalPackage.id == package_id)
-            .with_for_update(of=ProposalPackage)
+            select(ProposalBundle)
+            .options(
+                selectinload(ProposalBundle.proposals).selectinload(Proposal.contact),
+                selectinload(ProposalBundle.proposals).selectinload(Proposal.company),
+                selectinload(ProposalBundle.proposals).selectinload(Proposal.signing_documents),
+                selectinload(ProposalBundle.contact),
+                selectinload(ProposalBundle.company),
+            )
+            .where(ProposalBundle.public_token == token)
         )
         return result.scalar_one_or_none()
 
-    async def get_active_packages_for_public(self, proposal_id: int) -> list[ProposalPackage]:
-        result = await self.db.execute(
-            select(ProposalPackage)
-            .options(selectinload(ProposalPackage.items))
-            .where(ProposalPackage.proposal_id == proposal_id)
-            .where(ProposalPackage.is_active == True)  # noqa: E712
-            .order_by(
-                ProposalPackage.sort_order.asc(),
-                ProposalPackage.id.asc(),
-            )
-        )
-        return list(result.scalars().all())
+    async def record_bundle_view(self, bundle: ProposalBundle) -> None:
+        # Don't re-arm sibling status on an already-closed bundle. Once a
+        # sibling was accepted, the other siblings are correctly `rejected`;
+        # if a previous flush left any in `sent` (e.g. a partial failure),
+        # they must NOT bounce back to `viewed` here — that would expose
+        # them as actionable to a customer who refreshed the chooser page
+        # after acceptance, widening the accept-race window.
+        if bundle.status in ("accepted", "rejected"):
+            return
+        now = datetime.now(UTC)
+        bundle.viewed_at = now
+        if bundle.status == "sent":
+            bundle.status = "viewed"
+        for proposal in bundle.proposals or []:
+            if proposal.status == "sent":
+                proposal.status = "viewed"
+                proposal.viewed_at = proposal.viewed_at or now
+        await self.db.flush()
 
-    async def create_package(
-        self,
-        proposal: Proposal,
-        data: ProposalPackageCreate,
-        user_id: int,
-    ) -> ProposalPackage:
-        self._assert_packages_mutable(proposal)
-        values = data.model_dump(exclude={"items", "subtotal", "discount_amount", "tax_amount", "total"})
-        package = ProposalPackage(
-            proposal_id=proposal.id,
+    async def create_bundle(self, data: ProposalBundleCreate, user_id: int) -> ProposalBundle:
+        proposal_ids = list(dict.fromkeys(data.proposal_ids))
+        if len(proposal_ids) < 2:
+            raise ValueError("Choose at least two proposals for a bundle")
+        proposals = await self._load_bundle_proposals(proposal_ids)
+        self._validate_bundle_proposals_mutable(proposals)
+        first = proposals[0]
+        title = data.title.strip()
+        if not title:
+            raise ValueError("Bundle title is required")
+        bundle = ProposalBundle(
+            bundle_number=await self._generate_bundle_number(),
+            public_token=secrets.token_urlsafe(32),
+            title=title,
+            description=data.description,
+            status="draft",
+            contact_id=first.contact_id,
+            company_id=first.company_id,
+            owner_id=first.owner_id or user_id,
             created_by_id=user_id,
-            **values,
         )
-        package.items = [
-            ProposalPackageItem(
-                **item.model_dump(exclude={"total"}),
-            )
-            for item in data.items
-        ]
-        # _normalize_package_payload computes subtotal/discount/tax/total
-        # on the in-memory ORM object so the flush persists them. The
-        # outer _validate_proposal_packages call re-fetches all active
-        # packages as new ORM instances (so its normalize pass cannot
-        # mutate this one) — its real job is the cross-package currency
-        # and "one recommended" assertions.
-        self._normalize_package_payload(package)
-        await self._assert_recommended_available(
-            proposal.id,
-            is_recommended=package.is_recommended,
-        )
-        self.db.add(package)
+        self.db.add(bundle)
         await self.db.flush()
-        await self._validate_proposal_packages(proposal.id)
-        await self.db.refresh(package)
-        return package
+        for index, proposal in enumerate(proposals):
+            proposal.proposal_bundle_id = bundle.id
+            proposal.bundle_sort_order = index
+            proposal.bundle_is_recommended = index == 0
+        await self.db.flush()
+        await self.db.refresh(bundle)
+        return bundle
 
-    async def update_package(
+    async def update_bundle(
         self,
-        proposal: Proposal,
-        package: ProposalPackage,
-        data: ProposalPackageUpdate,
+        bundle: ProposalBundle,
+        data: ProposalBundleUpdate,
         user_id: int,
-    ) -> ProposalPackage:
-        self._assert_packages_mutable(proposal)
-        values = data.model_dump(exclude_unset=True, exclude={"items", "subtotal", "discount_amount", "tax_amount", "total"})
+    ) -> ProposalBundle:
+        if bundle.status not in ("draft",):
+            raise ValueError("Proposal bundles can only be changed while draft")
+        values = data.model_dump(exclude_unset=True, exclude={"proposal_ids"})
+        if "title" in values and values["title"] is not None:
+            values["title"] = values["title"].strip()
+            if not values["title"]:
+                raise ValueError("Bundle title is required")
         for key, value in values.items():
-            setattr(package, key, value)
-        if data.items is not None:
-            package.items = [
-                ProposalPackageItem(**item.model_dump(exclude={"total"}))
-                for item in data.items
-            ]
-        package.updated_by_id = user_id
-        # See create_package: in-memory normalize is required so the flush
-        # persists recomputed totals on this specific ORM instance.
-        self._normalize_package_payload(package)
-        await self._assert_recommended_available(
-            proposal.id,
-            package_id=package.id,
-            is_recommended=package.is_recommended,
+            setattr(bundle, key, value)
+        if data.proposal_ids is not None:
+            proposal_ids = list(dict.fromkeys(data.proposal_ids))
+            if len(proposal_ids) < 2:
+                raise ValueError("Choose at least two proposals for a bundle")
+            proposals = await self._load_bundle_proposals(proposal_ids)
+            self._validate_bundle_proposals_mutable(proposals, bundle_id=bundle.id)
+            for existing in list(bundle.proposals):
+                if existing.id not in proposal_ids:
+                    existing.proposal_bundle_id = None
+                    existing.bundle_sort_order = 0
+                    existing.bundle_is_recommended = False
+            for index, proposal in enumerate(proposals):
+                proposal.proposal_bundle_id = bundle.id
+                proposal.bundle_sort_order = index
+                proposal.bundle_is_recommended = index == 0
+        bundle.updated_by_id = user_id
+        await self.db.flush()
+        await self.db.refresh(bundle)
+        return bundle
+
+    async def _load_bundle_proposals(self, proposal_ids: list[int]) -> list[Proposal]:
+        result = await self.db.execute(
+            select(Proposal)
+            .options(selectinload(Proposal.signing_documents), selectinload(Proposal.bundle))
+            .where(Proposal.id.in_(proposal_ids))
         )
-        await self.db.flush()
-        await self._validate_proposal_packages(proposal.id)
-        await self.db.refresh(package)
-        return package
+        proposals_by_id = {proposal.id: proposal for proposal in result.scalars().all()}
+        missing = [proposal_id for proposal_id in proposal_ids if proposal_id not in proposals_by_id]
+        if missing:
+            raise ValueError(f"Proposal not found: {missing[0]}")
+        return [proposals_by_id[proposal_id] for proposal_id in proposal_ids]
 
-    async def delete_package(
+    def _validate_bundle_proposals_mutable(
         self,
-        proposal: Proposal,
-        package: ProposalPackage,
-        user_id: int,
-    ) -> ProposalPackage:
-        self._assert_packages_mutable(proposal)
-        package.is_active = False
-        package.updated_by_id = user_id
-        await self.db.flush()
-        await self._validate_proposal_packages(proposal.id)
-        await self.db.refresh(package)
-        return package
-
-    def build_selected_package_snapshot(
-        self,
-        package: ProposalPackage,
+        proposals: list[Proposal],
         *,
-        captured_at: datetime,
-    ) -> dict:
-        self._normalize_package_payload(package)
-        return {
-            "package_id": package.id,
-            "name": package.name,
-            "description": package.description,
-            "currency": package.currency,
-            "payment_type": package.payment_type,
-            "recurring_interval": package.recurring_interval,
-            "recurring_interval_count": package.recurring_interval_count,
-            "subtotal": _decimal_text(package.subtotal),
-            "discount_amount": _decimal_text(package.discount_amount),
-            "tax_amount": _decimal_text(package.tax_amount),
-            "total": _decimal_text(package.total),
-            "is_recommended": bool(package.is_recommended),
-            "captured_at": captured_at.isoformat().replace("+00:00", "Z"),
-            "items": [
-                {
-                    "description": item.description,
-                    "quantity": _decimal_text(item.quantity),
-                    "unit_price": _decimal_text(item.unit_price),
-                    "discount_amount": _decimal_text(item.discount_amount),
-                    "total": _decimal_text(item.total),
-                }
-                for item in sorted(package.items, key=lambda item: (item.sort_order, item.id or 0))
-            ],
-        }
-
-    async def copy_packages_to_proposal(
-        self,
-        source: Proposal,
-        target: Proposal,
-        user_id: int,
+        bundle_id: int | None = None,
     ) -> None:
-        packages = await self.list_packages(source.id)
-        for source_package in packages:
-            clone = ProposalPackage(
-                proposal_id=target.id,
-                name=source_package.name,
-                description=source_package.description,
-                currency=source_package.currency,
-                payment_type=source_package.payment_type,
-                recurring_interval=source_package.recurring_interval,
-                recurring_interval_count=source_package.recurring_interval_count,
-                sort_order=source_package.sort_order,
-                is_recommended=source_package.is_recommended,
-                is_active=source_package.is_active,
-                created_by_id=user_id,
-            )
-            clone.items = [
-                ProposalPackageItem(
-                    product_id=item.product_id,
-                    price_id=item.price_id,
-                    description=item.description,
-                    quantity=item.quantity,
-                    unit_price=item.unit_price,
-                    discount_amount=item.discount_amount,
-                    sort_order=item.sort_order,
-                )
-                for item in source_package.items
-            ]
-            self._normalize_package_payload(clone)
-            self.db.add(clone)
-        target.selected_package_id = None
-        target.selected_package_snapshot = None
+        statuses = {proposal.status for proposal in proposals}
+        if statuses - {"draft"}:
+            raise ValueError("Only draft proposals can be added to a bundle")
+        contacts = {proposal.contact_id for proposal in proposals}
+        if len(contacts) > 1:
+            raise ValueError("Bundled proposals must target the same contact")
+        companies = {proposal.company_id for proposal in proposals}
+        if len(companies) > 1:
+            raise ValueError("Bundled proposals must target the same company")
+        for proposal in proposals:
+            if proposal.proposal_bundle_id not in (None, bundle_id):
+                raise ValueError("A proposal can only belong to one bundle")
+
+    async def validate_bundle_ready(self, bundle: ProposalBundle) -> None:
+        proposals = list(bundle.proposals or [])
+        if len(proposals) < 2:
+            raise ValueError("A proposal bundle needs at least two proposals")
+        for proposal in proposals:
+            await self.validate_signing_documents_ready(proposal)
+            if not proposal.contact_id and not bundle.contact_id:
+                raise ValueError("Every bundled proposal needs an associated contact")
+
+    async def send_bundle_email(
+        self,
+        bundle_id: int,
+        user_id: int,
+    ) -> ProposalBundle:
+        await assert_gmail_connected(self.db, user_id)
+        bundle = await self.get_bundle(bundle_id)
+        if not bundle:
+            raise ValueError(f"Proposal bundle {bundle_id} not found")
+        await self.validate_bundle_ready(bundle)
+        proposal = (bundle.proposals or [None])[0]
+        contact = proposal.contact if proposal and proposal.contact else bundle.contact
+        if not contact or not getattr(contact, "email", None):
+            raise ValueError("Bundle contact has no email address")
+        if not bundle.public_token:
+            bundle.public_token = secrets.token_urlsafe(32)
+        branding = await TenantBrandingHelper.get_branding_for_user(self.db, user_id)
+        base_url = settings.FRONTEND_BASE_URL or "http://localhost:3000"
+        view_url = f"{base_url}/proposals/public/{bundle.public_token}"
+        subject, html_body = render_proposal_email(
+            branding,
+            {
+                "proposal_title": bundle.title,
+                "client_name": getattr(contact, "first_name", None) or str(contact),
+                "summary": bundle.description or "",
+                "view_url": view_url,
+            },
+        )
+        await EmailService(self.db).queue_email(
+            to_email=contact.email,
+            subject=subject,
+            body=html_body,
+            sent_by_id=user_id,
+            entity_type="proposal_bundles",
+            entity_id=bundle.id,
+        )
+        now = datetime.now(UTC)
+        bundle.status = "sent"
+        bundle.sent_at = bundle.sent_at or now
+        for option in bundle.proposals:
+            if option.status == "draft":
+                option.status = "sent"
+                option.sent_at = option.sent_at or now
         await self.db.flush()
-
-    def _render_package_options_html(self, packages: list[ProposalPackage]) -> str:
-        if not packages:
-            return ""
-        cards = []
-        for package in packages:
-            items_html = "".join(
-                "<tr>"
-                f"<td>{escape(item.description)}</td>"
-                f"<td class=\"tabular\">{_decimal_text(item.quantity)}</td>"
-                f"<td class=\"tabular\">{_html_money(package.currency, item.unit_price)}</td>"
-                f"<td class=\"tabular\">{_html_money(package.currency, item.total)}</td>"
-                "</tr>"
-                for item in sorted(package.items, key=lambda item: (item.sort_order, item.id or 0))
-            )
-            cadence = ""
-            if package.payment_type == "subscription":
-                count = package.recurring_interval_count or 1
-                cadence = f" / every {count} {escape(package.recurring_interval or 'month')}"
-            recommended = (
-                '<span class="pkg-recommended">Recommended</span>'
-                if package.is_recommended
-                else ""
-            )
-            description = (
-                f'<p class="pkg-desc">{escape(package.description)}</p>'
-                if package.description
-                else ""
-            )
-            cards.append(
-                '<div class="pkg-card">'
-                f'<h3>{escape(package.name)} {recommended}</h3>'
-                f'<p class="pkg-total">{_html_money(package.currency, package.total)}{cadence}</p>'
-                f"{description}"
-                '<table class="pkg-table"><thead><tr><th>Item</th><th>Qty</th>'
-                '<th>Unit</th><th>Total</th></tr></thead>'
-                f"<tbody>{items_html}</tbody></table>"
-                "</div>"
-            )
-        return (
-            '<section class="doc-section">'
-            '<div class="doc-section-rule"></div>'
-            '<h2 class="doc-section-title">Packages</h2>'
-            + "".join(cards)
-            + "</section>"
-        )
-
-    def _render_selected_package_snapshot_html(self, snapshot: dict | None) -> str:
-        if not snapshot:
-            return ""
-        currency = str(snapshot.get("currency") or "USD").upper()
-        items = snapshot.get("items") or []
-        rows = "".join(
-            "<tr>"
-            f"<td>{escape(str(item.get('description') or ''))}</td>"
-            f"<td class=\"tabular\">{escape(str(item.get('quantity') or '0.00'))}</td>"
-            f"<td class=\"tabular\">{_html_money(currency, item.get('unit_price'))}</td>"
-            f"<td class=\"tabular\">{_html_money(currency, item.get('total'))}</td>"
-            "</tr>"
-            for item in items
-            if isinstance(item, dict)
-        )
-        cadence = ""
-        if snapshot.get("payment_type") == "subscription":
-            count = snapshot.get("recurring_interval_count") or 1
-            cadence = f" / every {escape(str(count))} {escape(str(snapshot.get('recurring_interval') or 'month'))}"
-        description = (
-            f'<p class="pkg-desc">{escape(str(snapshot.get("description") or ""))}</p>'
-            if snapshot.get("description")
-            else ""
-        )
-        return (
-            '<section class="doc-section">'
-            '<div class="doc-section-rule"></div>'
-            '<h2 class="doc-section-title">Selected Package</h2>'
-            '<div class="pkg-card">'
-            f'<h3>{escape(str(snapshot.get("name") or ""))}</h3>'
-            f'<p class="pkg-total">{_html_money(currency, snapshot.get("total"))}{cadence}</p>'
-            f"{description}"
-            '<table class="pkg-table"><thead><tr><th>Item</th><th>Qty</th>'
-            '<th>Unit</th><th>Total</th></tr></thead>'
-            f"<tbody>{rows}</tbody></table>"
-            "</div></section>"
-        )
+        await self.db.refresh(bundle)
+        return bundle
 
     async def update(
         self,
@@ -1023,8 +815,8 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         signer_ip: str | None = None,
         signer_user_agent: str | None = None,
         signer_timezone: str | None = None,
-        selected_package_id: int | None = None,
-    ) -> Proposal:
+        selected_proposal_id: int | None = None,
+    ) -> tuple[Proposal, list[Proposal]]:
         """Accept a proposal via the public Sign-to-Confirm modal.
 
         Persists the drawn signature, transitions the proposal to
@@ -1075,31 +867,41 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
             raise ValueError("Signature image is required")
 
         normalized_signer_email = _assert_signer_matches(proposal, signer_email)
-        active_packages = await self.get_active_packages_for_public(proposal.id)
-        selected_package: ProposalPackage | None = None
-        selected_package_snapshot: dict | None = None
-        if active_packages:
-            if selected_package_id is None:
-                raise ValueError("Select a proposal package before signing")
-            if not any(p.id == selected_package_id for p in active_packages):
-                raise ValueError("Selected package is not available for this proposal")
-            # Re-fetch + row-lock the chosen package so its items/totals can't
-            # drift under us between this read and the accept UPDATE. The
-            # lock blocks any concurrent staff update_package / delete_package
-            # until this transaction commits, and surfaces a deactivation
-            # that landed between our list query and now as the same
-            # "no longer available" error the signer sees today.
-            selected_package = await self._lock_selected_package(
-                proposal.id, selected_package_id,
+        if selected_proposal_id is not None and selected_proposal_id != proposal.id:
+            raise ValueError("Selected proposal does not match the proposal being signed")
+
+        # Bundle invariant: only one sibling can ever reach `accepted`. Two
+        # signers hitting two different sibling URLs concurrently each pass
+        # their own per-proposal conditional UPDATE (different rows), so the
+        # serialization point has to live on the bundle row. Acquire FOR
+        # UPDATE on the bundle BEFORE the per-proposal UPDATE — the second
+        # accept blocks until the first commits, then sees status='accepted'
+        # and refuses. A partial unique index on
+        # proposals(proposal_bundle_id) WHERE status IN ('accepted','awaiting_payment','paid')
+        # (migration 047) is the DB-level backstop if the app-layer guard is
+        # ever bypassed.
+        locked_bundle: ProposalBundle | None = None
+        if proposal.proposal_bundle_id is not None:
+            bundle_lock = await self.db.execute(
+                select(ProposalBundle)
+                .options(selectinload(ProposalBundle.proposals))
+                .where(ProposalBundle.id == proposal.proposal_bundle_id)
+                .with_for_update()
             )
-            if selected_package is None or not selected_package.is_active:
-                raise ValueError("Selected package is not available for this proposal")
-            selected_package_snapshot = self.build_selected_package_snapshot(
-                selected_package,
-                captured_at=now,
-            )
-        elif selected_package_id is not None:
-            raise ValueError("Selected package is not available for this proposal")
+            locked_bundle = bundle_lock.scalar_one_or_none()
+            if locked_bundle is None:
+                raise ValueError(
+                    f"Proposal {proposal.id} references missing bundle "
+                    f"{proposal.proposal_bundle_id}",
+                )
+            if locked_bundle.selected_proposal_id is not None and locked_bundle.selected_proposal_id != proposal.id:
+                raise ValueError(
+                    "Another proposal in this bundle was already accepted",
+                )
+            if locked_bundle.status == "accepted":
+                raise ValueError(
+                    "Another proposal in this bundle was already accepted",
+                )
 
         # Atomic status transition: conditional UPDATE guarded by the
         # same (sent|viewed) whitelist. If two accept requests arrive
@@ -1120,8 +922,6 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 signer_timezone=signer_timezone,
                 signed_at=now,
                 signature_image=signature_image,
-                selected_package_id=selected_package.id if selected_package else None,
-                selected_package_snapshot=selected_package_snapshot,
             )
         )
         result = await self.db.execute(stmt)
@@ -1131,11 +931,10 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
             )
         await self.db.flush()
         await self.db.refresh(proposal)
-        if selected_package_snapshot:
-            await self._record_package_selected_activity(
-                proposal,
-                selected_package_snapshot,
-                created_at=now,
+        rejected_siblings: list[Proposal] = []
+        if locked_bundle is not None:
+            rejected_siblings = await self._mark_bundle_accepted(
+                proposal, locked_bundle, accepted_at=now,
             )
 
         # Stamp + upload the master PDF if Lorenzo attached one. Failure
@@ -1179,52 +978,73 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 )
 
         await self.db.refresh(proposal)
-        return proposal
+        return proposal, rejected_siblings
 
-    async def _record_package_selected_activity(
+    async def _mark_bundle_accepted(
         self,
-        proposal: Proposal,
-        snapshot: dict,
+        selected: Proposal,
+        bundle: ProposalBundle,
         *,
-        created_at: datetime,
-    ) -> None:
-        summary = _package_snapshot_summary(snapshot)
-        if not summary:
-            return
-        # Wrap the activity insert in a SAVEPOINT: if it fails (constraint
-        # violation, schema drift, oversize subject), we roll back JUST this
-        # nested transaction and leave the outer accept-flow session in a
-        # healthy state — a corrupted session would otherwise fail the next
-        # commit and surface as a 500 even though the signature was already
-        # captured. owner_id may be NULL on legacy proposals; fall back to
-        # the proposal's creator so the activity row has a real actor.
-        actor_id = proposal.owner_id or proposal.created_by_id
-        try:
-            async with self.db.begin_nested():
-                activity = Activity(
+        accepted_at: datetime,
+    ) -> list[Proposal]:
+        # Caller (accept_proposal_public) acquired FOR UPDATE on this bundle
+        # row and pre-loaded bundle.proposals; this method just mutates under
+        # that lock and never re-queries.
+        bundle.status = "accepted"
+        bundle.selected_proposal_id = selected.id
+        bundle.selected_at = accepted_at
+        bundle.accepted_at = accepted_at
+        actor_id = selected.owner_id or selected.created_by_id
+        rejected_siblings: list[Proposal] = []
+        for option in bundle.proposals:
+            if option.id != selected.id and option.status in ("sent", "viewed"):
+                option.status = "rejected"
+                option.rejected_at = accepted_at
+                option.rejection_reason = (
+                    f"Another proposal in bundle {bundle.bundle_number} was accepted."
+                )
+                rejected_siblings.append(option)
+                # Per-sibling Activity row so the owner's timeline shows the
+                # full picture, not just the winner. emit() runs in the
+                # router after _mark_bundle_accepted returns — keeping IO
+                # out of the locked critical section.
+                if actor_id:
+                    self.db.add(
+                        Activity(
+                            activity_type="note",
+                            subject=f"Proposal rejected: {option.title}",
+                            description=(
+                                f"Auto-rejected because another proposal in "
+                                f"bundle {bundle.bundle_number} was accepted."
+                            ),
+                            entity_type="proposals",
+                            entity_id=option.id,
+                            is_completed=True,
+                            completed_at=accepted_at,
+                            owner_id=actor_id,
+                            created_by_id=actor_id,
+                        )
+                    )
+        if actor_id:
+            self.db.add(
+                Activity(
                     activity_type="note",
-                    subject=f"Package selected: {summary}",
-                    description="Selected during public proposal acceptance.",
+                    subject=f"Proposal bundle selected: {selected.title}",
+                    description=f"Selected from bundle {bundle.bundle_number}.",
                     entity_type="proposals",
-                    entity_id=proposal.id,
+                    entity_id=selected.id,
                     is_completed=True,
-                    completed_at=created_at,
+                    completed_at=accepted_at,
                     owner_id=actor_id,
                     created_by_id=actor_id,
                 )
-                self.db.add(activity)
-        except (SQLAlchemyError, TypeError, AttributeError):
-            # SQLAlchemyError covers constraint violations + schema drift;
-            # TypeError/AttributeError catch snapshot dicts mutated into an
-            # unexpected shape (e.g. summary tripping a non-string concat).
-            # The signature is already captured — silently logging is
-            # preferable to 500ing the accept after a successful sign.
-            logger.exception(
-                "Failed to record package selection activity for proposal %s "
-                "(snapshot summary=%r)",
-                proposal.id,
-                summary,
             )
+        # Return the rejected siblings so the router can emit PROPOSAL_REJECTED
+        # events post-commit. Avoids importing the events module from the
+        # service layer, and emitting under the row lock would tie event-
+        # handler latency to the bundle's serialization window.
+        await self.db.flush()
+        return rejected_siblings
 
     async def _maybe_stamp_signing_documents(
         self,
@@ -1272,7 +1092,6 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                         signer_user_agent=signer_user_agent,
                         signed_at=signed_at,
                         proposal_number=proposal.proposal_number,
-                        selected_package_snapshot=proposal.selected_package_snapshot,
                     ),
                 )
                 timestamp = int(signed_at.timestamp())
@@ -1381,7 +1200,6 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                     signer_user_agent=signer_user_agent,
                     signed_at=signed_at,
                     proposal_number=proposal.proposal_number,
-                    selected_package_snapshot=proposal.selected_package_snapshot,
                 ),
             )
             timestamp = int(signed_at.timestamp())
@@ -1556,7 +1374,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 selectinload(Proposal.contact),
                 selectinload(Proposal.company),
                 selectinload(Proposal.signing_documents),
-                selectinload(Proposal.packages).selectinload(ProposalPackage.items),
+                selectinload(Proposal.bundle),
             )
             .where(Proposal.public_token == token)
         )
@@ -1574,7 +1392,8 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         proposal = await self.get_by_id(proposal_id)
         if not proposal:
             raise ValueError(f"Proposal {proposal_id} not found")
-        await self.validate_packages_ready(proposal)
+        if proposal.proposal_bundle_id and proposal.bundle and proposal.bundle.status in {"draft", "sent", "viewed"}:
+            raise ValueError("Send the proposal bundle instead of sending one bundled proposal")
         await self.validate_signing_documents_ready(proposal)
         if not proposal.contact_id:
             raise ValueError("Proposal has no associated contact")
@@ -1763,25 +1582,10 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 f'<p class="doc-prose">{escape(pricing_free_text)}</p>',
             )
 
-        package_section_html = ""
-        if include_signature and proposal.signed_at and proposal.selected_package_snapshot:
-            package_section_html = self._render_selected_package_snapshot_html(
-                proposal.selected_package_snapshot,
-            )
-        elif not include_signature:
-            active_packages = [
-                package for package in (proposal.packages or []) if package.is_active
-            ]
-            if active_packages:
-                package_section_html = self._render_package_options_html(active_packages)
-        if package_section_html:
-            sections_html += package_section_html
-
         legacy_payment_snapshot_html = ""
         if (
             include_signature
             and proposal.signed_at
-            and not proposal.selected_package_snapshot
             and proposal.amount is not None
             and (
                 proposal.status in ("awaiting_payment", "paid")
@@ -1811,7 +1615,6 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
             proposal.content
             and not populated_content
             and not pricing_free_text
-            and not package_section_html
             and not legacy_payment_snapshot_html
         ):
             sections_html += _section(
@@ -2154,13 +1957,6 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 "signer_name": proposal.signer_name,
             },
         )
-        selected_summary = _package_snapshot_summary(proposal.selected_package_snapshot)
-        if selected_summary:
-            package_note = (
-                "<p><strong>Selected package:</strong> "
-                f"{escape(selected_summary)}</p>"
-            )
-            body = body.replace("</body>", package_note + "</body>", 1)
 
         # Render + queue are both best-effort: a failure in either leaves
         # the proposal accepted but without a signed-copy email. The CRM

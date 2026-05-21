@@ -61,7 +61,6 @@ class StampInputs:
     proposal_number: str
     date_coords: dict[str, Any] | list[dict[str, Any]] | None = None
     date_label: str | None = None
-    selected_package_snapshot: dict[str, Any] | None = None
 
 
 def stamp_master_with_signature(inputs: StampInputs) -> bytes:
@@ -377,8 +376,6 @@ def _build_audit_page(inputs: StampInputs) -> bytes:
     c.drawString(left + 110, y, digest[:64])
     y -= line_gap
 
-    y = _draw_selected_package(c, inputs.selected_package_snapshot, left, y - 10, line_gap)
-
     y -= 18
     c.setFont("Helvetica-Oblique", 9)
     c.setFillGray(0.45)
@@ -396,49 +393,6 @@ def _build_audit_page(inputs: StampInputs) -> bytes:
     c.showPage()
     c.save()
     return buf.getvalue()
-
-
-def _draw_selected_package(
-    c: canvas.Canvas,
-    snapshot: dict[str, Any] | None,
-    left: float,
-    y: float,
-    line_gap: float,
-) -> float:
-    if not snapshot:
-        return y
-    name = _safe(str(snapshot.get("name") or ""))
-    currency = _safe(str(snapshot.get("currency") or "USD").upper())
-    total = _safe(str(snapshot.get("total") or "0.00"))
-    if not name:
-        return y
-
-    c.setFont("Helvetica-Bold", 11)
-    c.drawString(left, y, "Selected package")
-    c.setFont("Helvetica", 11)
-    c.drawString(left + 110, y, f"{name} ({currency} {total})")
-    y -= line_gap
-
-    description = _safe(str(snapshot.get("description") or ""))
-    if description:
-        c.setFont("Helvetica", 9)
-        for line in _wrap_text(description, 86)[:3]:
-            c.drawString(left + 110, y, line)
-            y -= line_gap - 4
-
-    items = snapshot.get("items") or []
-    if isinstance(items, list) and items:
-        c.setFont("Helvetica", 8.5)
-        for item in items[:8]:
-            if not isinstance(item, dict):
-                continue
-            desc = _safe(str(item.get("description") or ""))
-            qty = _safe(str(item.get("quantity") or ""))
-            line_total = _safe(str(item.get("total") or ""))
-            for line in _wrap_text(f"{qty} x {desc} - {currency} {line_total}", 92)[:2]:
-                c.drawString(left + 110, y, line)
-                y -= line_gap - 5
-    return y
 
 
 def _safe(value: str | None) -> str:
