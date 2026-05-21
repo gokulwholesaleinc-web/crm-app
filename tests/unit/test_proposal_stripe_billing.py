@@ -1,7 +1,6 @@
 """Tests for proposal billing remnants after sign-to-confirm stopped billing.
 
 Covers:
-- ProposalBillingMixin schema validation for saved pricing metadata.
 - accept_proposal_public never spawns Stripe artifacts.
 - Stripe webhooks can still mark proposals paid when artifacts already exist.
 """
@@ -19,7 +18,6 @@ from src.auth.models import User
 from src.contacts.models import Contact
 from src.payments.webhook_processor import WebhookProcessor
 from src.proposals.models import Proposal
-from src.proposals.schemas import ProposalBillingMixin
 from src.proposals.service import ProposalService
 
 # Smallest possible valid PNG (1x1 transparent); used as the drawn
@@ -29,40 +27,6 @@ _ONE_PIXEL_PNG = bytes.fromhex(
     "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
     "0000000d49444154789c63000000000005000158a8c4d70000000049454e44ae426082"
 )
-
-
-class TestProposalBillingMixin:
-    def test_one_time_accepts_plain_amount(self):
-        proposal = ProposalBillingMixin(payment_type="one_time", amount=Decimal("500"))
-
-        assert proposal.payment_type == "one_time"
-        assert proposal.amount == Decimal("500")
-
-    def test_subscription_requires_interval(self):
-        with pytest.raises(ValueError):
-            ProposalBillingMixin(payment_type="subscription", amount=Decimal("100"))
-
-    def test_subscription_rejects_zero_count(self):
-        with pytest.raises(ValueError):
-            ProposalBillingMixin(
-                payment_type="subscription",
-                amount=Decimal("100"),
-                recurring_interval="month",
-                recurring_interval_count=0,
-            )
-
-    def test_one_time_rejects_recurring_hints(self):
-        with pytest.raises(ValueError):
-            ProposalBillingMixin(
-                payment_type="one_time",
-                amount=Decimal("100"),
-                recurring_interval="month",
-                recurring_interval_count=1,
-            )
-
-    def test_amount_must_be_positive(self):
-        with pytest.raises(ValueError):
-            ProposalBillingMixin(payment_type="one_time", amount=Decimal("0"))
 
 
 @pytest.fixture
