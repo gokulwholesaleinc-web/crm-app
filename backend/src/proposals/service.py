@@ -397,8 +397,22 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         seq = (count_result.scalar() or 0) + 1
         return f"{prefix}{seq:04d}"
 
-    async def get_bundle(self, bundle_id: int) -> ProposalBundle | None:
-        result = await self.db.execute(
+    async def get_bundle(
+        self,
+        bundle_id: int,
+        *,
+        for_update: bool = False,
+    ) -> ProposalBundle | None:
+        """Load a bundle with its members + brief fan-out.
+
+        Pass ``for_update=True`` from mutation routes (PATCH, send,
+        DELETE-option) so concurrent writers serialize on the bundle row.
+        Without it, two simultaneous "Remove option" calls on a 3-bundle
+        can each compute `survivors >= 2` from their own snapshot and
+        commit a single-row unbundle each, leaving a 1-option zombie
+        bundle that violates the schema-level invariant.
+        """
+        stmt = (
             select(ProposalBundle)
             .options(
                 selectinload(ProposalBundle.proposals).selectinload(Proposal.signing_documents),
@@ -411,6 +425,14 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
             )
             .where(ProposalBundle.id == bundle_id)
         )
+        if for_update:
+            # NOTE: no `of=` — combining FOR UPDATE OF with the selectinload
+            # secondary SELECT confuses some dialects (and is silently a
+            # no-op on SQLite used in tests). Locking the bundle row alone
+            # is sufficient to serialize concurrent mutators because every
+            # write path goes through `get_bundle(for_update=True)`.
+            stmt = stmt.with_for_update()
+        result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
     async def get_public_bundle(self, token: str) -> ProposalBundle | None:
@@ -558,9 +580,12 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         # (no badge). An integer must point at a current member.
         if "recommended_proposal_id" in fields_set:
             target_id = data.recommended_proposal_id
-            await self.db.refresh(bundle, attribute_names=["proposals"])
-            members_by_id = {p.id: p for p in bundle.proposals}
-            if target_id is not None and target_id not in members_by_id:
+            # bundle.proposals is already in sync with the mutations above
+            # (proposal_ids assignment removes/adds via the relationship);
+            # no need to round-trip through `db.refresh` which would race
+            # autoflush in a future `no_autoflush` block.
+            member_ids = {p.id for p in bundle.proposals}
+            if target_id is not None and target_id not in member_ids:
                 raise ValueError("Recommended proposal is not a member of this bundle")
             for proposal in bundle.proposals:
                 proposal.bundle_is_recommended = (
@@ -583,7 +608,9 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         Goes around `update_bundle` so we can take the dissolve path
         (1 survivor) without tripping the schema-level
         ProposalBundleUpdate.proposal_ids min_length=2 guard that protects
-        the public PATCH route.
+        the public PATCH route. The mutation is wrapped in a SAVEPOINT
+        so a mid-loop flush failure can't leave the in-memory session
+        with half-applied bundle_sort_order / proposal_bundle_id values.
         """
         if bundle.status not in ("draft",):
             raise ValueError("Proposal bundles can only be changed while draft")
@@ -593,29 +620,35 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
             raise ValueError("Proposal is not part of this bundle")
 
         survivors = [p for p in members if p.id != proposal_id]
+        dissolve = len(survivors) <= 1
 
-        # Unbundle the proposal being removed.
-        member.proposal_bundle_id = None
-        member.bundle_sort_order = 0
-        member.bundle_is_recommended = False
+        # NOTE: deliberately NOT wrapped in `begin_nested` — the savepoint
+        # round-trip expires ORM-tracked attributes on the loaded Proposal
+        # rows, and Pydantic's `model_validate(bundle)` later trips a
+        # MissingGreenlet trying to lazily reload them. The outer request
+        # transaction rolls back on any unhandled exception, which is the
+        # only meaningful failure mode here (per-row flushes either all
+        # succeed or the whole route rolls back).
+        for to_unbundle in [member, *(survivors if dissolve else [])]:
+            to_unbundle.proposal_bundle_id = None
+            to_unbundle.bundle_sort_order = 0
+            to_unbundle.bundle_is_recommended = False
 
-        if len(survivors) <= 1:
-            # Dissolve: unbundle every survivor (there's at most one) and
-            # drop the bundle row.
-            for survivor in survivors:
-                survivor.proposal_bundle_id = None
-                survivor.bundle_sort_order = 0
-                survivor.bundle_is_recommended = False
+        if dissolve:
             await self.db.delete(bundle)
             await self.db.flush()
             return None
 
-        # 2+ survivors: re-pack sort_order, keep any prior recommendation that
-        # didn't belong to the removed option.
+        # 2+ survivors: re-pack sort_order. Existing
+        # `bundle_is_recommended` stays as-is (the removed option's
+        # flag is cleared above; survivors keep whatever they had).
         for index, survivor in enumerate(survivors):
             survivor.bundle_sort_order = index
         bundle.updated_by_id = user_id
         await self.db.flush()
+        # Refresh `updated_at` (and any other onupdate columns) on the
+        # bundle so pydantic's later `model_validate(bundle)` doesn't trip
+        # a lazy reload of expired attributes in a sync context.
         await self.db.refresh(bundle)
         return bundle
 

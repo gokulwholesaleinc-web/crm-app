@@ -265,7 +265,9 @@ async def update_proposal_bundle(
     if bundle_data.proposal_ids is not None:
         await _require_proposals_write_access(db, bundle_data.proposal_ids, current_user)
     service = ProposalService(db)
-    bundle = await service.get_bundle(bundle_id)
+    # Mutation path → row-lock the bundle so concurrent PATCH / send /
+    # remove-option callers serialize and can't co-corrupt membership.
+    bundle = await service.get_bundle(bundle_id, for_update=True)
     if bundle is None:
         raise_not_found("Proposal bundle")
     _require_bundle_write_access(bundle, current_user)
@@ -298,7 +300,8 @@ async def send_proposal_bundle(
 ):
     """Send one public chooser link for a proposal bundle."""
     service = ProposalService(db)
-    bundle = await service.get_bundle(bundle_id)
+    # Send is a status-flip mutation that races with PATCH / remove-option.
+    bundle = await service.get_bundle(bundle_id, for_update=True)
     if bundle is None:
         raise_not_found("Proposal bundle")
     _require_bundle_write_access(bundle, current_user)
@@ -320,7 +323,12 @@ async def remove_proposal_bundle_option(
     bundle_id: int,
     proposal_id: int,
     request: Request,
-    current_user: ProposalUpdateUser,
+    # Removing the second-to-last option dissolves the bundle (db.delete on
+    # the ProposalBundle row). Gate on the same `delete` permission the
+    # single-proposal DELETE and DELETE /bundles/{id} routes use — a user
+    # holding only `update` shouldn't be able to destroy a bundle via the
+    # remove-option side door.
+    current_user: ProposalDeleteUser,
     db: DBSession,
 ):
     """Remove one proposal from a draft bundle.

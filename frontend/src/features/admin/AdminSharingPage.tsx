@@ -3,7 +3,7 @@
  * Accessible to admin role only.
  */
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -152,20 +152,24 @@ export default function AdminSharingPage() {
   });
 
   const bulkSelectedIds = useMemo(() => bulkSelected.map((s) => s.id), [bulkSelected]);
-  const bulkLabelsById = useMemo(() => {
-    const m = new Map<number, string>();
-    for (const item of bulkSelected) m.set(item.id, item.label);
-    return m;
-  }, [bulkSelected]);
+  // Snapshot of the labels at submit time so the "Retry failed records"
+  // button can recover names even if the user manipulated `bulkSelected`
+  // between submit and retry. Using a ref keeps this out of the render
+  // dependency graph — it's read in event handlers only.
+  const submittedLabelsRef = useRef<Map<number, string>>(new Map());
 
   const bulkMutation = useMutation({
-    mutationFn: () =>
-      bulkShareAdmin({
+    mutationFn: () => {
+      submittedLabelsRef.current = new Map(
+        bulkSelected.map((s) => [s.id, s.label]),
+      );
+      return bulkShareAdmin({
         entity_type: bulkEntityType,
         entity_ids: bulkSelectedIds,
         shared_with_user_id: Number(bulkSharedWithId),
         permission_level: bulkPermission,
-      }),
+      });
+    },
     onSuccess: (result) => {
       setBulkResult(result);
       queryClient.invalidateQueries({ queryKey: ['admin', 'shares'] });
@@ -269,10 +273,17 @@ export default function AdminSharingPage() {
                 label="Record type"
                 value={bulkEntityType}
                 onChange={(event) => {
-                  // Picker resets selected items in its own effect when the
-                  // type changes, but stamp bulkSelected here too so any
-                  // intermediate render (e.g., a count badge) sees zero.
-                  setBulkEntityType(event.target.value as RecordPickerEntityType);
+                  const nextType = event.target.value as RecordPickerEntityType;
+                  // IDs from `contacts` don't apply to `companies`, so a
+                  // type-change must drop selection — but warn the user if
+                  // they had picks in flight so curating 250 chips isn't
+                  // lost to one stray keystroke.
+                  if (bulkSelected.length > 0) {
+                    showWarning(
+                      `Switched to ${nextType} — cleared ${bulkSelected.length} previous selection(s).`,
+                    );
+                  }
+                  setBulkEntityType(nextType);
                   setBulkSelected([]);
                   setBulkResult(null);
                 }}
@@ -375,28 +386,43 @@ export default function AdminSharingPage() {
                     {failedItems.length > 0 && (
                       <div className="mt-2 space-y-2">
                         <ul className="max-h-40 space-y-1 overflow-y-auto rounded border border-yellow-200 bg-white/60 p-2 text-xs dark:border-yellow-900/60 dark:bg-yellow-950/30">
-                          {failedItems.map((item) => (
-                            <li key={item.entity_id}>
-                              <span className="font-semibold">
-                                {bulkLabelsById.get(item.entity_id) ?? `Record #${item.entity_id}`}
-                              </span>
-                              <span className="ml-2 font-normal">{item.detail}</span>
-                            </li>
-                          ))}
+                          {failedItems.map((item) => {
+                            const recoveredLabel = submittedLabelsRef.current.get(item.entity_id);
+                            return (
+                              <li key={item.entity_id}>
+                                <span className="font-semibold">
+                                  {recoveredLabel ?? `Record #${item.entity_id}`}
+                                </span>
+                                <span className="ml-2 font-normal">{item.detail}</span>
+                              </li>
+                            );
+                          })}
                         </ul>
                         <button
                           type="button"
                           onClick={() => {
-                            // Recover labels from the prior selection so the
-                            // retried chip list reads as names, not just ids.
+                            // Recover labels from the submit-time snapshot
+                            // so retried chips read as names. Any id we
+                            // can't resolve becomes a `Record #N` chip
+                            // visibly distinct from a real selection so
+                            // the user notices before re-submitting.
                             setBulkSelected(
-                              failedItems.map((item) => ({
-                                id: item.entity_id,
-                                label:
-                                  bulkLabelsById.get(item.entity_id) ??
-                                  `Record #${item.entity_id}`,
-                              })),
+                              failedItems.map((item) => {
+                                const label = submittedLabelsRef.current.get(item.entity_id);
+                                return {
+                                  id: item.entity_id,
+                                  label: label ?? `Record #${item.entity_id}`,
+                                };
+                              }),
                             );
+                            const phantomCount = failedItems.filter(
+                              (item) => !submittedLabelsRef.current.has(item.entity_id),
+                            ).length;
+                            if (phantomCount > 0) {
+                              showWarning(
+                                `Retrying ${phantomCount} unresolved ID(s) — name not recovered. Review before applying.`,
+                              );
+                            }
                             setBulkResult(null);
                           }}
                           className="text-xs font-medium underline hover:no-underline"

@@ -9,6 +9,8 @@ import { listContacts } from '../../api/contacts';
 import { listCompanies } from '../../api/companies';
 import { listLeads } from '../../api/leads';
 import { listProposals } from '../../api/proposals';
+import { showError } from '../../utils/toast';
+import { extractApiErrorDetail } from '../../utils/errors';
 
 export type RecordPickerEntityType = 'contacts' | 'companies' | 'leads' | 'proposals';
 
@@ -34,42 +36,77 @@ interface RecordSearchPickerProps {
 // matches max — enough for "type a few chars and pick" without paginating.
 const SEARCH_PAGE_SIZE = 25;
 
+type SearchFilters = { page: number; page_size: number; search?: string };
+
+interface RecordAdapter {
+  fetch: (filters: SearchFilters) => Promise<{ items: unknown[] }>;
+  toItem: (raw: unknown) => RecordPickerItem;
+}
+
+const ADAPTERS: Record<RecordPickerEntityType, RecordAdapter> = {
+  contacts: {
+    fetch: (f) => listContacts(f),
+    toItem: (raw) => {
+      const c = raw as { id: number; full_name?: string | null; email?: string | null };
+      return {
+        id: c.id,
+        label: c.full_name || c.email || `Contact #${c.id}`,
+        detail: c.email ?? undefined,
+      };
+    },
+  },
+  companies: {
+    fetch: (f) => listCompanies(f),
+    toItem: (raw) => {
+      const c = raw as { id: number; name?: string | null; industry?: string | null };
+      return {
+        id: c.id,
+        label: c.name || `Company #${c.id}`,
+        detail: c.industry ?? undefined,
+      };
+    },
+  },
+  leads: {
+    fetch: (f) => listLeads(f),
+    toItem: (raw) => {
+      const l = raw as {
+        id: number;
+        full_name?: string | null;
+        company_name?: string | null;
+        email?: string | null;
+      };
+      return {
+        id: l.id,
+        label: l.full_name || l.company_name || `Lead #${l.id}`,
+        detail: l.email ?? l.company_name ?? undefined,
+      };
+    },
+  },
+  proposals: {
+    fetch: (f) => listProposals(f),
+    toItem: (raw) => {
+      const p = raw as { id: number; title?: string | null; proposal_number?: string | null };
+      return {
+        id: p.id,
+        label: p.title || `Proposal #${p.id}`,
+        detail: p.proposal_number ?? undefined,
+      };
+    },
+  },
+};
+
 async function searchRecords(
   entityType: RecordPickerEntityType,
   query: string,
 ): Promise<RecordPickerItem[]> {
-  const filters = { page: 1, page_size: SEARCH_PAGE_SIZE, search: query || undefined };
-  if (entityType === 'contacts') {
-    const r = await listContacts(filters);
-    return r.items.map((c) => ({
-      id: c.id,
-      label: c.full_name || c.email || `Contact #${c.id}`,
-      detail: c.email ?? undefined,
-    }));
-  }
-  if (entityType === 'companies') {
-    const r = await listCompanies(filters);
-    return r.items.map((c) => ({
-      id: c.id,
-      label: c.name || `Company #${c.id}`,
-      detail: c.industry ?? undefined,
-    }));
-  }
-  if (entityType === 'leads') {
-    const r = await listLeads(filters);
-    return r.items.map((l) => ({
-      id: l.id,
-      label: l.full_name || l.company_name || `Lead #${l.id}`,
-      detail: l.email ?? l.company_name ?? undefined,
-    }));
-  }
-  // proposals
-  const r = await listProposals(filters);
-  return r.items.map((p) => ({
-    id: p.id,
-    label: p.title || `Proposal #${p.id}`,
-    detail: p.proposal_number,
-  }));
+  const filters: SearchFilters = {
+    page: 1,
+    page_size: SEARCH_PAGE_SIZE,
+    search: query || undefined,
+  };
+  const { fetch, toItem } = ADAPTERS[entityType];
+  const response = await fetch(filters);
+  return response.items.map(toItem);
 }
 
 const ENTITY_LABEL: Record<RecordPickerEntityType, string> = {
@@ -97,6 +134,7 @@ export function RecordSearchPicker({
     data: matches = [],
     isFetching,
     isError,
+    error,
   } = useQuery<RecordPickerItem[]>({
     queryKey: ['record-picker', entityType, debouncedQuery],
     queryFn: () => searchRecords(entityType, debouncedQuery),
@@ -106,6 +144,26 @@ export function RecordSearchPicker({
     placeholderData: (prev) => prev,
     staleTime: 30_000,
   });
+
+  // Surface fetch failures even when the dropdown is closed — otherwise a
+  // 5xx looks identical to "no matches" and the user might silently
+  // submit a stale partial selection. Fire once per error transition,
+  // not per refetch, so we don't spam toasts on a thrashy connection.
+  const [lastErroredQueryKey, setLastErroredQueryKey] = useState<string | null>(null);
+  useEffect(() => {
+    const key = `${entityType}|${debouncedQuery}`;
+    if (isError && lastErroredQueryKey !== key) {
+      showError(
+        extractApiErrorDetail(error) ??
+          `Failed to search ${entityWord} records. Check your connection and try again.`,
+      );
+      setLastErroredQueryKey(key);
+    } else if (!isError && lastErroredQueryKey === key) {
+      // The same query succeeded later — clear the latch so a future
+      // failure on this key re-toasts.
+      setLastErroredQueryKey(null);
+    }
+  }, [isError, error, entityType, debouncedQuery, entityWord, lastErroredQueryKey]);
 
   const handleSelect = useCallback(
     (next: RecordPickerItem[] | null) => {

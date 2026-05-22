@@ -404,7 +404,10 @@ function ProposalDetailPage() {
   const handleSetBundleRecommendation = async (
     recommendedProposalId: number | null,
   ) => {
-    if (!proposalBundle) return;
+    if (!proposalBundle) {
+      showError('Proposal options are still loading');
+      return;
+    }
     try {
       await updateBundleMutation.mutateAsync({
         bundleId: proposalBundle.id,
@@ -421,30 +424,25 @@ function ProposalDetailPage() {
   };
 
   const handleRemoveBundleOption = async (optionId: number) => {
-    if (!proposalBundle) return;
-    // Avoid an in-flight remove on the row the user is currently viewing
-    // — we'd dissolve the bundle out from under their detail page. The UI
-    // disables this row's remove button but defend in depth here too.
-    const survivorIds = (proposalBundle.proposals ?? [])
-      .map((p) => p.id)
-      .filter((id) => id !== optionId);
-    const willDissolve = survivorIds.length <= 1;
+    if (!proposalBundle) {
+      // Bundle still loading or load 5xx'd — never silently no-op; mirror
+      // the handleSend pattern so the user sees why their click did nothing.
+      showError('Proposal options are still loading');
+      return;
+    }
     try {
       const result = await removeBundleOptionMutation.mutateAsync({
         bundleId: proposalBundle.id,
         proposalId: optionId,
       });
+      // No navigate-on-dissolve: the removed proposal becomes a standalone
+      // draft whose URL is still valid. The detail-query invalidation
+      // refreshes the page and the bundle banner disappears naturally.
+      // Jumping the user to a survivor they didn't ask to see is worse.
       if (result === null) {
         showSuccess('Bundle dissolved — proposal is standalone again');
       } else {
         showSuccess('Option removed');
-      }
-      // If we dissolved AND the user is currently viewing a sub-proposal
-      // that's no longer in any bundle, redirect them to the survivor's
-      // detail page so the URL still has meaning. The survivor's bundle
-      // banner will disappear after the detail-query invalidation.
-      if (willDissolve && optionId === proposal.id && survivorIds[0]) {
-        navigate(`/proposals/${survivorIds[0]}`);
       }
     } catch (err) {
       showError(extractApiErrorDetail(err) ?? 'Failed to remove option');
