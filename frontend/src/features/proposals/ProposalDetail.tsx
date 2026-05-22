@@ -36,6 +36,7 @@ import {
   useUpdateProposalBundle,
   useSendProposalBundle,
   useDuplicateProposal,
+  useRemoveProposalBundleOption,
 } from '../../hooks/useProposals';
 import { ProposalAuditCard } from './ProposalAuditCard';
 // Lazy-loaded because pdf.js (~300 KB gzipped) only needs to land in
@@ -128,6 +129,7 @@ function ProposalDetailPage() {
   const updateBundleMutation = useUpdateProposalBundle();
   const sendBundleMutation = useSendProposalBundle();
   const duplicateProposalMutation = useDuplicateProposal();
+  const removeBundleOptionMutation = useRemoveProposalBundleOption();
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -397,6 +399,56 @@ function ProposalDetailPage() {
     navigate(`/proposals/${clone.id}`, {
       state: { focusSigningDocuments: true },
     });
+  };
+
+  const handleSetBundleRecommendation = async (
+    recommendedProposalId: number | null,
+  ) => {
+    if (!proposalBundle) return;
+    try {
+      await updateBundleMutation.mutateAsync({
+        bundleId: proposalBundle.id,
+        data: { recommended_proposal_id: recommendedProposalId },
+      });
+      showSuccess(
+        recommendedProposalId === null
+          ? 'Cleared recommended option'
+          : 'Marked as recommended',
+      );
+    } catch (err) {
+      showError(extractApiErrorDetail(err) ?? 'Failed to update recommendation');
+    }
+  };
+
+  const handleRemoveBundleOption = async (optionId: number) => {
+    if (!proposalBundle) return;
+    // Avoid an in-flight remove on the row the user is currently viewing
+    // — we'd dissolve the bundle out from under their detail page. The UI
+    // disables this row's remove button but defend in depth here too.
+    const survivorIds = (proposalBundle.proposals ?? [])
+      .map((p) => p.id)
+      .filter((id) => id !== optionId);
+    const willDissolve = survivorIds.length <= 1;
+    try {
+      const result = await removeBundleOptionMutation.mutateAsync({
+        bundleId: proposalBundle.id,
+        proposalId: optionId,
+      });
+      if (result === null) {
+        showSuccess('Bundle dissolved — proposal is standalone again');
+      } else {
+        showSuccess('Option removed');
+      }
+      // If we dissolved AND the user is currently viewing a sub-proposal
+      // that's no longer in any bundle, redirect them to the survivor's
+      // detail page so the URL still has meaning. The survivor's bundle
+      // banner will disappear after the detail-query invalidation.
+      if (willDissolve && optionId === proposal.id && survivorIds[0]) {
+        navigate(`/proposals/${survivorIds[0]}`);
+      }
+    } catch (err) {
+      showError(extractApiErrorDetail(err) ?? 'Failed to remove option');
+    }
   };
 
   const currentUser = useAuthStore.getState().user;
@@ -723,6 +775,11 @@ function ProposalDetailPage() {
             onSendOptions={handleSend}
             onCopyLink={handleCopyPublicLink}
             sendDisabledTitle={sendDisabledTitle}
+            canManageOptions={Boolean(proposalBundle) && bundleIsMutable}
+            isMutatingRecommendation={updateBundleMutation.isPending}
+            isRemovingOption={removeBundleOptionMutation.isPending}
+            onSetRecommended={handleSetBundleRecommendation}
+            onRemoveOption={handleRemoveBundleOption}
           />
         </div>
       )}
@@ -1033,6 +1090,14 @@ interface ProposalOptionsCardProps {
   onSendOptions: () => void;
   onCopyLink: () => void;
   sendDisabledTitle?: string;
+  // Per-option controls (Mark recommended / Remove). Only active when the
+  // caller has a draft bundle; otherwise the buttons are hidden and
+  // dispatching is a no-op.
+  canManageOptions: boolean;
+  isMutatingRecommendation: boolean;
+  isRemovingOption: boolean;
+  onSetRecommended: (proposalId: number | null) => void;
+  onRemoveOption: (proposalId: number) => void;
 }
 
 function ProposalOptionsCard({
@@ -1047,6 +1112,11 @@ function ProposalOptionsCard({
   onSendOptions,
   onCopyLink,
   sendDisabledTitle,
+  canManageOptions,
+  isMutatingRecommendation,
+  isRemovingOption,
+  onSetRecommended,
+  onRemoveOption,
 }: ProposalOptionsCardProps) {
   const options = bundle?.proposals?.length ? bundle.proposals : [proposal];
   const isDraftBundle = !bundle || bundle.status === 'draft';
@@ -1109,6 +1179,7 @@ function ProposalOptionsCard({
         <ul className="divide-y divide-gray-200 dark:divide-gray-700">
           {options.map((option) => {
             const isCurrent = option.id === proposal.id;
+            const isRecommended = Boolean(option.bundle_is_recommended);
             return (
               <li
                 key={option.id}
@@ -1127,7 +1198,7 @@ function ProposalOptionsCard({
                         Current
                       </span>
                     )}
-                    {option.bundle_is_recommended && (
+                    {isRecommended && (
                       <span className="rounded-full bg-primary-50 px-2 py-0.5 text-xs font-medium text-primary-700 dark:bg-primary-900/30 dark:text-primary-300">
                         Recommended
                       </span>
@@ -1140,7 +1211,42 @@ function ProposalOptionsCard({
                     )}
                   </p>
                 </div>
-                <StatusBadge status={option.status} size="sm" showDot={false} />
+                <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
+                  <StatusBadge status={option.status} size="sm" showDot={false} />
+                  {canManageOptions && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onSetRecommended(isRecommended ? null : option.id)
+                        }
+                        disabled={isMutatingRecommendation}
+                        className="rounded-md border border-gray-200 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
+                        aria-pressed={isRecommended}
+                        title={
+                          isRecommended
+                            ? 'Clear the Recommended badge'
+                            : 'Mark this option as recommended'
+                        }
+                      >
+                        {isRecommended ? 'Unmark' : 'Recommend'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onRemoveOption(option.id)}
+                        disabled={isRemovingOption}
+                        className="rounded-md border border-red-200 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-900/50 dark:text-red-300 dark:hover:bg-red-900/20"
+                        title={
+                          options.length === 2
+                            ? 'Removes this option AND dissolves the bundle (1 survivor)'
+                            : 'Remove this option from the bundle'
+                        }
+                      >
+                        Remove
+                      </button>
+                    </>
+                  )}
+                </div>
               </li>
             );
           })}

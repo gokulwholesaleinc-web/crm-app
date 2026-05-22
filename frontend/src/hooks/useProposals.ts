@@ -190,6 +190,32 @@ export function useSendProposalBundle() {
 }
 
 /**
+ * Remove a single option from a draft bundle. Returns null when the
+ * removal dissolved the bundle — callers must handle navigation in that
+ * case because the proposal page they were on may no longer make sense.
+ */
+export function useRemoveProposalBundleOption() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ bundleId, proposalId }: { bundleId: number; proposalId: number }) =>
+      proposalsApi.removeBundleOption(bundleId, proposalId),
+    onSuccess: (data, { bundleId, proposalId }) => {
+      // List page changes regardless of dissolve vs shrink — invalidate.
+      queryClient.invalidateQueries({ queryKey: proposalKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: ['proposal-bundles', bundleId] });
+      // The removed proposal's detail row now has bundle_id=null — refetch.
+      queryClient.invalidateQueries({ queryKey: proposalKeys.detail(proposalId) });
+      if (data) {
+        for (const proposal of data.proposals ?? []) {
+          queryClient.invalidateQueries({ queryKey: proposalKeys.detail(proposal.id) });
+        }
+      }
+    },
+  });
+}
+
+/**
  * Hook to reject a proposal
  */
 export function useRejectProposal() {

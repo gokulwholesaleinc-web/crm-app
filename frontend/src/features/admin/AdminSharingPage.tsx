@@ -33,6 +33,11 @@ import type {
 import { formatDate } from '../../utils/formatters';
 import { extractApiErrorDetail } from '../../utils/errors';
 import { showError, showSuccess, showWarning } from '../../utils/toast';
+import {
+  RecordSearchPicker,
+  type RecordPickerEntityType,
+  type RecordPickerItem,
+} from './RecordSearchPicker';
 
 // ``quotes`` retired 2026-05-14 — quotes router unmounted. Historical
 // EntityShare rows targeting quotes still exist in the DB but are no longer
@@ -80,67 +85,6 @@ function entityDetailHref(entityType: string, entityId: number): string {
   return `/${base}/${entityId}`;
 }
 
-function parseEntityIds(raw: string) {
-  const invalid: string[] = [];
-  const ids: number[] = [];
-  const seen = new Set<number>();
-  let tooMany = false;
-  const tokens = raw.split(/[\s,]+/).map((token) => token.trim()).filter(Boolean);
-
-  const addId = (id: number) => {
-    if (seen.has(id)) return;
-    if (ids.length >= BULK_MAX) {
-      tooMany = true;
-      return;
-    }
-    seen.add(id);
-    ids.push(id);
-  };
-
-  for (const token of tokens) {
-    const rangeMatch = token.match(/^(\d+)-(\d+)$/);
-    if (rangeMatch) {
-      const start = Number(rangeMatch[1]);
-      const end = Number(rangeMatch[2]);
-      if (
-        start < 1 ||
-        end < start ||
-        !Number.isSafeInteger(start) ||
-        !Number.isSafeInteger(end)
-      ) {
-        invalid.push(token);
-        continue;
-      }
-      if (end - start + 1 > BULK_MAX) {
-        tooMany = true;
-        continue;
-      }
-      for (let id = start; id <= end; id += 1) {
-        addId(id);
-      }
-      continue;
-    }
-
-    if (!/^\d+$/.test(token)) {
-      invalid.push(token);
-      continue;
-    }
-
-    const id = Number(token);
-    if (id < 1 || !Number.isSafeInteger(id)) {
-      invalid.push(token);
-      continue;
-    }
-    addId(id);
-  }
-
-  return {
-    ids,
-    invalid,
-    tooMany,
-  };
-}
-
 function resultTone(result: AdminBulkShareResponse | null) {
   if (!result) return null;
   return result.failed > 0 ? 'warning' : 'success';
@@ -162,10 +106,13 @@ export default function AdminSharingPage() {
   const [permissionLevel, setPermissionLevel] = useState('');
   const [revokeTarget, setRevokeTarget] = useState<AdminShareItem | null>(null);
 
-  const [bulkEntityType, setBulkEntityType] = useState('contacts');
+  const [bulkEntityType, setBulkEntityType] =
+    useState<RecordPickerEntityType>('contacts');
   const [bulkSharedWithId, setBulkSharedWithId] = useState('');
   const [bulkPermission, setBulkPermission] = useState<PermissionLevel>('view');
-  const [bulkRecordIds, setBulkRecordIds] = useState('');
+  // Selected records as RecordPickerItem so we keep the labels for the
+  // "failed IDs" recap and the chips can render names instead of bare ids.
+  const [bulkSelected, setBulkSelected] = useState<RecordPickerItem[]>([]);
   const [bulkResult, setBulkResult] = useState<AdminBulkShareResponse | null>(null);
 
   const { data: usersData } = useUsers(0, 200, { enabled: isAuthorized });
@@ -204,13 +151,18 @@ export default function AdminSharingPage() {
     },
   });
 
-  const parsedBulkIds = useMemo(() => parseEntityIds(bulkRecordIds), [bulkRecordIds]);
+  const bulkSelectedIds = useMemo(() => bulkSelected.map((s) => s.id), [bulkSelected]);
+  const bulkLabelsById = useMemo(() => {
+    const m = new Map<number, string>();
+    for (const item of bulkSelected) m.set(item.id, item.label);
+    return m;
+  }, [bulkSelected]);
 
   const bulkMutation = useMutation({
     mutationFn: () =>
       bulkShareAdmin({
         entity_type: bulkEntityType,
-        entity_ids: parsedBulkIds.ids,
+        entity_ids: bulkSelectedIds,
         shared_with_user_id: Number(bulkSharedWithId),
         permission_level: bulkPermission,
       }),
@@ -252,12 +204,7 @@ export default function AdminSharingPage() {
   }
 
   function handleBulkSubmit() {
-    if (
-      !bulkSharedWithId ||
-      parsedBulkIds.ids.length === 0 ||
-      parsedBulkIds.invalid.length > 0 ||
-      parsedBulkIds.tooMany
-    ) {
+    if (!bulkSharedWithId || bulkSelectedIds.length === 0) {
       return;
     }
     bulkMutation.mutate();
@@ -287,9 +234,7 @@ export default function AdminSharingPage() {
   const pages = Math.ceil(total / PAGE_SIZE);
   const bulkCanSubmit =
     Boolean(bulkSharedWithId) &&
-    parsedBulkIds.ids.length > 0 &&
-    parsedBulkIds.invalid.length === 0 &&
-    !parsedBulkIds.tooMany &&
+    bulkSelectedIds.length > 0 &&
     !bulkMutation.isPending;
   const failedItems = bulkResult?.items.filter((item) => item.status === 'failed') ?? [];
   const bulkTone = resultTone(bulkResult);
@@ -310,10 +255,10 @@ export default function AdminSharingPage() {
         <Card>
           <CardHeader
             title="Bulk add access"
-            description="Grant one teammate access to up to 500 records at once."
+            description="Search for records by name and grant one teammate access to up to 500 at once."
             action={
-              <Badge variant={parsedBulkIds.ids.length > 0 ? 'blue' : 'gray'} size="sm">
-                {parsedBulkIds.ids.length} selected
+              <Badge variant={bulkSelectedIds.length > 0 ? 'blue' : 'gray'} size="sm">
+                {bulkSelectedIds.length} selected
               </Badge>
             }
           />
@@ -324,7 +269,11 @@ export default function AdminSharingPage() {
                 label="Record type"
                 value={bulkEntityType}
                 onChange={(event) => {
-                  setBulkEntityType(event.target.value);
+                  // Picker resets selected items in its own effect when the
+                  // type changes, but stamp bulkSelected here too so any
+                  // intermediate render (e.g., a count badge) sees zero.
+                  setBulkEntityType(event.target.value as RecordPickerEntityType);
+                  setBulkSelected([]);
                   setBulkResult(null);
                 }}
                 options={BULK_ENTITY_TYPE_OPTIONS}
@@ -365,39 +314,35 @@ export default function AdminSharingPage() {
 
             <div className="mt-4">
               <label
-                htmlFor="bulk-record-ids"
+                htmlFor="bulk-record-picker"
                 className="block text-sm font-medium text-gray-700 dark:text-gray-300"
               >
-                Record IDs
+                Records
               </label>
-              <textarea
-                id="bulk-record-ids"
-                value={bulkRecordIds}
-                onChange={(event) => {
-                  setBulkRecordIds(event.target.value);
-                  setBulkResult(null);
-                }}
-                rows={4}
-                placeholder="42, 43, 44 or 100-120"
-                className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm transition-colors focus-visible:border-primary-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
-                aria-describedby="bulk-record-ids-status"
-              />
+              <div className="mt-1">
+                <RecordSearchPicker
+                  id="bulk-record-picker"
+                  entityType={bulkEntityType}
+                  value={bulkSelected}
+                  onChange={(items) => {
+                    setBulkSelected(items);
+                    setBulkResult(null);
+                  }}
+                  maxRecords={BULK_MAX}
+                  disabled={bulkMutation.isPending}
+                />
+              </div>
               <div
                 id="bulk-record-ids-status"
                 className="mt-2 min-h-5 text-xs text-gray-500 dark:text-gray-400"
               >
-                {parsedBulkIds.invalid.length > 0 ? (
-                  <span className="text-red-600 dark:text-red-400">
-                    Invalid: {parsedBulkIds.invalid.join(', ')}. Use
-                    comma- or space-separated IDs ≥ 1, or ranges like 100-120.
-                  </span>
-                ) : parsedBulkIds.tooMany ? (
-                  <span className="text-red-600 dark:text-red-400">
-                    Limit is {BULK_MAX} records — narrow the range or split
-                    into smaller batches.
+                {bulkSelected.length === 0 ? (
+                  <span>
+                    Search by name; click a match to add it as a chip. Up to{' '}
+                    {BULK_MAX} records per batch.
                   </span>
                 ) : (
-                  <span>{parsedBulkIds.ids.length} unique record ID(s)</span>
+                  <span>{bulkSelected.length} record(s) selected</span>
                 )}
               </div>
             </div>
@@ -431,8 +376,10 @@ export default function AdminSharingPage() {
                       <div className="mt-2 space-y-2">
                         <ul className="max-h-40 space-y-1 overflow-y-auto rounded border border-yellow-200 bg-white/60 p-2 text-xs dark:border-yellow-900/60 dark:bg-yellow-950/30">
                           {failedItems.map((item) => (
-                            <li key={item.entity_id} className="font-mono">
-                              <span className="font-semibold">#{item.entity_id}</span>
+                            <li key={item.entity_id}>
+                              <span className="font-semibold">
+                                {bulkLabelsById.get(item.entity_id) ?? `Record #${item.entity_id}`}
+                              </span>
                               <span className="ml-2 font-normal">{item.detail}</span>
                             </li>
                           ))}
@@ -440,14 +387,21 @@ export default function AdminSharingPage() {
                         <button
                           type="button"
                           onClick={() => {
-                            setBulkRecordIds(
-                              failedItems.map((item) => item.entity_id).join(', '),
+                            // Recover labels from the prior selection so the
+                            // retried chip list reads as names, not just ids.
+                            setBulkSelected(
+                              failedItems.map((item) => ({
+                                id: item.entity_id,
+                                label:
+                                  bulkLabelsById.get(item.entity_id) ??
+                                  `Record #${item.entity_id}`,
+                              })),
                             );
                             setBulkResult(null);
                           }}
                           className="text-xs font-medium underline hover:no-underline"
                         >
-                          Retry failed IDs
+                          Retry failed records
                         </button>
                       </div>
                     )}

@@ -311,9 +311,16 @@ function ProposalsPage() {
                       to={`/proposals/${proposal.id}`}
                       className="flex-1 min-w-0"
                     >
-                      <p className="text-sm font-medium text-primary-600 hover:text-primary-900 dark:hover:text-primary-300 truncate">
-                        {proposal.title}
-                      </p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium text-primary-600 hover:text-primary-900 dark:hover:text-primary-300 truncate">
+                          {proposal.title}
+                        </p>
+                        {proposal.bundle && (proposal.bundle.proposals_count ?? 0) > 1 && (
+                          <span className="flex-shrink-0 rounded-full bg-primary-50 px-2 py-0.5 text-xs font-medium text-primary-700 dark:bg-primary-900/30 dark:text-primary-300">
+                            {proposal.bundle.proposals_count} options
+                          </span>
+                        )}
+                      </div>
                       <p className="text-xs text-gray-500 dark:text-gray-400">{proposal.proposal_number}</p>
                       {proposal.bundle && (
                         <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">
@@ -417,12 +424,19 @@ function ProposalsPage() {
                       }}
                     >
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <Link
-                          to={`/proposals/${proposal.id}`}
-                          className="text-sm font-medium text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-300"
-                        >
-                          {proposal.title}
-                        </Link>
+                        <div className="flex items-center gap-2">
+                          <Link
+                            to={`/proposals/${proposal.id}`}
+                            className="text-sm font-medium text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-300"
+                          >
+                            {proposal.title}
+                          </Link>
+                          {proposal.bundle && (proposal.bundle.proposals_count ?? 0) > 1 && (
+                            <span className="rounded-full bg-primary-50 px-2 py-0.5 text-xs font-medium text-primary-700 dark:bg-primary-900/30 dark:text-primary-300">
+                              {proposal.bundle.proposals_count} options
+                            </span>
+                          )}
+                        </div>
                         <p className="text-xs text-gray-500 dark:text-gray-400">{proposal.proposal_number}</p>
                         {proposal.bundle && (
                           <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">

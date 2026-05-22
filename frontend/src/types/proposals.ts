@@ -127,6 +127,9 @@ export interface ProposalBundleBrief {
   accepted_at?: string | null;
   contact?: { id: number; full_name: string; email?: string | null } | null;
   company?: { id: number; name: string } | null;
+  // Number of options in the bundle — exposed by the brief so the list
+  // page can render the "N options" badge without loading every sibling.
+  proposals_count?: number;
 }
 
 export interface ProposalBundle extends ProposalBundleBrief {
@@ -147,6 +150,11 @@ export interface ProposalBundleUpdate {
   title?: string | null;
   description?: string | null;
   proposal_ids?: number[] | null;
+  // `null` is meaningful here — it clears every option's "Recommended"
+  // badge. Omit the field entirely to leave the recommendation untouched.
+  // (Set `extractApiErrorDetail` consumers expect the wire shape to allow
+  // explicit null, not undefined-only.)
+  recommended_proposal_id?: number | null;
 }
 
 export interface Proposal extends ProposalBase, ProposalLegacyBillingFields {

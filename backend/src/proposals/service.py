@@ -303,8 +303,15 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         shared_entity_ids: list[int] | None = None,
         order_by: str | None = None,
         order_dir: str | None = None,
+        include_bundle_options: bool = False,
     ) -> tuple[list[Proposal], int]:
-        """Get paginated list of proposals with filters."""
+        """Get paginated list of proposals with filters.
+
+        By default, sub-options of a bundle (sort_order != 0) are hidden so
+        the bundle surfaces as a single row on /proposals — the "parent
+        representative". Pass ``include_bundle_options=True`` for admin /
+        reporting use cases that need every row.
+        """
         query = (
             select(Proposal)
             .options(
@@ -317,6 +324,17 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 selectinload(Proposal.bundle).selectinload(ProposalBundle.proposals),
             )
         )
+
+        if not include_bundle_options:
+            # Sub-proposals live ONLY under their parent (sort_order=0) on the
+            # detail page — they shouldn't pollute the list. A NULL bundle id
+            # means "standalone proposal" and stays visible regardless.
+            query = query.where(
+                or_(
+                    Proposal.proposal_bundle_id.is_(None),
+                    Proposal.bundle_sort_order == 0,
+                )
+            )
 
         if search:
             search_condition = build_token_search(search, Proposal.title, Proposal.proposal_number)
@@ -466,22 +484,55 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         bundle: ProposalBundle,
         data: ProposalBundleUpdate,
         user_id: int,
-    ) -> ProposalBundle:
+    ) -> ProposalBundle | None:
+        """Update a bundle. Returns None when the update dissolved the bundle
+        (proposal_ids shrank to 1) so the router can emit 204."""
         if bundle.status not in ("draft",):
             raise ValueError("Proposal bundles can only be changed while draft")
-        values = data.model_dump(exclude_unset=True, exclude={"proposal_ids"})
+
+        fields_set = data.model_fields_set
+        values = data.model_dump(
+            exclude_unset=True,
+            exclude={"proposal_ids", "recommended_proposal_id"},
+        )
         if "title" in values and values["title"] is not None:
             values["title"] = values["title"].strip()
             if not values["title"]:
                 raise ValueError("Bundle title is required")
         for key, value in values.items():
             setattr(bundle, key, value)
+
         if data.proposal_ids is not None:
             proposal_ids = list(dict.fromkeys(data.proposal_ids))
-            if len(proposal_ids) < 2:
-                raise ValueError("Choose at least two proposals for a bundle")
+            if len(proposal_ids) == 0:
+                raise ValueError("Bundle must reference at least one proposal")
+
+            if len(proposal_ids) == 1:
+                # Dissolve: unbundle the survivor and any removed siblings,
+                # then drop the bundle row itself.
+                survivors = await self._load_bundle_proposals(proposal_ids)
+                survivor = survivors[0]
+                if survivor.proposal_bundle_id not in (None, bundle.id):
+                    raise ValueError("A proposal can only belong to one bundle")
+                for existing in list(bundle.proposals):
+                    existing.proposal_bundle_id = None
+                    existing.bundle_sort_order = 0
+                    existing.bundle_is_recommended = False
+                await self.db.delete(bundle)
+                await self.db.flush()
+                return None
+
             proposals = await self._load_bundle_proposals(proposal_ids)
             self._validate_bundle_proposals_mutable(proposals, bundle_id=bundle.id)
+
+            # Remember which proposal was recommended BEFORE we churn the
+            # membership — we want to preserve a user-chosen recommendation
+            # across "add/remove option" actions instead of silently snapping
+            # it back to the new index==0 the way the original code did.
+            prior_recommended_id: int | None = next(
+                (p.id for p in bundle.proposals if p.bundle_is_recommended),
+                None,
+            )
             for existing in list(bundle.proposals):
                 if existing.id not in proposal_ids:
                     existing.proposal_bundle_id = None
@@ -490,7 +541,79 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
             for index, proposal in enumerate(proposals):
                 proposal.proposal_bundle_id = bundle.id
                 proposal.bundle_sort_order = index
-                proposal.bundle_is_recommended = index == 0
+            # If the previously-recommended option survived, keep flagging it;
+            # otherwise clear all (no auto-fallback to index==0 on an update
+            # — only the create path defaults to "first is recommended").
+            if prior_recommended_id is not None and any(
+                p.id == prior_recommended_id for p in proposals
+            ):
+                for proposal in proposals:
+                    proposal.bundle_is_recommended = proposal.id == prior_recommended_id
+            else:
+                for proposal in proposals:
+                    proposal.bundle_is_recommended = False
+
+        # An explicit `recommended_proposal_id` in the payload overrides the
+        # preservation logic above. `null` means "no option is recommended"
+        # (no badge). An integer must point at a current member.
+        if "recommended_proposal_id" in fields_set:
+            target_id = data.recommended_proposal_id
+            await self.db.refresh(bundle, attribute_names=["proposals"])
+            members_by_id = {p.id: p for p in bundle.proposals}
+            if target_id is not None and target_id not in members_by_id:
+                raise ValueError("Recommended proposal is not a member of this bundle")
+            for proposal in bundle.proposals:
+                proposal.bundle_is_recommended = (
+                    target_id is not None and proposal.id == target_id
+                )
+
+        bundle.updated_by_id = user_id
+        await self.db.flush()
+        await self.db.refresh(bundle)
+        return bundle
+
+    async def remove_option_from_bundle(
+        self,
+        bundle: ProposalBundle,
+        proposal_id: int,
+        user_id: int,
+    ) -> ProposalBundle | None:
+        """Remove one proposal from the bundle. Dissolves when ≤1 survivor.
+
+        Goes around `update_bundle` so we can take the dissolve path
+        (1 survivor) without tripping the schema-level
+        ProposalBundleUpdate.proposal_ids min_length=2 guard that protects
+        the public PATCH route.
+        """
+        if bundle.status not in ("draft",):
+            raise ValueError("Proposal bundles can only be changed while draft")
+        members = list(bundle.proposals)
+        member = next((p for p in members if p.id == proposal_id), None)
+        if member is None:
+            raise ValueError("Proposal is not part of this bundle")
+
+        survivors = [p for p in members if p.id != proposal_id]
+
+        # Unbundle the proposal being removed.
+        member.proposal_bundle_id = None
+        member.bundle_sort_order = 0
+        member.bundle_is_recommended = False
+
+        if len(survivors) <= 1:
+            # Dissolve: unbundle every survivor (there's at most one) and
+            # drop the bundle row.
+            for survivor in survivors:
+                survivor.proposal_bundle_id = None
+                survivor.bundle_sort_order = 0
+                survivor.bundle_is_recommended = False
+            await self.db.delete(bundle)
+            await self.db.flush()
+            return None
+
+        # 2+ survivors: re-pack sort_order, keep any prior recommendation that
+        # didn't belong to the removed option.
+        for index, survivor in enumerate(survivors):
+            survivor.bundle_sort_order = index
         bundle.updated_by_id = user_id
         await self.db.flush()
         await self.db.refresh(bundle)

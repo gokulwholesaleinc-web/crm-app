@@ -273,6 +273,9 @@ async def update_proposal_bundle(
     old_data = snapshot_entity(bundle, update_fields)
     with value_error_as_400():
         bundle = await service.update_bundle(bundle, bundle_data, current_user.id)
+    # PATCH never carries proposal_ids with length 1 (schema-blocked), so
+    # update_bundle can't return None here — narrow for the typechecker.
+    assert bundle is not None
     new_data = snapshot_entity(bundle, update_fields)
     ip_address = get_client_ip(request)
     await audit_entity_update(
@@ -310,6 +313,64 @@ async def send_proposal_bundle(
     })
 
     return ProposalBundleResponse.model_validate(bundle)
+
+
+@router.delete("/bundles/{bundle_id}/options/{proposal_id}")
+async def remove_proposal_bundle_option(
+    bundle_id: int,
+    proposal_id: int,
+    request: Request,
+    current_user: ProposalUpdateUser,
+    db: DBSession,
+):
+    """Remove one proposal from a draft bundle.
+
+    Returns 200 + the updated bundle when 2+ options remain. Returns 204
+    when removing the option dissolved the bundle (≤1 survivor); the
+    frontend should then navigate the user away from any sub-proposal
+    detail page since the bundle no longer exists.
+    """
+    service = ProposalService(db)
+    bundle = await service.get_bundle(bundle_id)
+    if bundle is None:
+        raise_not_found("Proposal bundle")
+    _require_bundle_write_access(bundle, current_user)
+    # Confirm the proposal exists + the caller can write to it before we
+    # mutate the bundle (avoids partial mutations on permission failures).
+    await _require_proposals_write_access(db, [proposal_id], current_user)
+    bundle_id_for_audit = bundle.id
+
+    # snapshot_entity reads attributes by name and ProposalBundle exposes the
+    # membership via the `proposals` relationship, not a flat `proposal_ids`
+    # column — capture the id list explicitly so the audit log shows the
+    # actual diff (e.g., [11, 12, 13] → [11, 12]).
+    old_data = {"proposal_ids": [p.id for p in bundle.proposals]}
+    with value_error_as_400():
+        updated = await service.remove_option_from_bundle(
+            bundle, proposal_id, current_user.id
+        )
+    ip_address = get_client_ip(request)
+    if updated is None:
+        # Bundle dissolved — log a delete on the parent + signal 204.
+        await audit_entity_delete(
+            db,
+            "proposal_bundle",
+            bundle_id_for_audit,
+            current_user.id,
+            ip_address,
+        )
+        return Response(status_code=HTTPStatus.NO_CONTENT)
+    new_data = {"proposal_ids": [p.id for p in updated.proposals]}
+    await audit_entity_update(
+        db,
+        "proposal_bundle",
+        updated.id,
+        current_user.id,
+        old_data,
+        new_data,
+        ip_address,
+    )
+    return ProposalBundleResponse.model_validate(updated)
 
 
 @router.get("/templates", response_model=list[ProposalTemplateResponse])

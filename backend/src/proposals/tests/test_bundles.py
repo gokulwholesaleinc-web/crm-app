@@ -479,3 +479,229 @@ class TestProposalBundles:
         # the preserved audit data.
         cols = Base.metadata.tables["proposals"].c
         assert "accepted_selection_snapshot" in cols
+
+    # ------------------------------------------------------------------
+    # Bundle refinement: list hides sub-options, recommend toggle, remove
+    # option, dissolve-on-1-survivor.
+    # ------------------------------------------------------------------
+
+    async def test_list_proposals_hides_bundle_sub_options(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        test_user: User,
+        auth_headers: dict,
+    ):
+        """The list endpoint must show the bundle's primary proposal only —
+        sub-options (sort_order > 0) live inside the parent's detail page.
+        """
+        standalone = await _make_proposal(db_session, test_user, title="Solo")
+        primary = await _make_proposal(db_session, test_user, title="Primary")
+        sub = await _make_proposal(db_session, test_user, title="Sub")
+        await _make_bundle(db_session, test_user, [primary, sub])
+
+        resp = await client.get("/api/proposals", headers=auth_headers)
+        assert resp.status_code == 200
+        ids = {item["id"] for item in resp.json()["items"]}
+        assert standalone.id in ids
+        assert primary.id in ids, "Bundle primary (sort_order=0) must surface"
+        assert sub.id not in ids, "Sub-option (sort_order>0) must be hidden"
+
+    async def test_patch_bundle_recommendation_to_specific_proposal(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        test_user: User,
+        auth_headers: dict,
+    ):
+        first = await _make_proposal(db_session, test_user, title="First")
+        second = await _make_proposal(db_session, test_user, title="Second")
+        bundle = await _make_bundle(db_session, test_user, [first, second])
+
+        resp = await client.patch(
+            f"/api/proposals/bundles/{bundle.id}",
+            headers=auth_headers,
+            json={"recommended_proposal_id": second.id},
+        )
+        assert resp.status_code == 200
+        await db_session.refresh(first)
+        await db_session.refresh(second)
+        assert first.bundle_is_recommended is False
+        assert second.bundle_is_recommended is True
+
+    async def test_patch_bundle_recommendation_null_clears_all(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        test_user: User,
+        auth_headers: dict,
+    ):
+        first = await _make_proposal(db_session, test_user, title="A")
+        second = await _make_proposal(db_session, test_user, title="B")
+        bundle = await _make_bundle(db_session, test_user, [first, second])
+        # Sanity: _make_bundle defaults the index==0 row to recommended.
+        await db_session.refresh(first)
+        assert first.bundle_is_recommended is True
+
+        resp = await client.patch(
+            f"/api/proposals/bundles/{bundle.id}",
+            headers=auth_headers,
+            json={"recommended_proposal_id": None},
+        )
+        assert resp.status_code == 200
+        await db_session.refresh(first)
+        await db_session.refresh(second)
+        assert first.bundle_is_recommended is False
+        assert second.bundle_is_recommended is False
+
+    async def test_patch_bundle_rejects_recommendation_for_non_member(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        test_user: User,
+        auth_headers: dict,
+    ):
+        first = await _make_proposal(db_session, test_user, title="A")
+        second = await _make_proposal(db_session, test_user, title="B")
+        outsider = await _make_proposal(db_session, test_user, title="Outsider")
+        bundle = await _make_bundle(db_session, test_user, [first, second])
+
+        resp = await client.patch(
+            f"/api/proposals/bundles/{bundle.id}",
+            headers=auth_headers,
+            json={"recommended_proposal_id": outsider.id},
+        )
+        assert resp.status_code == 400
+
+    async def test_patch_proposal_ids_preserves_user_recommendation(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        test_user: User,
+        auth_headers: dict,
+    ):
+        """If the user marked option B as recommended and then 'Add option'
+        appends C, B must stay recommended — must NOT snap back to index==0.
+        Regression of the pre-refinement behavior.
+        """
+        a = await _make_proposal(db_session, test_user, title="A")
+        b = await _make_proposal(db_session, test_user, title="B")
+        c = await _make_proposal(db_session, test_user, title="C")
+        bundle = await _make_bundle(db_session, test_user, [a, b])
+
+        # User flips recommended → B.
+        resp = await client.patch(
+            f"/api/proposals/bundles/{bundle.id}",
+            headers=auth_headers,
+            json={"recommended_proposal_id": b.id},
+        )
+        assert resp.status_code == 200
+
+        # User adds C; recommendation should remain on B.
+        resp = await client.patch(
+            f"/api/proposals/bundles/{bundle.id}",
+            headers=auth_headers,
+            json={"proposal_ids": [a.id, b.id, c.id]},
+        )
+        assert resp.status_code == 200
+        await db_session.refresh(a)
+        await db_session.refresh(b)
+        await db_session.refresh(c)
+        assert a.bundle_is_recommended is False
+        assert b.bundle_is_recommended is True, (
+            "Recommendation must survive proposal_ids changes that keep B"
+        )
+        assert c.bundle_is_recommended is False
+
+    async def test_remove_option_endpoint_shrinks_bundle(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        test_user: User,
+        auth_headers: dict,
+    ):
+        a = await _make_proposal(db_session, test_user, title="A")
+        b = await _make_proposal(db_session, test_user, title="B")
+        c = await _make_proposal(db_session, test_user, title="C")
+        bundle = await _make_bundle(db_session, test_user, [a, b, c])
+
+        resp = await client.delete(
+            f"/api/proposals/bundles/{bundle.id}/options/{b.id}",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert [p["id"] for p in data["proposals"]] == [a.id, c.id]
+        await db_session.refresh(b)
+        assert b.proposal_bundle_id is None
+        assert b.bundle_is_recommended is False
+
+    async def test_remove_option_dissolves_when_one_survivor(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        test_user: User,
+        auth_headers: dict,
+    ):
+        """Removing one option from a 2-bundle dissolves the bundle: the
+        survivor goes back to being a standalone draft and the bundle row
+        is deleted. The endpoint returns 204.
+        """
+        a = await _make_proposal(db_session, test_user, title="A")
+        b = await _make_proposal(db_session, test_user, title="B")
+        bundle = await _make_bundle(db_session, test_user, [a, b])
+        bundle_id = bundle.id
+
+        resp = await client.delete(
+            f"/api/proposals/bundles/{bundle_id}/options/{b.id}",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 204
+
+        await db_session.refresh(a)
+        await db_session.refresh(b)
+        assert a.proposal_bundle_id is None
+        assert a.bundle_is_recommended is False
+        assert b.proposal_bundle_id is None
+
+        gone = (
+            await db_session.execute(
+                select(ProposalBundle).where(ProposalBundle.id == bundle_id)
+            )
+        ).scalar_one_or_none()
+        assert gone is None, "Dissolved bundle must be deleted"
+
+    async def test_remove_option_404_when_proposal_not_in_bundle(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        test_user: User,
+        auth_headers: dict,
+    ):
+        a = await _make_proposal(db_session, test_user, title="A")
+        b = await _make_proposal(db_session, test_user, title="B")
+        outsider = await _make_proposal(db_session, test_user, title="Outsider")
+        bundle = await _make_bundle(db_session, test_user, [a, b])
+
+        resp = await client.delete(
+            f"/api/proposals/bundles/{bundle.id}/options/{outsider.id}",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 400
+
+    async def test_remove_option_blocked_when_bundle_not_draft(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        test_user: User,
+        auth_headers: dict,
+    ):
+        a = await _make_proposal(db_session, test_user, title="A")
+        b = await _make_proposal(db_session, test_user, title="B")
+        bundle = await _make_bundle(db_session, test_user, [a, b], status="sent")
+
+        resp = await client.delete(
+            f"/api/proposals/bundles/{bundle.id}/options/{b.id}",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 400

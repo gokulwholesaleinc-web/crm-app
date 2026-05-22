@@ -114,6 +114,28 @@ export const sendProposalBundle = async (bundleId: number): Promise<ProposalBund
 };
 
 /**
+ * Remove one option from a draft proposal bundle.
+ *
+ * Returns the updated bundle when 2+ options remain. Returns `null` when
+ * the removal dissolved the bundle (≤1 survivor); the caller must then
+ * navigate the user away from any sub-proposal view because the bundle
+ * no longer exists.
+ */
+export const removeProposalBundleOption = async (
+  bundleId: number,
+  proposalId: number,
+): Promise<ProposalBundle | null> => {
+  const response = await apiClient.delete<ProposalBundle | ''>(
+    `${PROPOSALS_BASE}/bundles/${bundleId}/options/${proposalId}`,
+  );
+  // 204 No Content arrives as an empty string body — surface as `null`.
+  if (response.status === 204 || response.data === '' || response.data == null) {
+    return null;
+  }
+  return response.data as ProposalBundle;
+};
+
+/**
  * Reject a proposal
  */
 export const rejectProposal = async (proposalId: number): Promise<Proposal> => {
@@ -484,6 +506,7 @@ export const proposalsApi = {
   getBundle: getProposalBundle,
   updateBundle: updateProposalBundle,
   sendBundle: sendProposalBundle,
+  removeBundleOption: removeProposalBundleOption,
   reject: rejectProposal,
   restampSignedPdf: restampProposalSignedPdf,
   listTemplates: listProposalTemplates,
