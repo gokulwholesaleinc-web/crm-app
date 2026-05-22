@@ -120,15 +120,20 @@ const createApiClient = (): AxiosInstance => {
       // attachments, report exports) surface the real reason on
       // failure. Falls back to .text() if the body isn't JSON.
       let detailFromBlob: string | undefined;
+      let rawDetail: unknown;
       const data = error.response?.data;
       if (data instanceof Blob) {
         try {
           const text = await data.text();
           try {
             const parsed = JSON.parse(text) as { detail?: unknown };
+            rawDetail = parsed.detail;
             detailFromBlob = flattenErrorDetail(parsed.detail);
           } catch {
-            if (text.trim()) detailFromBlob = text.trim();
+            if (text.trim()) {
+              rawDetail = text.trim();
+              detailFromBlob = text.trim();
+            }
           }
         } catch (blobErr) {
           // Reading the blob body itself failed (already consumed,
@@ -142,9 +147,15 @@ const createApiClient = (): AxiosInstance => {
       // JSON 422 responses (the common case for non-blob endpoints) get
       // the same flattening so toasts surface `EmailStr: not a valid
       // email` instead of `[object Object]`.
-      const responseDetail = !(data instanceof Blob)
-        ? flattenErrorDetail((data as ApiError | undefined)?.detail)
+      const jsonDetail = !(data instanceof Blob)
+        ? (data as ApiError | undefined)?.detail
         : undefined;
+      const responseDetail = !(data instanceof Blob)
+        ? flattenErrorDetail(jsonDetail)
+        : undefined;
+      if (rawDetail === undefined && jsonDetail !== undefined) {
+        rawDetail = jsonDetail;
+      }
 
       const apiError: ApiError = {
         detail:
@@ -152,6 +163,11 @@ const createApiClient = (): AxiosInstance => {
           responseDetail ||
           error.message ||
           'An error occurred',
+        // Preserve the original detail shape (object / array / string)
+        // so callers like GoogleAuthCallbackPage can branch on
+        // `{pending_approval: true}` instead of fighting the flattened
+        // JSON-stringified version.
+        rawDetail,
         status_code: error.response?.status,
       };
 
