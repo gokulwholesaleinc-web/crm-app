@@ -182,7 +182,18 @@ class ProposalBundleCreate(BaseModel):
 class ProposalBundleUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1)
     description: str | None = None
+    # Dissolve is handled by the dedicated DELETE option endpoint, not by
+    # shrinking proposal_ids to a single id — keep the 2-min guard so the
+    # PATCH router response shape stays a non-null bundle.
     proposal_ids: list[int] | None = Field(default=None, min_length=2)
+    # Recommended-option control:
+    # - field absent:        leave recommendation as-is (current default)
+    # - integer:             mark THAT proposal recommended, others cleared
+    # - explicit null:       clear all recommendations (no "Recommended" badge)
+    # Cannot use `int | None` alone because pydantic-v2 still distinguishes
+    # "not provided" from "explicitly null" via model_fields_set, which the
+    # service consults to apply the right semantic.
+    recommended_proposal_id: int | None = Field(default=None)
 
     model_config = ConfigDict(extra="forbid")
 
@@ -219,6 +230,11 @@ class ProposalBundleBrief(BaseModel):
     accepted_at: datetime | None = None
     contact: ContactBrief | None = None
     company: CompanyBrief | None = None
+    # Total option count — exposed so the list page can render a "N options"
+    # badge without having to load every sub-proposal payload. Computed
+    # from the SQLAlchemy `proposals` relationship via the
+    # `proposals_count` @property on the ProposalBundle model.
+    proposals_count: int = 0
 
     model_config = ConfigDict(from_attributes=True)
 

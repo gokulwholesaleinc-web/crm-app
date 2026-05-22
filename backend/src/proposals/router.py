@@ -165,6 +165,11 @@ async def list_proposals(
     owner_id: int | None = None,
     order_by: str | None = None,
     order_dir: str | None = None,
+    # When false (default), bundle sub-options (sort_order > 0) are hidden
+    # so the parent proposal surfaces as a single row on /proposals. The
+    # admin RecordSearchPicker passes true so admins can still find and
+    # share individual sub-options.
+    include_bundle_options: bool = Query(False),
 ):
     """List proposals with pagination and filters."""
     effective_owner_id = owner_id if data_scope.can_see_all() else data_scope.owner_id
@@ -184,6 +189,7 @@ async def list_proposals(
         shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_PROPOSALS),
         order_by=order_by,
         order_dir=order_dir,
+        include_bundle_options=include_bundle_options,
     )
 
     return ProposalListResponse(
@@ -265,7 +271,9 @@ async def update_proposal_bundle(
     if bundle_data.proposal_ids is not None:
         await _require_proposals_write_access(db, bundle_data.proposal_ids, current_user)
     service = ProposalService(db)
-    bundle = await service.get_bundle(bundle_id)
+    # Mutation path → row-lock the bundle so concurrent PATCH / send /
+    # remove-option callers serialize and can't co-corrupt membership.
+    bundle = await service.get_bundle(bundle_id, for_update=True)
     if bundle is None:
         raise_not_found("Proposal bundle")
     _require_bundle_write_access(bundle, current_user)
@@ -273,6 +281,9 @@ async def update_proposal_bundle(
     old_data = snapshot_entity(bundle, update_fields)
     with value_error_as_400():
         bundle = await service.update_bundle(bundle, bundle_data, current_user.id)
+    # PATCH never carries proposal_ids with length 1 (schema-blocked), so
+    # update_bundle can't return None here — narrow for the typechecker.
+    assert bundle is not None
     new_data = snapshot_entity(bundle, update_fields)
     ip_address = get_client_ip(request)
     await audit_entity_update(
@@ -295,7 +306,8 @@ async def send_proposal_bundle(
 ):
     """Send one public chooser link for a proposal bundle."""
     service = ProposalService(db)
-    bundle = await service.get_bundle(bundle_id)
+    # Send is a status-flip mutation that races with PATCH / remove-option.
+    bundle = await service.get_bundle(bundle_id, for_update=True)
     if bundle is None:
         raise_not_found("Proposal bundle")
     _require_bundle_write_access(bundle, current_user)
@@ -310,6 +322,72 @@ async def send_proposal_bundle(
     })
 
     return ProposalBundleResponse.model_validate(bundle)
+
+
+@router.delete("/bundles/{bundle_id}/options/{proposal_id}")
+async def remove_proposal_bundle_option(
+    bundle_id: int,
+    proposal_id: int,
+    request: Request,
+    # Removing the second-to-last option dissolves the bundle (db.delete on
+    # the ProposalBundle row). Gate on the same `delete` permission the
+    # single-proposal DELETE and DELETE /bundles/{id} routes use — a user
+    # holding only `update` shouldn't be able to destroy a bundle via the
+    # remove-option side door.
+    current_user: ProposalDeleteUser,
+    db: DBSession,
+):
+    """Remove one proposal from a draft bundle.
+
+    Returns 200 + the updated bundle when 2+ options remain. Returns 204
+    when removing the option dissolved the bundle (≤1 survivor); the
+    frontend should then navigate the user away from any sub-proposal
+    detail page since the bundle no longer exists.
+    """
+    service = ProposalService(db)
+    # Mutation path → row-lock the bundle so concurrent removes can't each
+    # compute `survivors >= 2` from their own snapshot and leave a 1-option
+    # zombie bundle. Same gate the PATCH / send paths use.
+    bundle = await service.get_bundle(bundle_id, for_update=True)
+    if bundle is None:
+        raise_not_found("Proposal bundle")
+    _require_bundle_write_access(bundle, current_user)
+    # Confirm the proposal exists + the caller can write to it before we
+    # mutate the bundle (avoids partial mutations on permission failures).
+    await _require_proposals_write_access(db, [proposal_id], current_user)
+    bundle_id_for_audit = bundle.id
+
+    # snapshot_entity reads attributes by name and ProposalBundle exposes the
+    # membership via the `proposals` relationship, not a flat `proposal_ids`
+    # column — capture the id list explicitly so the audit log shows the
+    # actual diff (e.g., [11, 12, 13] → [11, 12]).
+    old_data = {"proposal_ids": [p.id for p in bundle.proposals]}
+    with value_error_as_400():
+        updated = await service.remove_option_from_bundle(
+            bundle, proposal_id, current_user.id
+        )
+    ip_address = get_client_ip(request)
+    if updated is None:
+        # Bundle dissolved — log a delete on the parent + signal 204.
+        await audit_entity_delete(
+            db,
+            "proposal_bundle",
+            bundle_id_for_audit,
+            current_user.id,
+            ip_address,
+        )
+        return Response(status_code=HTTPStatus.NO_CONTENT)
+    new_data = {"proposal_ids": [p.id for p in updated.proposals]}
+    await audit_entity_update(
+        db,
+        "proposal_bundle",
+        updated.id,
+        current_user.id,
+        old_data,
+        new_data,
+        ip_address,
+    )
+    return ProposalBundleResponse.model_validate(updated)
 
 
 @router.get("/templates", response_model=list[ProposalTemplateResponse])

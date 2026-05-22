@@ -423,6 +423,15 @@ class ProposalBundle(Base, AuditableMixin):
         lazy="joined",
     )
 
+    @property
+    def proposals_count(self) -> int:
+        """Number of options in the bundle. Pydantic reads this when
+        serializing ProposalBundleBrief so the proposals list page can
+        render an "N options" badge without paying for the full
+        sub-proposal payloads.
+        """
+        return len(self.proposals)
+
 
 class ProposalTemplate(Base, AuditableMixin):
     """Reusable proposal templates with merge variable placeholders."""
