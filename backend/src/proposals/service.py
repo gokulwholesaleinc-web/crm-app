@@ -524,6 +524,14 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         for key, value in values.items():
             setattr(bundle, key, value)
 
+        # Track the effective post-mutation membership ourselves. We can't
+        # rely on `bundle.proposals` after we set `existing.proposal_bundle_id
+        # = None` (FK column) — the relationship's back_populates only syncs
+        # on flush/refresh, so `bundle.proposals` still includes the row we
+        # just orphaned and excludes any row we just adopted by FK alone.
+        # When `proposal_ids` is omitted we leave it as the loaded relation.
+        effective_members: list[Proposal] = list(bundle.proposals)
+
         if data.proposal_ids is not None:
             proposal_ids = list(dict.fromkeys(data.proposal_ids))
             if len(proposal_ids) == 0:
@@ -575,19 +583,20 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 for proposal in proposals:
                     proposal.bundle_is_recommended = False
 
+            # Effective membership now reflects the NEW set — recommendation
+            # validation below must consult this, not the stale relation.
+            effective_members = proposals
+
         # An explicit `recommended_proposal_id` in the payload overrides the
         # preservation logic above. `null` means "no option is recommended"
-        # (no badge). An integer must point at a current member.
+        # (no badge). An integer must point at a current member of the new
+        # set (matters when proposal_ids changed in the same PATCH).
         if "recommended_proposal_id" in fields_set:
             target_id = data.recommended_proposal_id
-            # bundle.proposals is already in sync with the mutations above
-            # (proposal_ids assignment removes/adds via the relationship);
-            # no need to round-trip through `db.refresh` which would race
-            # autoflush in a future `no_autoflush` block.
-            member_ids = {p.id for p in bundle.proposals}
+            member_ids = {p.id for p in effective_members}
             if target_id is not None and target_id not in member_ids:
                 raise ValueError("Recommended proposal is not a member of this bundle")
-            for proposal in bundle.proposals:
+            for proposal in effective_members:
                 proposal.bundle_is_recommended = (
                     target_id is not None and proposal.id == target_id
                 )

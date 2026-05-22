@@ -165,6 +165,11 @@ async def list_proposals(
     owner_id: int | None = None,
     order_by: str | None = None,
     order_dir: str | None = None,
+    # When false (default), bundle sub-options (sort_order > 0) are hidden
+    # so the parent proposal surfaces as a single row on /proposals. The
+    # admin RecordSearchPicker passes true so admins can still find and
+    # share individual sub-options.
+    include_bundle_options: bool = Query(False),
 ):
     """List proposals with pagination and filters."""
     effective_owner_id = owner_id if data_scope.can_see_all() else data_scope.owner_id
@@ -184,6 +189,7 @@ async def list_proposals(
         shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_PROPOSALS),
         order_by=order_by,
         order_dir=order_dir,
+        include_bundle_options=include_bundle_options,
     )
 
     return ProposalListResponse(
@@ -339,7 +345,10 @@ async def remove_proposal_bundle_option(
     detail page since the bundle no longer exists.
     """
     service = ProposalService(db)
-    bundle = await service.get_bundle(bundle_id)
+    # Mutation path → row-lock the bundle so concurrent removes can't each
+    # compute `survivors >= 2` from their own snapshot and leave a 1-option
+    # zombie bundle. Same gate the PATCH / send paths use.
+    bundle = await service.get_bundle(bundle_id, for_update=True)
     if bundle is None:
         raise_not_found("Proposal bundle")
     _require_bundle_write_access(bundle, current_user)

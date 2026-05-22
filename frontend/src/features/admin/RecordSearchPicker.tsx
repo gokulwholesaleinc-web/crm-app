@@ -83,7 +83,10 @@ const ADAPTERS: Record<RecordPickerEntityType, RecordAdapter> = {
     },
   },
   proposals: {
-    fetch: (f) => listProposals(f),
+    // Admins need to be able to share bundle sub-options too — the
+    // default list filter hides them so the parent surfaces as a single
+    // row on /proposals, but here we want every record reachable.
+    fetch: (f) => listProposals({ ...f, include_bundle_options: true }),
     toItem: (raw) => {
       const p = raw as { id: number; title?: string | null; proposal_number?: string | null };
       return {
@@ -170,14 +173,26 @@ export function RecordSearchPicker({
       // Combobox can hand back `null` if the input is cleared with no
       // selection — coalesce so we never call onChange(null).
       const safe = next ?? [];
+      // Dedupe by id: every search refetch produces fresh object refs, so
+      // re-picking the same record from a new result set would otherwise
+      // chip it a second time (the Combobox identity is forced via
+      // `by="id"` below, but defend in depth here in case the prop fails
+      // to apply on a future Headless UI upgrade).
+      const deduped: RecordPickerItem[] = [];
+      const seen = new Set<number>();
+      for (const item of safe) {
+        if (seen.has(item.id)) continue;
+        seen.add(item.id);
+        deduped.push(item);
+      }
       // Respect the cap. If a paste-like multi-add overshoots, drop the
       // overflow rather than silently re-shrinking back to the cap on the
       // next render.
-      if (typeof maxRecords === 'number' && safe.length > maxRecords) {
-        onChange(safe.slice(0, maxRecords));
+      if (typeof maxRecords === 'number' && deduped.length > maxRecords) {
+        onChange(deduped.slice(0, maxRecords));
         return;
       }
-      onChange(safe);
+      onChange(deduped);
       // Clear the query after each pick so the user can search the next
       // record without first deleting the prior token.
       setQuery('');
@@ -203,6 +218,11 @@ export function RecordSearchPicker({
         value={value}
         onChange={handleSelect}
         disabled={disabled}
+        // Headless UI defaults to reference-equality for membership; with
+        // refetches handing back fresh objects the same record (id=42)
+        // looks new every time, which would let users double-chip via
+        // re-pick. Compare by stable id instead.
+        by="id"
       >
         <div className="relative">
           <div

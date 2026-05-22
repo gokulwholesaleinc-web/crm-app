@@ -220,6 +220,11 @@ export interface ProposalFilters {
   quote_id?: number;
   order_by?: string;
   order_dir?: 'asc' | 'desc';
+  // Default backend behavior hides bundle sub-options (sort_order > 0)
+  // from /proposals so a bundle parent surfaces as one row. Admin tools
+  // that need to find/share individual sub-options pass `true` to flip
+  // the filter off.
+  include_bundle_options?: boolean;
 }
 
 export interface ProposalTemplate {

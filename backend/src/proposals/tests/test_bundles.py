@@ -573,6 +573,75 @@ class TestProposalBundles:
         )
         assert resp.status_code == 400
 
+    async def test_patch_combined_payload_adds_and_recommends_new_member(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        test_user: User,
+        auth_headers: dict,
+    ):
+        """Regression for the audit P1: a combined PATCH that adds C to
+        the bundle AND marks C as recommended must succeed — the
+        recommendation check has to consult the NEW membership, not the
+        stale bundle.proposals relationship that still reflects [A, B].
+        """
+        a = await _make_proposal(db_session, test_user, title="A")
+        b = await _make_proposal(db_session, test_user, title="B")
+        c = await _make_proposal(db_session, test_user, title="C")
+        bundle = await _make_bundle(db_session, test_user, [a, b])
+
+        resp = await client.patch(
+            f"/api/proposals/bundles/{bundle.id}",
+            headers=auth_headers,
+            json={
+                "proposal_ids": [a.id, b.id, c.id],
+                "recommended_proposal_id": c.id,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        await db_session.refresh(c)
+        assert c.bundle_is_recommended is True
+        await db_session.refresh(a)
+        await db_session.refresh(b)
+        assert a.bundle_is_recommended is False
+        assert b.bundle_is_recommended is False
+
+    async def test_patch_combined_payload_cannot_recommend_removed_member(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        test_user: User,
+        auth_headers: dict,
+    ):
+        """Regression for the audit P1: removing C from the bundle AND
+        recommending C in the same PATCH must be rejected — and C must
+        end up unbundled with `bundle_is_recommended=False`, NOT a
+        standalone proposal still flagged as recommended.
+        """
+        a = await _make_proposal(db_session, test_user, title="A")
+        b = await _make_proposal(db_session, test_user, title="B")
+        c = await _make_proposal(db_session, test_user, title="C")
+        bundle = await _make_bundle(db_session, test_user, [a, b, c])
+
+        resp = await client.patch(
+            f"/api/proposals/bundles/{bundle.id}",
+            headers=auth_headers,
+            json={
+                "proposal_ids": [a.id, b.id],
+                "recommended_proposal_id": c.id,
+            },
+        )
+        assert resp.status_code == 400
+        await db_session.refresh(c)
+        # The atomic-PATCH guarantee: 400 means the whole transaction
+        # rolled back; C is still a bundle member with its prior state.
+        # (Without `for_update` row-locking + the membership check, the
+        # bug surfaced as: C unbundled AND marked recommended.)
+        assert c.proposal_bundle_id == bundle.id, (
+            "PATCH rollback must keep C bundled when the request is rejected"
+        )
+        assert c.bundle_is_recommended is False
+
     async def test_patch_proposal_ids_preserves_user_recommendation(
         self,
         client: AsyncClient,
