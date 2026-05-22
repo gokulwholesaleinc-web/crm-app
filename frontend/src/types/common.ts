@@ -17,7 +17,15 @@ export interface PaginatedResponse<T> {
  * Generic API error response
  */
 export interface ApiError {
+  /** Flattened, display-ready detail string. Always set so toasts can
+   *  consume it directly without typeguards. */
   detail: string;
+  /** Original `detail` payload from the backend response, preserved
+   *  unmodified so callers that need to inspect structured errors
+   *  (e.g. `{pending_approval: true}` from the Google OAuth callback,
+   *  or FastAPI's array of validation issues) can read the shape
+   *  instead of having to re-parse the flattened JSON string. */
+  rawDetail?: unknown;
   status_code?: number;
 }
 

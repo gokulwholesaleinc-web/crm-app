@@ -77,14 +77,20 @@ function GoogleAuthCallbackPage() {
 
         navigate('/', { replace: true });
       } catch (err: unknown) {
-        // Check for structured 403 detail objects from the approval gate
-        const detail =
-          typeof err === 'object' && err !== null && 'detail' in err
-            ? (err as { detail: unknown }).detail
+        // Approval-gate responses arrive as a 403 whose `detail` is a
+        // structured object: `{pending_approval: true, detail: "..."}` or
+        // `{rejected: true, detail: "..."}`. The apiClient interceptor
+        // flattens `detail` into a display-ready string for toasts, but
+        // also stashes the original payload on `rawDetail` so we can
+        // branch on the structured shape here without re-parsing JSON.
+        const errObj =
+          typeof err === 'object' && err !== null
+            ? (err as { detail?: unknown; rawDetail?: unknown })
             : null;
+        const structured = errObj?.rawDetail ?? errObj?.detail;
 
-        if (typeof detail === 'object' && detail !== null) {
-          const d = detail as Record<string, unknown>;
+        if (typeof structured === 'object' && structured !== null) {
+          const d = structured as Record<string, unknown>;
           if (d.pending_approval === true) {
             setState({ kind: 'pending' });
             return;
@@ -93,10 +99,17 @@ function GoogleAuthCallbackPage() {
             setState({ kind: 'rejected' });
             return;
           }
+          // Backend included a human-readable `detail` inside the object
+          // — surface that as the error message instead of the JSON blob.
+          if (typeof d.detail === 'string' && d.detail.trim()) {
+            setState({ kind: 'error', message: d.detail });
+            return;
+          }
         }
 
         const message =
-          (typeof detail === 'string' ? detail : null) ||
+          (typeof structured === 'string' ? structured : null) ||
+          (typeof errObj?.detail === 'string' ? (errObj.detail as string) : null) ||
           (err instanceof Error ? err.message : null) ||
           'Failed to sign in with Google.';
         setState({ kind: 'error', message });
