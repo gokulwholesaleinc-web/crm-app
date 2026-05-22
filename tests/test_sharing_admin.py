@@ -2,6 +2,7 @@
 Tests for admin sharing endpoint: GET /api/sharing/admin and related flows.
 """
 
+import secrets
 import time
 
 import pytest
@@ -11,11 +12,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.auth.models import User
 from src.auth.security import create_access_token, get_password_hash
+from src.companies.models import Company
 from src.contacts.models import Contact
 from src.core import data_scope as data_scope_module
 from src.core.data_scope import DataScope
 from src.core.models import EntityShare
+from src.leads.models import Lead
 from src.notifications.models import Notification
+from src.proposals.models import Proposal
 from src.roles.models import RoleName, UserRole
 
 # ---------------------------------------------------------------------------
@@ -683,3 +687,393 @@ class TestAdminBulkShare:
         ).scalars().all()
         assert len(notifications) == 1
         assert notifications[0].type == "entity_shared_with_you"
+
+
+class TestAdminSharesEnrichmentAndSearch:
+    """Tests for entity_label/entity_subtitle enrichment + `q` search."""
+
+    @pytest_asyncio.fixture
+    async def enriched_world(
+        self,
+        db_session: AsyncSession,
+        admin_user: User,
+        another_user: User,
+    ) -> dict:
+        """Build a contact/company/lead/proposal each with a share row.
+
+        Returns a dict keyed by entity_type → (entity, share) so individual
+        tests can lookup the IDs they need without re-querying.
+        """
+        company = Company(
+            name="Acme Industries",
+            owner_id=admin_user.id,
+            created_by_id=admin_user.id,
+            status="prospect",
+        )
+        contact = Contact(
+            first_name="Priya",
+            last_name="Ramanathan",
+            email="priya@acme.example",
+            status="active",
+            owner_id=admin_user.id,
+            created_by_id=admin_user.id,
+        )
+        db_session.add_all([company, contact])
+        await db_session.flush()
+        contact.company_id = company.id
+
+        lead = Lead(
+            first_name="Marcus",
+            last_name="Okafor",
+            email="marcus@startup.example",
+            company_name="Startup Forge LLC",
+            status="new",
+            owner_id=admin_user.id,
+            created_by_id=admin_user.id,
+        )
+        proposal = Proposal(
+            proposal_number=f"PR-TEST-{secrets.token_hex(4)}",
+            title="Q3 Onboarding Engagement",
+            contact_id=contact.id,
+            company_id=company.id,
+            status="draft",
+            owner_id=admin_user.id,
+            created_by_id=admin_user.id,
+        )
+        db_session.add_all([lead, proposal])
+        await db_session.flush()
+
+        shares = {
+            "contacts": EntityShare(
+                entity_type="contacts",
+                entity_id=contact.id,
+                shared_with_user_id=another_user.id,
+                shared_by_user_id=admin_user.id,
+                permission_level="view",
+            ),
+            "companies": EntityShare(
+                entity_type="companies",
+                entity_id=company.id,
+                shared_with_user_id=another_user.id,
+                shared_by_user_id=admin_user.id,
+                permission_level="edit",
+            ),
+            "leads": EntityShare(
+                entity_type="leads",
+                entity_id=lead.id,
+                shared_with_user_id=another_user.id,
+                shared_by_user_id=admin_user.id,
+                permission_level="view",
+            ),
+            "proposals": EntityShare(
+                entity_type="proposals",
+                entity_id=proposal.id,
+                shared_with_user_id=another_user.id,
+                shared_by_user_id=admin_user.id,
+                permission_level="edit",
+            ),
+        }
+        for share in shares.values():
+            db_session.add(share)
+        await db_session.commit()
+
+        return {
+            "company": company,
+            "contact": contact,
+            "lead": lead,
+            "proposal": proposal,
+            "shares": shares,
+        }
+
+    def _by_type(self, items: list[dict], entity_type: str) -> dict:
+        matches = [item for item in items if item["entity_type"] == entity_type]
+        assert len(matches) == 1, f"expected exactly one {entity_type} row"
+        return matches[0]
+
+    @pytest.mark.asyncio
+    async def test_entity_label_and_subtitle_populated(
+        self,
+        client: AsyncClient,
+        admin_user: User,
+        enriched_world: dict,
+    ):
+        """Each entity_type renders its real name + a meaningful subtitle."""
+        response = await client.get(
+            "/api/sharing/admin", headers=_headers(admin_user)
+        )
+        assert response.status_code == 200
+        items = response.json()["items"]
+
+        contact_row = self._by_type(items, "contacts")
+        assert contact_row["entity_label"] == "Priya Ramanathan"
+        assert contact_row["entity_subtitle"] == "Acme Industries • priya@acme.example"
+
+        company_row = self._by_type(items, "companies")
+        assert company_row["entity_label"] == "Acme Industries"
+        assert company_row["entity_subtitle"] is None
+
+        lead_row = self._by_type(items, "leads")
+        assert lead_row["entity_label"] == "Marcus Okafor"
+        assert lead_row["entity_subtitle"] == "Startup Forge LLC • marcus@startup.example"
+
+        proposal_row = self._by_type(items, "proposals")
+        assert proposal_row["entity_label"] == "Q3 Onboarding Engagement"
+        assert proposal_row["entity_subtitle"] == "Acme Industries • Priya Ramanathan"
+
+    @pytest.mark.asyncio
+    async def test_entity_label_null_for_missing_record(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        admin_user: User,
+        another_user: User,
+    ):
+        """A share pointing at a hard-deleted entity_id still appears with NULL label."""
+        share = EntityShare(
+            entity_type="contacts",
+            entity_id=9_999_999,
+            shared_with_user_id=another_user.id,
+            shared_by_user_id=admin_user.id,
+            permission_level="view",
+        )
+        db_session.add(share)
+        await db_session.commit()
+
+        response = await client.get(
+            "/api/sharing/admin", headers=_headers(admin_user)
+        )
+        assert response.status_code == 200
+        rows = [item for item in response.json()["items"] if item["id"] == share.id]
+        assert len(rows) == 1
+        assert rows[0]["entity_label"] is None
+        assert rows[0]["entity_subtitle"] is None
+
+    @pytest.mark.asyncio
+    async def test_lead_label_falls_back_to_company_name(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        admin_user: User,
+        another_user: User,
+    ):
+        """A lead with no first/last name shows the company_name as the label."""
+        lead = Lead(
+            company_name="Headless Co",
+            status="new",
+            owner_id=admin_user.id,
+            created_by_id=admin_user.id,
+        )
+        db_session.add(lead)
+        await db_session.flush()
+        share = EntityShare(
+            entity_type="leads",
+            entity_id=lead.id,
+            shared_with_user_id=another_user.id,
+            shared_by_user_id=admin_user.id,
+            permission_level="view",
+        )
+        db_session.add(share)
+        await db_session.commit()
+
+        response = await client.get(
+            f"/api/sharing/admin?entity_type=leads&shared_with_user_id={another_user.id}",
+            headers=_headers(admin_user),
+        )
+        assert response.status_code == 200
+        rows = [item for item in response.json()["items"] if item["id"] == share.id]
+        assert rows[0]["entity_label"] == "Headless Co"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("needle", "expected_types"),
+        [
+            # Lead's free-text company_name.
+            ("startup+forge", ["leads"]),
+            # Proposal title.
+            ("onboarding", ["proposals"]),
+            # Contact last name — matches the contact share AND the proposal
+            # share whose contact_id points at that contact.
+            ("ramanathan", ["contacts", "proposals"]),
+            # Company name — matches the company share, the contact share
+            # (contact.company_id), and the proposal share (proposal.company_id).
+            ("acme", ["companies", "contacts", "proposals"]),
+        ],
+    )
+    async def test_q_search_matches_expected_entity_types(
+        self,
+        client: AsyncClient,
+        admin_user: User,
+        enriched_world: dict,
+        needle: str,
+        expected_types: list[str],
+    ):
+        """Substring search hits the right join columns for each entity type.
+
+        Asks "who has access to anything matching <needle>?" and the admin
+        gets every share row whose entity (or whose linked entity) carries
+        the term in its name/title/company/email columns.
+        """
+        response = await client.get(
+            f"/api/sharing/admin?q={needle}", headers=_headers(admin_user)
+        )
+        assert response.status_code == 200
+        types = sorted(item["entity_type"] for item in response.json()["items"])
+        assert types == expected_types
+
+    @pytest.mark.asyncio
+    async def test_q_matches_recipient_user_email(
+        self,
+        client: AsyncClient,
+        admin_user: User,
+        another_user: User,
+        enriched_world: dict,
+    ):
+        """`q` also searches the shared_with user's name + email."""
+        response = await client.get(
+            f"/api/sharing/admin?q={another_user.email.split('@')[0]}",
+            headers=_headers(admin_user),
+        )
+        assert response.status_code == 200
+        # Every share in enriched_world is shared with `another_user`.
+        assert response.json()["total"] == 4
+
+    @pytest.mark.asyncio
+    async def test_q_whitespace_only_is_treated_as_no_filter(
+        self,
+        client: AsyncClient,
+        admin_user: User,
+        enriched_world: dict,
+    ):
+        response = await client.get(
+            "/api/sharing/admin?q=%20%20%20", headers=_headers(admin_user)
+        )
+        assert response.status_code == 200
+        # All 4 enriched shares present — whitespace-only q must not filter.
+        assert response.json()["total"] == 4
+
+    @pytest.mark.asyncio
+    async def test_soft_deleted_contact_renders_as_unlabelled(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        admin_user: User,
+        another_user: User,
+    ):
+        """A share targeting an archived contact must not resurrect its name.
+
+        Soft-deleted contacts are filtered out of the JOIN so the row falls
+        through to the "Deleted contact" rendering path — the admin can
+        still see and revoke it, but isn't misled into thinking the contact
+        is live.
+        """
+        from datetime import UTC, datetime
+
+        contact = Contact(
+            first_name="Sara",
+            last_name="Halverson",
+            email="sara@gone.example",
+            status="archived",
+            deleted_at=datetime.now(UTC),
+            owner_id=admin_user.id,
+            created_by_id=admin_user.id,
+        )
+        db_session.add(contact)
+        await db_session.flush()
+        share = EntityShare(
+            entity_type="contacts",
+            entity_id=contact.id,
+            shared_with_user_id=another_user.id,
+            shared_by_user_id=admin_user.id,
+            permission_level="view",
+        )
+        db_session.add(share)
+        await db_session.commit()
+
+        response = await client.get(
+            "/api/sharing/admin", headers=_headers(admin_user)
+        )
+        assert response.status_code == 200
+        row = next(item for item in response.json()["items"] if item["id"] == share.id)
+        assert row["entity_label"] is None
+        assert row["entity_subtitle"] is None
+
+    @pytest.mark.asyncio
+    async def test_merged_company_renders_as_unlabelled(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        admin_user: User,
+        another_user: User,
+    ):
+        """A share targeting a merged-away company falls through to the
+        deleted-entity rendering path, not the survivor's old name."""
+        survivor = Company(
+            name="Survivor Corp",
+            owner_id=admin_user.id,
+            created_by_id=admin_user.id,
+            status="customer",
+        )
+        db_session.add(survivor)
+        await db_session.flush()
+        merged_away = Company(
+            name="Old Acme",
+            status="merged",
+            merged_into_id=survivor.id,
+            owner_id=admin_user.id,
+            created_by_id=admin_user.id,
+        )
+        db_session.add(merged_away)
+        await db_session.flush()
+        share = EntityShare(
+            entity_type="companies",
+            entity_id=merged_away.id,
+            shared_with_user_id=another_user.id,
+            shared_by_user_id=admin_user.id,
+            permission_level="view",
+        )
+        db_session.add(share)
+        await db_session.commit()
+
+        response = await client.get(
+            "/api/sharing/admin", headers=_headers(admin_user)
+        )
+        assert response.status_code == 200
+        row = next(item for item in response.json()["items"] if item["id"] == share.id)
+        assert row["entity_label"] is None
+
+    @pytest.mark.asyncio
+    async def test_nameless_contact_falls_back_to_email(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        admin_user: User,
+        another_user: User,
+    ):
+        """A live contact with empty names but a populated email surfaces
+        the email as the label so the admin can still place the share."""
+        contact = Contact(
+            first_name="",
+            last_name="",
+            email="anon@guest.example",
+            status="active",
+            owner_id=admin_user.id,
+            created_by_id=admin_user.id,
+        )
+        db_session.add(contact)
+        await db_session.flush()
+        share = EntityShare(
+            entity_type="contacts",
+            entity_id=contact.id,
+            shared_with_user_id=another_user.id,
+            shared_by_user_id=admin_user.id,
+            permission_level="view",
+        )
+        db_session.add(share)
+        await db_session.commit()
+
+        response = await client.get(
+            "/api/sharing/admin", headers=_headers(admin_user)
+        )
+        assert response.status_code == 200
+        row = next(item for item in response.json()["items"] if item["id"] == share.id)
+        assert row["entity_label"] == "anon@guest.example"

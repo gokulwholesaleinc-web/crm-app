@@ -5,12 +5,14 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import aliased
 
 from src.audit.service import AuditService
 from src.auth.models import User
+from src.companies.models import Company
+from src.contacts.models import Contact
 from src.core.constants import HTTPStatus
 from src.core.data_scope import (
     DataScope,
@@ -26,7 +28,9 @@ from src.core.share_permissions import (
     VALID_SHARE_PERMISSIONS,
     require_owner_or_manager_access,
 )
+from src.leads.models import Lead
 from src.notifications.service import NotificationService
+from src.proposals.models import Proposal
 
 router = APIRouter(prefix="/api/sharing", tags=["sharing"])
 
@@ -542,6 +546,10 @@ class AdminShareItem(BaseModel):
     shared_by_user_name: str
     permission_level: str
     created_at: datetime
+    # Null when the target record was hard-deleted, soft-deleted, or merged
+    # away — the row still renders so the admin can revoke the stale share.
+    entity_label: str | None = None
+    entity_subtitle: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -562,6 +570,16 @@ async def admin_list_shares(
     shared_with_user_id: int | None = Query(None),
     shared_by_user_id: int | None = Query(None),
     permission_level: str | None = Query(None),
+    q: str | None = Query(
+        None,
+        min_length=1,
+        max_length=200,
+        description=(
+            "Substring search across the recipient's name/email, the sharer's "
+            "name, and the target entity's label (contact/lead full name + "
+            "email, company name, lead/proposal company, proposal title)."
+        ),
+    ),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
 ):
@@ -574,6 +592,16 @@ async def admin_list_shares(
 
     SharedWith = aliased(User)
     SharedBy = aliased(User)
+    # Polymorphic joins — one alias per entity_type. The join condition is
+    # intentionally specific: `entity_id == X.id` alone would collide across
+    # entity types since IDs are not namespaced.
+    JoinedContact = aliased(Contact)
+    ContactCompany = aliased(Company)  # contact.company_id → companies
+    JoinedCompany = aliased(Company)
+    JoinedLead = aliased(Lead)
+    JoinedProposal = aliased(Proposal)
+    ProposalContact = aliased(Contact)  # proposal.contact_id → contacts
+    ProposalCompany = aliased(Company)  # proposal.company_id → companies
 
     base_query = (
         select(
@@ -587,9 +615,82 @@ async def admin_list_shares(
             SharedBy.full_name.label("shared_by_user_name"),
             EntityShare.permission_level,
             EntityShare.created_at,
+            JoinedContact.first_name.label("contact_first_name"),
+            JoinedContact.last_name.label("contact_last_name"),
+            JoinedContact.email.label("contact_email"),
+            ContactCompany.name.label("contact_company_name"),
+            JoinedCompany.name.label("company_name"),
+            JoinedLead.first_name.label("lead_first_name"),
+            JoinedLead.last_name.label("lead_last_name"),
+            JoinedLead.company_name.label("lead_company_name"),
+            JoinedLead.email.label("lead_email"),
+            JoinedProposal.title.label("proposal_title"),
+            ProposalContact.first_name.label("proposal_contact_first_name"),
+            ProposalContact.last_name.label("proposal_contact_last_name"),
+            ProposalCompany.name.label("proposal_company_name"),
         )
         .join(SharedWith, EntityShare.shared_with_user_id == SharedWith.id)
         .join(SharedBy, EntityShare.shared_by_user_id == SharedBy.id)
+        # Soft-delete + merge predicates are part of the ON clause so a stale
+        # share row falls through to the "Deleted/Merged X" rendering path
+        # instead of resurrecting the tombstoned record's name.
+        .outerjoin(
+            JoinedContact,
+            and_(
+                EntityShare.entity_type.in_(entity_type_variants("contacts")),
+                EntityShare.entity_id == JoinedContact.id,
+                JoinedContact.deleted_at.is_(None),
+                JoinedContact.merged_into_id.is_(None),
+            ),
+        )
+        .outerjoin(
+            ContactCompany,
+            and_(
+                JoinedContact.company_id == ContactCompany.id,
+                ContactCompany.status != "merged",
+                ContactCompany.merged_into_id.is_(None),
+            ),
+        )
+        .outerjoin(
+            JoinedCompany,
+            and_(
+                EntityShare.entity_type.in_(entity_type_variants("companies")),
+                EntityShare.entity_id == JoinedCompany.id,
+                JoinedCompany.status != "merged",
+                JoinedCompany.merged_into_id.is_(None),
+            ),
+        )
+        .outerjoin(
+            JoinedLead,
+            and_(
+                EntityShare.entity_type.in_(entity_type_variants("leads")),
+                EntityShare.entity_id == JoinedLead.id,
+                JoinedLead.merged_into_id.is_(None),
+            ),
+        )
+        .outerjoin(
+            JoinedProposal,
+            and_(
+                EntityShare.entity_type.in_(entity_type_variants("proposals")),
+                EntityShare.entity_id == JoinedProposal.id,
+            ),
+        )
+        .outerjoin(
+            ProposalContact,
+            and_(
+                JoinedProposal.contact_id == ProposalContact.id,
+                ProposalContact.deleted_at.is_(None),
+                ProposalContact.merged_into_id.is_(None),
+            ),
+        )
+        .outerjoin(
+            ProposalCompany,
+            and_(
+                JoinedProposal.company_id == ProposalCompany.id,
+                ProposalCompany.status != "merged",
+                ProposalCompany.merged_into_id.is_(None),
+            ),
+        )
     )
 
     if entity_type is not None:
@@ -602,6 +703,33 @@ async def admin_list_shares(
         base_query = base_query.where(EntityShare.shared_by_user_id == shared_by_user_id)
     if permission_level is not None:
         base_query = base_query.where(EntityShare.permission_level == permission_level)
+
+    if q is not None:
+        # The search trims the term and treats whitespace-only queries as
+        # absent so a stray space doesn't accidentally return zero rows.
+        needle = q.strip()
+        if needle:
+            pattern = f"%{needle.lower()}%"
+            base_query = base_query.where(
+                or_(
+                    func.lower(SharedWith.full_name).like(pattern),
+                    func.lower(SharedWith.email).like(pattern),
+                    func.lower(SharedBy.full_name).like(pattern),
+                    func.lower(JoinedContact.first_name).like(pattern),
+                    func.lower(JoinedContact.last_name).like(pattern),
+                    func.lower(JoinedContact.email).like(pattern),
+                    func.lower(ContactCompany.name).like(pattern),
+                    func.lower(JoinedCompany.name).like(pattern),
+                    func.lower(JoinedLead.first_name).like(pattern),
+                    func.lower(JoinedLead.last_name).like(pattern),
+                    func.lower(JoinedLead.email).like(pattern),
+                    func.lower(JoinedLead.company_name).like(pattern),
+                    func.lower(JoinedProposal.title).like(pattern),
+                    func.lower(ProposalContact.first_name).like(pattern),
+                    func.lower(ProposalContact.last_name).like(pattern),
+                    func.lower(ProposalCompany.name).like(pattern),
+                )
+            )
 
     count_query = select(func.count()).select_from(base_query.subquery())
     total_result = await db.execute(count_query)
@@ -625,8 +753,51 @@ async def admin_list_shares(
             shared_by_user_name=row.shared_by_user_name,
             permission_level=row.permission_level,
             created_at=row.created_at,
+            entity_label=_format_entity_label(row),
+            entity_subtitle=_format_entity_subtitle(row),
         )
         for row in rows
     ]
 
     return AdminShareListResponse(items=items, total=total, page=page, page_size=page_size)
+
+
+def _join_name(first: str | None, last: str | None) -> str | None:
+    name = " ".join(p.strip() for p in (first, last) if p and p.strip())
+    return name or None
+
+
+def _format_entity_label(row) -> str | None:
+    entity_type = row.entity_type
+    if entity_type in entity_type_variants("contacts"):
+        # Email is a defensible last resort: a contact with no name but a
+        # populated email is still recognisable to the admin auditing shares.
+        return (
+            _join_name(row.contact_first_name, row.contact_last_name)
+            or row.contact_email
+        )
+    if entity_type in entity_type_variants("companies"):
+        return row.company_name
+    if entity_type in entity_type_variants("leads"):
+        return _join_name(row.lead_first_name, row.lead_last_name) or row.lead_company_name
+    if entity_type in entity_type_variants("proposals"):
+        return row.proposal_title
+    return None
+
+
+def _format_entity_subtitle(row) -> str | None:
+    entity_type = row.entity_type
+    if entity_type in entity_type_variants("contacts"):
+        parts = [row.contact_company_name, row.contact_email]
+    elif entity_type in entity_type_variants("leads"):
+        parts = [row.lead_company_name, row.lead_email]
+    elif entity_type in entity_type_variants("proposals"):
+        parts = [
+            row.proposal_company_name,
+            _join_name(row.proposal_contact_first_name, row.proposal_contact_last_name),
+        ]
+    else:
+        return None
+
+    filtered = [p for p in parts if p]
+    return " • ".join(filtered) if filtered else None

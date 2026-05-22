@@ -68,6 +68,9 @@ export interface AdminShareItem {
   shared_by_user_name: string;
   permission_level: string;
   created_at: string;
+  // Null when the target was hard-deleted, soft-deleted, or merged.
+  entity_label: string | null;
+  entity_subtitle: string | null;
 }
 
 export interface AdminShareListResponse {
@@ -82,6 +85,7 @@ export interface AdminShareFilters {
   shared_with_user_id?: number;
   shared_by_user_id?: number;
   permission_level?: string;
+  q?: string;
   page?: number;
   page_size?: number;
 }
@@ -115,6 +119,7 @@ export const listAdminShares = async (
   if (filters.shared_with_user_id != null) params.shared_with_user_id = filters.shared_with_user_id;
   if (filters.shared_by_user_id != null) params.shared_by_user_id = filters.shared_by_user_id;
   if (filters.permission_level) params.permission_level = filters.permission_level;
+  if (filters.q) params.q = filters.q;
   if (filters.page != null) params.page = filters.page;
   if (filters.page_size != null) params.page_size = filters.page_size;
   const response = await apiClient.get<AdminShareListResponse>(`${BASE}/admin`, { params });

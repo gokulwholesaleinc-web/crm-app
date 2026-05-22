@@ -3,19 +3,22 @@
  * Accessible to admin role only.
  */
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   CheckCircleIcon,
   ExclamationTriangleIcon,
   LockClosedIcon,
+  MagnifyingGlassIcon,
   ShareIcon,
   UserPlusIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/outline';
 
 import { Card, CardHeader, CardBody } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
+import { Input } from '../../components/ui/Input';
 import { Spinner } from '../../components/ui/Spinner';
 import { Badge } from '../../components/ui/Badge';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
@@ -23,6 +26,7 @@ import { PaginationBar } from '../../components/ui/Pagination';
 import { Select } from '../../components/ui/Select';
 import { useAuthStore } from '../../store/authStore';
 import { useUsers } from '../../hooks/useAuth';
+import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { bulkShareAdmin, listAdminShares, revokeShare } from '../../api/sharing';
 import type {
@@ -85,6 +89,24 @@ function entityDetailHref(entityType: string, entityId: number): string {
   return `/${base}/${entityId}`;
 }
 
+const ENTITY_TYPE_LABEL: Record<string, string> = {
+  contacts: 'Contact',
+  companies: 'Company',
+  leads: 'Lead',
+  proposals: 'Proposal',
+};
+
+function entityTypeLabel(entityType: string): string {
+  return ENTITY_TYPE_LABEL[entityType] ?? entityType;
+}
+
+function revokeMessage(target: AdminShareItem): string {
+  const label =
+    target.entity_label ??
+    `${entityTypeLabel(target.entity_type)} #${target.entity_id}`;
+  return `This will immediately remove ${target.shared_with_user_name}'s access to ${label}.`;
+}
+
 function resultTone(result: AdminBulkShareResponse | null) {
   if (!result) return null;
   return result.failed > 0 ? 'warning' : 'success';
@@ -104,7 +126,18 @@ export default function AdminSharingPage() {
   const [sharedWithId, setSharedWithId] = useState('');
   const [sharedById, setSharedById] = useState('');
   const [permissionLevel, setPermissionLevel] = useState('');
+  // `searchInput` is the raw text the admin is typing; `debouncedSearch` is
+  // what's actually sent to the API, throttled so each keystroke doesn't
+  // re-hit the server while the planner walks the polymorphic joins.
+  const [searchInput, setSearchInput] = useState('');
+  const debouncedSearch = useDebouncedValue(searchInput.trim(), 250);
   const [revokeTarget, setRevokeTarget] = useState<AdminShareItem | null>(null);
+
+  // Reset to page 1 when debounced search settles (filter dropdowns batch
+  // their own setPage(1) via handleFilterChange).
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch]);
 
   const [bulkEntityType, setBulkEntityType] =
     useState<RecordPickerEntityType>('contacts');
@@ -117,7 +150,7 @@ export default function AdminSharingPage() {
 
   const { data: usersData } = useUsers(0, 200, { enabled: isAuthorized });
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isFetching, isError, error } = useQuery({
     queryKey: [
       'admin',
       'shares',
@@ -126,6 +159,7 @@ export default function AdminSharingPage() {
       sharedWithId,
       sharedById,
       permissionLevel,
+      debouncedSearch,
     ],
     queryFn: () =>
       listAdminShares({
@@ -135,8 +169,12 @@ export default function AdminSharingPage() {
         shared_with_user_id: sharedWithId ? Number(sharedWithId) : undefined,
         shared_by_user_id: sharedById ? Number(sharedById) : undefined,
         permission_level: permissionLevel || undefined,
+        q: debouncedSearch || undefined,
       }),
     enabled: isAuthorized,
+    // Keep the previous page rendered while the next request resolves so the
+    // table doesn't blink to empty between keystrokes.
+    placeholderData: (prev) => prev,
   });
 
   const revokeMutation = useMutation({
@@ -441,7 +479,41 @@ export default function AdminSharingPage() {
 
       <div data-guide="admin-sharing-filters">
         <Card>
-          <CardBody className="!mt-0">
+          <CardBody className="!mt-0 space-y-4">
+            <div>
+              <label
+                htmlFor="filter-search"
+                className="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400"
+              >
+                Search
+              </label>
+              <div className="relative">
+                <Input
+                  id="filter-search"
+                  type="search"
+                  value={searchInput}
+                  onChange={(event) => setSearchInput(event.target.value)}
+                  placeholder="Find by teammate, company, contact, lead, or proposal..."
+                  autoComplete="off"
+                  spellCheck={false}
+                  leftIcon={<MagnifyingGlassIcon aria-hidden="true" />}
+                  // Hide the WebKit/Chrome native cancel button so our custom
+                  // clear-X doesn't duplicate; reserve inner padding when our
+                  // X is visible.
+                  className={`[&::-webkit-search-cancel-button]:hidden ${searchInput ? '!pr-10' : ''}`}
+                />
+                {searchInput && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchInput('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-gray-400 hover:text-gray-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:text-gray-500 dark:hover:text-gray-300"
+                    aria-label="Clear search"
+                  >
+                    <XMarkIcon className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                )}
+              </div>
+            </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <div>
                 <label
@@ -522,17 +594,42 @@ export default function AdminSharingPage() {
       <div data-guide="admin-sharing-table">
         <Card>
           <CardHeader
-            title={`Shares (${total.toLocaleString()})`}
+            // While re-fetching, the count is from the prior query — show a
+            // placeholder so the admin doesn't read a stale total alongside
+            // the about-to-refresh rows.
+            title={
+              isFetching && !isLoading
+                ? 'Shares (refreshing...)'
+                : `Shares (${total.toLocaleString()})`
+            }
             description="Click Revoke to remove a share immediately."
+            action={
+              isFetching && !isLoading ? (
+                <Spinner aria-label="Refreshing results" />
+              ) : undefined
+            }
           />
           <CardBody className="!mt-0">
             {isLoading ? (
               <div className="flex justify-center py-12">
                 <Spinner />
               </div>
+            ) : isError ? (
+              // React Query holds onto the previous page via `placeholderData`
+              // if the most recent fetch errors, so we surface the failure
+              // inline instead of silently re-rendering stale rows.
+              <div
+                role="alert"
+                aria-live="polite"
+                className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-200"
+              >
+                Couldn't load shares: {extractApiErrorDetail(error) ?? 'unknown error'}.
+              </div>
             ) : !data || data.items.length === 0 ? (
               <p className="px-6 py-8 text-sm text-gray-500 dark:text-gray-400">
-                No shares match the current filters.
+                {debouncedSearch
+                  ? `No shares match "${debouncedSearch}".`
+                  : 'No shares match the current filters.'}
               </p>
             ) : (
               <div className="overflow-x-auto">
@@ -580,12 +677,26 @@ export default function AdminSharingPage() {
                         key={item.id}
                         className="hover:bg-gray-50 dark:hover:bg-gray-700/40"
                       >
-                        <td className="whitespace-nowrap px-4 py-3">
+                        <td className="px-4 py-3 align-top">
                           <a
                             href={entityDetailHref(item.entity_type, item.entity_id)}
-                            className="text-sm font-medium text-primary-600 hover:underline dark:text-primary-400"
+                            className="block max-w-xs"
                           >
-                            {item.entity_type} #{item.entity_id}
+                            <p className="truncate text-sm font-medium text-primary-600 hover:underline dark:text-primary-400">
+                              {item.entity_label ?? (
+                                <span className="italic text-gray-500 dark:text-gray-400">
+                                  Deleted {entityTypeLabel(item.entity_type).toLowerCase()}
+                                </span>
+                              )}
+                            </p>
+                            {item.entity_subtitle && (
+                              <p className="truncate text-xs text-gray-500 dark:text-gray-400">
+                                {item.entity_subtitle}
+                              </p>
+                            )}
+                            <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">
+                              {entityTypeLabel(item.entity_type)} #{item.entity_id}
+                            </p>
                           </a>
                         </td>
                         <td className="px-4 py-3">
@@ -648,11 +759,7 @@ export default function AdminSharingPage() {
           if (revokeTarget) revokeMutation.mutate(revokeTarget.id);
         }}
         title="Revoke this share?"
-        message={
-          revokeTarget
-            ? `This will immediately remove ${revokeTarget.shared_with_user_name}'s access to ${revokeTarget.entity_type} #${revokeTarget.entity_id}.`
-            : ''
-        }
+        message={revokeTarget ? revokeMessage(revokeTarget) : ''}
         confirmLabel="Revoke"
         variant="danger"
         isLoading={revokeMutation.isPending}
