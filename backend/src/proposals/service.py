@@ -397,6 +397,27 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         seq = (count_result.scalar() or 0) + 1
         return f"{prefix}{seq:04d}"
 
+    @staticmethod
+    def _bundle_lock_select(bundle_id: int, *options):
+        """SELECT ProposalBundle ... FOR UPDATE OF proposal_bundles.
+
+        Shared by every mutation path that needs to serialize on the
+        bundle row. The ``of=ProposalBundle`` scope is mandatory:
+        ProposalBundle declares five ``lazy="joined"`` relations
+        (contact, company, owner, created_by_user, selected_proposal)
+        which emit LEFT OUTER JOINs in the primary SELECT. Postgres
+        refuses a bare ``FOR UPDATE`` on the nullable side of an outer
+        join (FeatureNotSupportedError). SQLite ignores FOR UPDATE
+        entirely, so the same statement is a no-op there — fine because
+        tests are single-threaded.
+        """
+        return (
+            select(ProposalBundle)
+            .options(*options)
+            .where(ProposalBundle.id == bundle_id)
+            .with_for_update(of=ProposalBundle)
+        )
+
     async def get_bundle(
         self,
         bundle_id: int,
@@ -412,26 +433,23 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         commit a single-row unbundle each, leaving a 1-option zombie
         bundle that violates the schema-level invariant.
         """
-        stmt = (
-            select(ProposalBundle)
-            .options(
-                selectinload(ProposalBundle.proposals).selectinload(Proposal.signing_documents),
-                selectinload(ProposalBundle.proposals).selectinload(Proposal.contact),
-                selectinload(ProposalBundle.proposals).selectinload(Proposal.company),
-                selectinload(ProposalBundle.contact),
-                selectinload(ProposalBundle.company),
-                selectinload(ProposalBundle.created_by_user),
-                selectinload(ProposalBundle.owner),
-            )
-            .where(ProposalBundle.id == bundle_id)
+        eager_options = (
+            selectinload(ProposalBundle.proposals).selectinload(Proposal.signing_documents),
+            selectinload(ProposalBundle.proposals).selectinload(Proposal.contact),
+            selectinload(ProposalBundle.proposals).selectinload(Proposal.company),
+            selectinload(ProposalBundle.contact),
+            selectinload(ProposalBundle.company),
+            selectinload(ProposalBundle.created_by_user),
+            selectinload(ProposalBundle.owner),
         )
         if for_update:
-            # NOTE: no `of=` — combining FOR UPDATE OF with the selectinload
-            # secondary SELECT confuses some dialects (and is silently a
-            # no-op on SQLite used in tests). Locking the bundle row alone
-            # is sufficient to serialize concurrent mutators because every
-            # write path goes through `get_bundle(for_update=True)`.
-            stmt = stmt.with_for_update()
+            stmt = self._bundle_lock_select(bundle_id, *eager_options)
+        else:
+            stmt = (
+                select(ProposalBundle)
+                .options(*eager_options)
+                .where(ProposalBundle.id == bundle_id)
+            )
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -1048,10 +1066,10 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         locked_bundle: ProposalBundle | None = None
         if proposal.proposal_bundle_id is not None:
             bundle_lock = await self.db.execute(
-                select(ProposalBundle)
-                .options(selectinload(ProposalBundle.proposals))
-                .where(ProposalBundle.id == proposal.proposal_bundle_id)
-                .with_for_update()
+                self._bundle_lock_select(
+                    proposal.proposal_bundle_id,
+                    selectinload(ProposalBundle.proposals),
+                )
             )
             locked_bundle = bundle_lock.scalar_one_or_none()
             if locked_bundle is None:

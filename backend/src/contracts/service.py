@@ -219,9 +219,18 @@ class ContractService(CRUDService[Contract, ContractCreate, ContractUpdate]):
 
         # Lock the contract row for the rest of the transaction. Postgres
         # serializes; SQLite (test) treats it as a no-op which is fine
-        # because tests are single-threaded.
+        # because tests are single-threaded. `of=Contract` is required
+        # because Contract has `lazy="joined"` contact / company relations
+        # (see contracts/models.py) — bare FOR UPDATE would fail on PG
+        # with FeatureNotSupportedError on the nullable side of the
+        # outer join. Defensive: the contracts router was unmounted
+        # 2026-05-14 so this path isn't currently reachable, but the
+        # statement is identical to the prop-bundles fix and worth
+        # keeping consistent.
         locked = await self.db.execute(
-            select(Contract).where(Contract.id == contract.id).with_for_update(),
+            select(Contract)
+            .where(Contract.id == contract.id)
+            .with_for_update(of=Contract),
         )
         contract = locked.scalar_one()
 

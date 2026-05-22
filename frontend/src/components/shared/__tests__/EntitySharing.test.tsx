@@ -65,10 +65,13 @@ describe('EntitySharing', () => {
     } as unknown as ReturnType<typeof useEntityShares>);
 
     renderSharing();
-    expect(screen.getByText('Not shared yet.')).toBeTruthy();
+    // Header subline replaces the old dashed "Not shared yet" box.
+    expect(screen.getByText(/Private record/i)).toBeTruthy();
+    // Manager hint guides toward the Share button.
+    expect(screen.getByText(/Not shared yet/i)).toBeTruthy();
   });
 
-  it('shows "Shared with N people" badge with correct count', () => {
+  it('shows "Shared with N teammates" subline with correct count', () => {
     mockedUseEntityShares.mockReturnValue({
       data: {
         items: [
@@ -80,7 +83,7 @@ describe('EntitySharing', () => {
     } as unknown as ReturnType<typeof useEntityShares>);
 
     renderSharing();
-    expect(screen.getByText(/Shared with 2 people/i)).toBeTruthy();
+    expect(screen.getByText(/Shared with 2 teammates/i)).toBeTruthy();
   });
 
   it('revoke button only renders when canManage=true', () => {
