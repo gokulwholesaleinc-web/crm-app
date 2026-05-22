@@ -774,3 +774,26 @@ class TestProposalBundles:
             headers=auth_headers,
         )
         assert resp.status_code == 400
+
+    async def test_bundle_lock_select_uses_of_proposal_bundles(self):
+        """Regression: bare `with_for_update()` on `select(ProposalBundle)`
+        raised asyncpg ``FeatureNotSupportedError: FOR UPDATE cannot be
+        applied to the nullable side of an outer join`` in prod because
+        ProposalBundle declares five `lazy="joined"` relations
+        (contact, company, owner, created_by_user, selected_proposal)
+        that emit LEFT OUTER JOINs in the primary SELECT.
+
+        SQLite ignores FOR UPDATE entirely so this can't reproduce the
+        PG runtime error directly. Instead we compile the *actual*
+        statement produced by ProposalService._bundle_lock_select with
+        the PG dialect and assert the lock is scoped to the bundle
+        table. Reverting `_bundle_lock_select` to bare
+        `with_for_update()` makes this fail.
+        """
+        from sqlalchemy.dialects import postgresql
+
+        from src.proposals.service import ProposalService
+
+        stmt = ProposalService._bundle_lock_select(1)
+        sql = str(stmt.compile(dialect=postgresql.dialect()))
+        assert "FOR UPDATE OF proposal_bundles" in sql, sql
