@@ -284,3 +284,53 @@ class TestDuplicateEndpoint:
         )
         assert resp.status_code == 201
         assert resp.json()["status"] == "draft"
+
+    async def test_duplicate_of_copy_increments_suffix(
+        self, client: AsyncClient, db_session: AsyncSession, test_user: User, auth_headers: dict
+    ):
+        """`foo (copy)` → `foo (copy 2)`, not `foo (copy) (copy)`."""
+        proposal = await _make_proposal(db_session, test_user, title="Acme (copy)")
+
+        resp = await client.post(
+            f"/api/proposals/{proposal.id}/duplicate",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 201
+        assert resp.json()["title"] == "Acme (copy 2)"
+
+    async def test_duplicate_of_numbered_copy_increments(
+        self, client: AsyncClient, db_session: AsyncSession, test_user: User, auth_headers: dict
+    ):
+        proposal = await _make_proposal(db_session, test_user, title="Acme (copy 3)")
+
+        resp = await client.post(
+            f"/api/proposals/{proposal.id}/duplicate",
+            headers=auth_headers,
+        )
+        assert resp.json()["title"] == "Acme (copy 4)"
+
+    async def test_duplicate_collapses_legacy_copy_chain(
+        self, client: AsyncClient, db_session: AsyncSession, test_user: User, auth_headers: dict
+    ):
+        """Legacy titles like `foo (copy) (copy)` collapse to `foo (copy 3)`."""
+        proposal = await _make_proposal(db_session, test_user, title="Acme (copy) (copy)")
+
+        resp = await client.post(
+            f"/api/proposals/{proposal.id}/duplicate",
+            headers=auth_headers,
+        )
+        # Both trailing (copy) markers count toward the chain length.
+        assert resp.json()["title"] == "Acme (copy 3)"
+
+    async def test_duplicate_degenerate_copy_only_title(
+        self, client: AsyncClient, db_session: AsyncSession, test_user: User, auth_headers: dict
+    ):
+        """Title that is purely `(copy)` falls back to suffixing the original
+        rather than emitting a leading-space title like ` (copy 2)`."""
+        proposal = await _make_proposal(db_session, test_user, title="(copy)")
+
+        resp = await client.post(
+            f"/api/proposals/{proposal.id}/duplicate",
+            headers=auth_headers,
+        )
+        assert resp.json()["title"] == "(copy) (copy)"
