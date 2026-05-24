@@ -1181,13 +1181,27 @@ function ProposalOptionsCard({
             return (
               <li
                 key={option.id}
-                className="flex flex-col gap-2 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+                className="relative flex flex-col gap-2 px-3 py-3 transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/40 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
+                    {/* Stretched link: ::before fills the row so the whole
+                        <li> is the click target. The focus ring rides the
+                        ::before so the keyboard indicator matches the click
+                        area, not just the title text. Action buttons below
+                        sit in a `relative z-10` container above the overlay. */}
                     <Link
                       to={`/proposals/${option.id}`}
-                      className="truncate text-sm font-medium text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-300"
+                      onClick={(e) => {
+                        // Don't navigate if the user was drag-selecting text;
+                        // the stretched ::before catches mouseup and would
+                        // silently lose their selection otherwise.
+                        if ((window.getSelection()?.toString().length ?? 0) > 0) {
+                          e.preventDefault();
+                        }
+                      }}
+                      className="truncate text-sm font-medium text-primary-600 before:absolute before:inset-0 before:rounded-sm before:content-[''] hover:text-primary-900 focus-visible:outline-none focus-visible:before:ring-2 focus-visible:before:ring-inset focus-visible:before:ring-primary-500 dark:text-primary-400 dark:hover:text-primary-300"
+                      aria-label={`Open proposal ${option.proposal_number}: ${option.title}`}
                     >
                       {option.title}
                     </Link>
@@ -1209,7 +1223,7 @@ function ProposalOptionsCard({
                     )}
                   </p>
                 </div>
-                <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
+                <div className="relative z-10 flex flex-wrap items-center gap-2 sm:flex-nowrap">
                   <StatusBadge status={option.status} size="sm" showDot={false} />
                   {canManageOptions && (
                     <>

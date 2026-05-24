@@ -3,6 +3,7 @@
 import base64
 import binascii
 import logging
+import re
 from typing import Annotated, NoReturn
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
@@ -1947,6 +1948,35 @@ async def accept_proposal(
     return ProposalResponse.model_validate(proposal)
 
 
+# Matches a trailing " (copy)" or " (copy N)" suffix. Used to collapse copy
+# chains (e.g. "foo (copy) (copy)" → "foo (copy 2)") so the Proposal Options
+# panel doesn't accumulate "(copy) (copy) (copy)" titles after every Add.
+_COPY_SUFFIX_RE = re.compile(r"\s*\(copy(?:\s+(\d+))?\)\s*$")
+
+
+def _next_copy_title(title: str) -> str:
+    base = title
+    highest = 0
+    chain_len = 0
+    while True:
+        m = _COPY_SUFFIX_RE.search(base)
+        if not m:
+            break
+        chain_len += 1
+        n = int(m.group(1)) if m.group(1) else 1
+        highest = max(highest, n)
+        base = base[: m.start()]
+    # If the entire title was (copy)-suffixes (e.g. literal "(copy)"), there's
+    # nothing meaningful to keep — fall back to suffixing the original title
+    # rather than emitting a leading-space title like " (copy 2)".
+    if chain_len == 0 or not base.strip():
+        return f"{title} (copy)"
+    # Use the larger of (highest explicit index, chain length) so legacy
+    # `foo (copy) (copy)` collapses to `foo (copy 3)` rather than (copy 2).
+    next_n = max(highest, chain_len) + 1
+    return f"{base} (copy {next_n})"
+
+
 @router.post("/{proposal_id}/duplicate", response_model=ProposalResponse, status_code=HTTPStatus.CREATED)
 async def duplicate_proposal(
     proposal_id: int,
@@ -1957,10 +1987,11 @@ async def duplicate_proposal(
 ):
     """Clone a proposal as a new draft.
 
-    Copies core proposal content, appends " (copy)" to the title, and clears
-    all e-sign / Stripe / sent timestamps. Legacy structured payment fields are
-    carried over for retention only; create/edit no longer exposes those inputs.
-    The clone is owned by the requesting user.
+    Copies core proposal content, appends " (copy)" (or " (copy N)" when
+    duplicating an existing copy) to the title, and clears all e-sign / Stripe
+    / sent timestamps. Legacy structured payment fields are carried over for
+    retention only; create/edit no longer exposes those inputs. The clone is
+    owned by the requesting user.
     """
     service = ProposalService(db)
     proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
@@ -1970,7 +2001,7 @@ async def duplicate_proposal(
     )
 
     clone_data = ProposalCreate(
-        title=f"{proposal.title} (copy)",
+        title=_next_copy_title(proposal.title),
         content=proposal.content,
         cover_letter=proposal.cover_letter,
         executive_summary=proposal.executive_summary,
