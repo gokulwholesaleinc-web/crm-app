@@ -27,7 +27,17 @@ export function renderWithProviders(
   const wrapped = createElement(
     QueryClientProvider,
     { client },
-    createElement(MemoryRouter, { initialEntries: [initialRoute] }, ui)
+    createElement(
+      MemoryRouter,
+      {
+        initialEntries: [initialRoute],
+        future: {
+          v7_startTransition: true,
+          v7_relativeSplatPath: true,
+        },
+      },
+      ui
+    )
   );
   return { ...render(wrapped), queryClient: client };
 }

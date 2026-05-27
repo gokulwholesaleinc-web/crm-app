@@ -16,6 +16,7 @@ side-effects from sibling test files can't paper over a removed import.
 
 from __future__ import annotations
 
+import os
 import pathlib
 import subprocess
 import sys
@@ -45,6 +46,7 @@ def test_quote_table_registers_via_proposals_models_alone() -> None:
         timeout=30,
         check=False,
         cwd=_BACKEND_DIR,
+        env={**os.environ, "SECRET_KEY": os.environ.get("SECRET_KEY", "test-secret-key")},
     )
     assert result.returncode == 0, (
         f"subprocess failed: stdout={result.stdout!r} stderr={result.stderr!r}"

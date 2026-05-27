@@ -33,6 +33,10 @@ vi.mock('../../hooks/usePayments', () => ({
   useCancelSubscription: () => ({ mutateAsync: cancelMutateAsync, isPending: false }),
 }));
 
+vi.mock('../../hooks/useStripeMode', () => ({
+  useStripeMode: () => ({ mode: 'live', isLoading: false, isError: false }),
+}));
+
 vi.mock('../../utils/toast', () => ({ showSuccess: vi.fn(), showError: vi.fn() }));
 
 vi.mock('./components/SendInvoiceModal', () => ({
