@@ -1813,7 +1813,12 @@ async def delete_proposal(
     current_user: ProposalDeleteUser,
     db: DBSession,
 ):
-    """Delete a proposal."""
+    """Delete a proposal.
+
+    Bundle-aware: if the proposal belongs to a bundle, route through
+    remove_option_from_bundle so survivors keep consistent sort_order
+    and the bundle dissolves cleanly when ≤1 option remains.
+    """
     service = ProposalService(db)
     proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
     check_ownership(proposal, current_user, EntityNames.PROPOSAL)
@@ -1821,7 +1826,16 @@ async def delete_proposal(
     ip_address = get_client_ip(request)
     await audit_entity_delete(db, "proposal", proposal.id, current_user.id, ip_address)
 
-    await service.delete(proposal)
+    with value_error_as_400():
+        if proposal.proposal_bundle_id:
+            bundle = await service.get_bundle(
+                proposal.proposal_bundle_id, for_update=True
+            )
+            if bundle:
+                await service.remove_option_from_bundle(
+                    bundle, proposal_id, current_user.id
+                )
+        await service.delete(proposal)
 
 
 @router.post("/{proposal_id}/send", response_model=ProposalResponse)

@@ -326,9 +326,8 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         )
 
         if not include_bundle_options:
-            # Sub-proposals live ONLY under their parent (sort_order=0) on the
-            # detail page — they shouldn't pollute the list. A NULL bundle id
-            # means "standalone proposal" and stays visible regardless.
+            # Sub-options live under their parent on the detail page;
+            # the list always shows only standalone + parent rows.
             query = query.where(
                 or_(
                     Proposal.proposal_bundle_id.is_(None),
@@ -336,7 +335,26 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 )
             )
 
-        if search:
+            if search:
+                # Search may match a sub-option title/number that the list
+                # normally hides.  When that happens, surface the parent
+                # bundle row (sort_order=0) so the user can navigate to it.
+                search_condition = build_token_search(search, Proposal.title, Proposal.proposal_number)
+                if search_condition is not None:
+                    sibling = Proposal.__table__.alias("sibling")
+                    matched_bundle_ids = (
+                        select(sibling.c.proposal_bundle_id)
+                        .where(sibling.c.proposal_bundle_id.is_not(None))
+                        .where(build_token_search(search, sibling.c.title, sibling.c.proposal_number))
+                    ).correlate(None)
+
+                    query = query.where(
+                        or_(
+                            search_condition,
+                            Proposal.proposal_bundle_id.in_(matched_bundle_ids),
+                        )
+                    )
+        elif search:
             search_condition = build_token_search(search, Proposal.title, Proposal.proposal_number)
             if search_condition is not None:
                 query = query.where(search_condition)

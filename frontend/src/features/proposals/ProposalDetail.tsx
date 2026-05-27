@@ -225,6 +225,7 @@ function ProposalDetailPage() {
   const isBundled = Boolean(proposal.proposal_bundle_id);
   const bundleIsMutable = !isBundled || proposalBundle?.status === 'draft';
   const bundleOptionCount = proposalBundle?.proposals?.length ?? (isBundled ? 0 : 1);
+  const willDissolveBundle = isBundled && bundleOptionCount <= 2;
   const bundleCanSendStatus =
     Boolean(proposalBundle) && ['draft', 'sent', 'viewed'].includes(proposalBundle?.status ?? '');
   const handleSend = async () => {
@@ -293,8 +294,8 @@ function ProposalDetailPage() {
       await deleteProposalMutation.mutateAsync(proposal.id);
       showSuccess('Proposal deleted');
       navigate('/proposals');
-    } catch {
-      showError('Failed to delete proposal');
+    } catch (err) {
+      showError(extractApiErrorDetail(err) ?? 'Failed to delete proposal');
     }
   };
 
@@ -458,11 +459,13 @@ function ProposalDetailPage() {
       currentUser.role === 'manager');
 
   const isDraft = proposal.status === 'draft';
+  const hasContact = Boolean(proposal.contact_id || proposal.contact);
   const proposalRecipient =
     proposal.designated_signer_email || proposal.contact?.email || '';
   // Show Send for draft/sent/viewed so the CRM user can resend if delivery
-  // failed (bad Gmail token, sandbox rejection). Require a recipient so the
-  // frontend gates the 400 the backend would return without one.
+  // failed (bad Gmail token, sandbox rejection). Require a linked contact
+  // AND a recipient email so the frontend gates the 400s the backend would
+  // return without them.
   const canSendStatus = isBundled
     ? bundleCanSendStatus
     : ['draft', 'sent', 'viewed'].includes(proposal.status ?? '');
@@ -479,9 +482,10 @@ function ProposalDetailPage() {
     ? canSendStatus &&
       Boolean(proposalBundle) &&
       bundleOptionCount >= 2 &&
+      hasContact &&
       Boolean(proposalRecipient) &&
       !signingDocsBlockSend
-    : canSendStatus && Boolean(proposalRecipient) && !signingDocsBlockSend;
+    : canSendStatus && hasContact && Boolean(proposalRecipient) && !signingDocsBlockSend;
   const sendLabel = isBundled
     ? (proposalBundle?.status === 'draft' ? 'Send options' : 'Resend options')
     : (isDraft ? 'Send' : 'Resend');
@@ -1062,7 +1066,11 @@ function ProposalDetailPage() {
         onClose={() => setShowDeleteConfirm(false)}
         onConfirm={handleDelete}
         title="Delete Proposal"
-        message={`Are you sure you want to delete "${proposal.title}"? This action cannot be undone.`}
+        message={
+          isBundled
+            ? `Are you sure you want to delete "${proposal.title}"? It will be removed from its options bundle${willDissolveBundle ? ' and the bundle will be dissolved' : ''}. This action cannot be undone.`
+            : `Are you sure you want to delete "${proposal.title}"? This action cannot be undone.`
+        }
         confirmLabel="Delete"
         cancelLabel="Cancel"
         variant="danger"
@@ -1118,6 +1126,7 @@ function ProposalOptionsCard({
 }: ProposalOptionsCardProps) {
   const options = bundle?.proposals?.length ? bundle.proposals : [proposal];
   const isDraftBundle = !bundle || bundle.status === 'draft';
+  const [removeConfirm, setRemoveConfirm] = useState<{ id: number; title: string } | null>(null);
 
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-5 shadow dark:border-gray-700 dark:bg-gray-800">
@@ -1245,7 +1254,12 @@ function ProposalOptionsCard({
                       </button>
                       <button
                         type="button"
-                        onClick={() => onRemoveOption(option.id)}
+                        onClick={() =>
+                          setRemoveConfirm({
+                            id: option.id,
+                            title: option.title,
+                          })
+                        }
                         disabled={isRemovingOption}
                         className="rounded-md border border-red-200 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-900/50 dark:text-red-300 dark:hover:bg-red-900/20"
                         title={
@@ -1270,6 +1284,27 @@ function ProposalOptionsCard({
           Loading proposal options…
         </p>
       )}
+
+      <ConfirmDialog
+        isOpen={removeConfirm !== null}
+        onClose={() => setRemoveConfirm(null)}
+        onConfirm={() => {
+          if (removeConfirm) {
+            onRemoveOption(removeConfirm.id);
+            setRemoveConfirm(null);
+          }
+        }}
+        title="Remove Option"
+        message={
+          options.length <= 2
+            ? `Remove "${removeConfirm?.title ?? ''}"? This will dissolve the entire bundle since only one option would remain.`
+            : `Remove "${removeConfirm?.title ?? ''}" from this bundle?`
+        }
+        confirmLabel="Remove"
+        cancelLabel="Cancel"
+        variant="danger"
+        isLoading={isRemovingOption}
+      />
     </div>
   );
 }

@@ -40,6 +40,27 @@ function formatChangeValue(value: unknown): string {
   return String(value);
 }
 
+function normalizeChanges(
+  changes: AuditLogEntry['changes']
+): AuditChangeDetail[] {
+  if (!changes) return [];
+  if (Array.isArray(changes)) return changes;
+
+  return Object.entries(changes).map(([field, value]) => {
+    const detail = value as { old_value?: unknown; new_value?: unknown };
+    const hasDetail =
+      value !== null &&
+      typeof value === 'object' &&
+      ('old_value' in detail || 'new_value' in detail);
+
+    return {
+      field,
+      old_value: hasDetail ? detail.old_value : undefined,
+      new_value: hasDetail ? detail.new_value : value,
+    };
+  });
+}
+
 function ChangeDetail({ change }: { change: AuditChangeDetail }) {
   return (
     <div className="flex items-start gap-2 text-xs">
@@ -60,7 +81,8 @@ function ChangeDetail({ change }: { change: AuditChangeDetail }) {
 function AuditEntry({ entry }: { entry: AuditLogEntry }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const colors = ACTION_COLORS[entry.action] ?? ACTION_COLORS['update']!;
-  const hasChanges = entry.changes && entry.changes.length > 0;
+  const changes = normalizeChanges(entry.changes);
+  const hasChanges = changes.length > 0;
 
   return (
     <li className="relative pb-8 last:pb-0">
@@ -148,11 +170,11 @@ function AuditEntry({ entry }: { entry: AuditLogEntry }) {
               >
                 {isExpanded
                   ? 'Hide changes'
-                  : `${entry.changes!.length} field${entry.changes!.length > 1 ? 's' : ''} changed`}
+                  : `${changes.length} field${changes.length > 1 ? 's' : ''} changed`}
               </button>
               {isExpanded && (
                 <div className="mt-2 space-y-1 bg-gray-50 dark:bg-gray-700 rounded-md p-2">
-                  {entry.changes!.map((change, idx) => (
+                  {changes.map((change, idx) => (
                     <ChangeDetail key={idx} change={change} />
                   ))}
                 </div>
