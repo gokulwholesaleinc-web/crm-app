@@ -460,12 +460,10 @@ function ProposalDetailPage() {
 
   const isDraft = proposal.status === 'draft';
   const hasContact = Boolean(proposal.contact_id || proposal.contact);
-  const proposalRecipient =
-    proposal.designated_signer_email || proposal.contact?.email || '';
-  // Show Send for draft/sent/viewed so the CRM user can resend if delivery
-  // failed (bad Gmail token, sandbox rejection). Require a linked contact
-  // AND a recipient email so the frontend gates the 400s the backend would
-  // return without them.
+  const contactEmail = proposal.contact?.email || '';
+  // Backend requires contact_id + contact.email for both single and bundle
+  // sends. designated_signer_email controls who signs, not where to deliver.
+  const hasDeliveryTarget = hasContact && Boolean(contactEmail);
   const canSendStatus = isBundled
     ? bundleCanSendStatus
     : ['draft', 'sent', 'viewed'].includes(proposal.status ?? '');
@@ -482,10 +480,9 @@ function ProposalDetailPage() {
     ? canSendStatus &&
       Boolean(proposalBundle) &&
       bundleOptionCount >= 2 &&
-      hasContact &&
-      Boolean(proposalRecipient) &&
+      hasDeliveryTarget &&
       !signingDocsBlockSend
-    : canSendStatus && hasContact && Boolean(proposalRecipient) && !signingDocsBlockSend;
+    : canSendStatus && hasDeliveryTarget && !signingDocsBlockSend;
   const sendLabel = isBundled
     ? (proposalBundle?.status === 'draft' ? 'Send options' : 'Resend options')
     : (isDraft ? 'Send' : 'Resend');
@@ -493,8 +490,8 @@ function ProposalDetailPage() {
     ? 'Proposal options are still loading'
     : isBundled && bundleOptionCount < 2
     ? 'Add at least two proposal options before sending'
-    : !proposalRecipient
-    ? 'Set a designated signer email or attach a contact with an email before sending'
+    : !hasDeliveryTarget
+    ? 'Link a contact with an email address before sending'
     : signingDocsBlockSend
       ? signingDocsBlockerSibling && signingDocsBlockerSibling.id !== proposal.id
         ? `Place signature and date areas on every uploaded signing document for option ${signingDocsBlockerSibling.proposal_number} before sending`

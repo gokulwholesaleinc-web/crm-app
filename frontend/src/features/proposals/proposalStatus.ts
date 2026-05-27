@@ -115,36 +115,29 @@ export function buildProposalSendChecklist(
 ): ChecklistItem[] {
   const items: ChecklistItem[] = [];
 
-  // The backend requires a linked contact with an email for single sends
-  // (service.py send_proposal_email checks contact_id then contact.email).
-  // designated_signer_email controls who must *sign*, but the contact is
-  // still the delivery target. Surface both requirements separately so the
-  // user knows exactly what's missing.
+  // The backend requires a linked contact WITH an email for both single
+  // and bundle sends (service.py send_proposal_email checks contact_id
+  // then contact.email; send_bundle_email checks contact.email too).
+  // designated_signer_email controls who must *sign* but does NOT
+  // substitute for the contact delivery email.
   const hasContact = Boolean(proposal.contact_id || proposal.contact);
   const contactEmail = proposal.contact?.email || '';
-  const recipient =
-    proposal.designated_signer_email || contactEmail || '';
   items.push({
     key: 'contact',
-    label: hasContact ? 'Contact linked' : 'Link a contact',
-    state: hasContact,
-    hint: hasContact
-      ? undefined
-      : 'A linked contact is required to send. Edit the proposal to attach one.',
-    action: hasContact
+    label: hasContact
+      ? contactEmail
+        ? `Contact linked (${contactEmail})`
+        : 'Contact has no email'
+      : 'Link a contact',
+    state: hasContact && Boolean(contactEmail),
+    hint: !hasContact
+      ? 'A linked contact with an email is required to send.'
+      : !contactEmail
+        ? 'The linked contact needs an email address on file.'
+        : undefined,
+    action: hasContact && contactEmail
       ? undefined
       : { label: 'Edit', onClick: options.onEditContact },
-  });
-  items.push({
-    key: 'recipient',
-    label: recipient ? `Recipient set (${recipient})` : 'Recipient email',
-    state: Boolean(recipient),
-    hint: recipient
-      ? undefined
-      : 'The linked contact needs an email, or set a designated signer email.',
-    action: recipient
-      ? undefined
-      : { label: 'Set recipient', onClick: options.onEditContact },
   });
 
   // Linked contact OR company is required so accepted-side hooks

@@ -789,20 +789,21 @@ class TestProposalBundles:
         b = await _make_proposal(db_session, test_user, title="Secondary")
         c = await _make_proposal(db_session, test_user, title="Tertiary")
         bundle = await _make_bundle(db_session, test_user, [a, b, c])
+        a_id, b_id, c_id, bundle_id = a.id, b.id, c.id, bundle.id
 
         resp = await client.delete(
-            f"/api/proposals/{b.id}", headers=auth_headers,
+            f"/api/proposals/{b_id}", headers=auth_headers,
         )
         assert resp.status_code == 204
 
         db_session.expire_all()
         remaining = (await db_session.execute(
             select(Proposal)
-            .where(Proposal.proposal_bundle_id == bundle.id)
+            .where(Proposal.proposal_bundle_id == bundle_id)
             .order_by(Proposal.bundle_sort_order)
         )).scalars().all()
         assert len(remaining) == 2
-        assert [p.id for p in remaining] == [a.id, c.id]
+        assert [p.id for p in remaining] == [a_id, c_id]
         assert remaining[0].bundle_sort_order == 0
         assert remaining[1].bundle_sort_order == 1
 
@@ -818,15 +819,15 @@ class TestProposalBundles:
         a = await _make_proposal(db_session, test_user, title="Primary")
         b = await _make_proposal(db_session, test_user, title="Secondary")
         bundle = await _make_bundle(db_session, test_user, [a, b])
-        bundle_id = bundle.id
+        a_id, b_id, bundle_id = a.id, b.id, bundle.id
 
         resp = await client.delete(
-            f"/api/proposals/{a.id}", headers=auth_headers,
+            f"/api/proposals/{a_id}", headers=auth_headers,
         )
         assert resp.status_code == 204
 
         db_session.expire_all()
-        survivor = await db_session.get(Proposal, b.id)
+        survivor = await db_session.get(Proposal, b_id)
         assert survivor is not None
         assert survivor.proposal_bundle_id is None
         assert survivor.bundle_sort_order == 0

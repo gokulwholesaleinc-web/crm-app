@@ -29,6 +29,8 @@ const statusOptions = [
   { value: 'viewed', label: 'Viewed' },
   { value: 'accepted', label: 'Accepted' },
   { value: 'rejected', label: 'Rejected' },
+  { value: 'awaiting_payment', label: 'Awaiting Payment' },
+  { value: 'paid', label: 'Paid' },
 ];
 
 type TabType = 'proposals' | 'templates';
