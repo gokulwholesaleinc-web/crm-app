@@ -86,6 +86,32 @@ describe('proposal signing document send guardrails', () => {
     expect(item?.label).toContain('Signature and date areas placed');
   });
 
+  it('marks contact item as failing when proposal has no contact_id', () => {
+    const noContact = {
+      ...baseProposal,
+      contact: undefined,
+      contact_id: undefined,
+      designated_signer_email: 'signer@example.com',
+    } as unknown as Proposal;
+
+    const checklist = buildProposalSendChecklist(noContact, {
+      onEditContact: vi.fn(),
+    });
+    const contactItem = checklist.find((entry) => entry.key === 'contact');
+    expect(contactItem?.state).toBe(false);
+    expect(contactItem?.hint).toContain('contact');
+  });
+
+  it('marks both contact and recipient as passing when contact has email', () => {
+    const checklist = buildProposalSendChecklist(baseProposal, {
+      onEditContact: vi.fn(),
+    });
+    const contactItem = checklist.find((entry) => entry.key === 'contact');
+    const recipientItem = checklist.find((entry) => entry.key === 'recipient');
+    expect(contactItem?.state).toBe(true);
+    expect(recipientItem?.state).toBe(true);
+  });
+
   it('allows multiple placements but treats empty placement arrays as missing', () => {
     const readyProposal = {
       ...baseProposal,

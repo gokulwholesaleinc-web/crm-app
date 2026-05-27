@@ -775,6 +775,85 @@ class TestProposalBundles:
         )
         assert resp.status_code == 400
 
+    async def test_delete_bundled_proposal_removes_from_bundle(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        test_user: User,
+        auth_headers: dict,
+    ):
+        """Deleting a bundled proposal via DELETE /proposals/{id} must route
+        through remove_option_from_bundle so the surviving options keep
+        consistent sort_order and the bundle dissolves when ≤1 remains."""
+        a = await _make_proposal(db_session, test_user, title="Primary")
+        b = await _make_proposal(db_session, test_user, title="Secondary")
+        c = await _make_proposal(db_session, test_user, title="Tertiary")
+        bundle = await _make_bundle(db_session, test_user, [a, b, c])
+
+        resp = await client.delete(
+            f"/api/proposals/{b.id}", headers=auth_headers,
+        )
+        assert resp.status_code == 204
+
+        await db_session.expire_all()
+        remaining = (await db_session.execute(
+            select(Proposal)
+            .where(Proposal.proposal_bundle_id == bundle.id)
+            .order_by(Proposal.bundle_sort_order)
+        )).scalars().all()
+        assert len(remaining) == 2
+        assert [p.id for p in remaining] == [a.id, c.id]
+        assert remaining[0].bundle_sort_order == 0
+        assert remaining[1].bundle_sort_order == 1
+
+    async def test_delete_primary_bundled_proposal_dissolves_2_option_bundle(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        test_user: User,
+        auth_headers: dict,
+    ):
+        """Deleting the primary (sort_order=0) proposal from a 2-option
+        bundle should dissolve the bundle, leaving the survivor standalone."""
+        a = await _make_proposal(db_session, test_user, title="Primary")
+        b = await _make_proposal(db_session, test_user, title="Secondary")
+        bundle = await _make_bundle(db_session, test_user, [a, b])
+        bundle_id = bundle.id
+
+        resp = await client.delete(
+            f"/api/proposals/{a.id}", headers=auth_headers,
+        )
+        assert resp.status_code == 204
+
+        await db_session.expire_all()
+        survivor = await db_session.get(Proposal, b.id)
+        assert survivor is not None
+        assert survivor.proposal_bundle_id is None
+        assert survivor.bundle_sort_order == 0
+        bundle_row = await db_session.get(ProposalBundle, bundle_id)
+        assert bundle_row is None
+
+    async def test_search_matches_sub_option_surfaces_parent(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        test_user: User,
+        auth_headers: dict,
+    ):
+        """Searching for a sub-option's title should surface the parent bundle
+        row (sort_order=0) in the list even though sub-options are hidden."""
+        parent = await _make_proposal(db_session, test_user, title="Main Offer")
+        child = await _make_proposal(db_session, test_user, title="Premium Upgrade")
+        await _make_bundle(db_session, test_user, [parent, child])
+
+        resp = await client.get(
+            "/api/proposals/", params={"search": "Premium"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        titles = [p["title"] for p in resp.json()["items"]]
+        assert "Main Offer" in titles
+
     async def test_bundle_lock_select_uses_of_proposal_bundles(self):
         """Regression: bare `with_for_update()` on `select(ProposalBundle)`
         raised asyncpg ``FeatureNotSupportedError: FOR UPDATE cannot be

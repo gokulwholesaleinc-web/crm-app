@@ -95,8 +95,8 @@ function ProposalsPage() {
       await deleteProposalMutation.mutateAsync(deleteConfirm.proposal.id);
       setDeleteConfirm({ isOpen: false, proposal: null });
       showSuccess('Proposal deleted successfully');
-    } catch {
-      showError('Failed to delete proposal');
+    } catch (err) {
+      showError(extractApiErrorDetail(err) ?? 'Failed to delete proposal');
     }
   };
 
@@ -557,7 +557,11 @@ function ProposalsPage() {
         onClose={handleDeleteCancel}
         onConfirm={handleDeleteConfirm}
         title="Delete Proposal"
-        message={`Are you sure you want to delete "${deleteConfirm.proposal?.title}"? This action cannot be undone.`}
+        message={
+          deleteConfirm.proposal?.proposal_bundle_id
+            ? `Are you sure you want to delete "${deleteConfirm.proposal?.title}"? It belongs to an options bundle and will be removed from it. This action cannot be undone.`
+            : `Are you sure you want to delete "${deleteConfirm.proposal?.title}"? This action cannot be undone.`
+        }
         confirmLabel="Delete"
         cancelLabel="Cancel"
         variant="danger"
