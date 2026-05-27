@@ -795,7 +795,7 @@ class TestProposalBundles:
         )
         assert resp.status_code == 204
 
-        await db_session.expire_all()
+        db_session.expire_all()
         remaining = (await db_session.execute(
             select(Proposal)
             .where(Proposal.proposal_bundle_id == bundle.id)
@@ -825,7 +825,7 @@ class TestProposalBundles:
         )
         assert resp.status_code == 204
 
-        await db_session.expire_all()
+        db_session.expire_all()
         survivor = await db_session.get(Proposal, b.id)
         assert survivor is not None
         assert survivor.proposal_bundle_id is None
@@ -847,7 +847,7 @@ class TestProposalBundles:
         await _make_bundle(db_session, test_user, [parent, child])
 
         resp = await client.get(
-            "/api/proposals/", params={"search": "Premium"},
+            "/api/proposals", params={"search": "Premium"},
             headers=auth_headers,
         )
         assert resp.status_code == 200

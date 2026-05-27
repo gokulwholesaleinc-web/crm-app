@@ -1827,10 +1827,14 @@ async def delete_proposal(
     await audit_entity_delete(db, "proposal", proposal.id, current_user.id, ip_address)
 
     with value_error_as_400():
-        if proposal.proposal_bundle_id and proposal.bundle:
-            await service.remove_option_from_bundle(
-                proposal.bundle, proposal_id, current_user.id
+        if proposal.proposal_bundle_id:
+            bundle = await service.get_bundle(
+                proposal.proposal_bundle_id, for_update=True
             )
+            if bundle:
+                await service.remove_option_from_bundle(
+                    bundle, proposal_id, current_user.id
+                )
         await service.delete(proposal)
 
 

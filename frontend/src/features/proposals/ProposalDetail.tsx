@@ -459,11 +459,13 @@ function ProposalDetailPage() {
       currentUser.role === 'manager');
 
   const isDraft = proposal.status === 'draft';
+  const hasContact = Boolean(proposal.contact_id || proposal.contact);
   const proposalRecipient =
     proposal.designated_signer_email || proposal.contact?.email || '';
   // Show Send for draft/sent/viewed so the CRM user can resend if delivery
-  // failed (bad Gmail token, sandbox rejection). Require a recipient so the
-  // frontend gates the 400 the backend would return without one.
+  // failed (bad Gmail token, sandbox rejection). Require a linked contact
+  // AND a recipient email so the frontend gates the 400s the backend would
+  // return without them.
   const canSendStatus = isBundled
     ? bundleCanSendStatus
     : ['draft', 'sent', 'viewed'].includes(proposal.status ?? '');
@@ -480,9 +482,10 @@ function ProposalDetailPage() {
     ? canSendStatus &&
       Boolean(proposalBundle) &&
       bundleOptionCount >= 2 &&
+      hasContact &&
       Boolean(proposalRecipient) &&
       !signingDocsBlockSend
-    : canSendStatus && Boolean(proposalRecipient) && !signingDocsBlockSend;
+    : canSendStatus && hasContact && Boolean(proposalRecipient) && !signingDocsBlockSend;
   const sendLabel = isBundled
     ? (proposalBundle?.status === 'draft' ? 'Send options' : 'Resend options')
     : (isDraft ? 'Send' : 'Resend');
