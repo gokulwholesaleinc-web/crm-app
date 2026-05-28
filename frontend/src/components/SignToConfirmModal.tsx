@@ -16,9 +16,8 @@ export interface SignToConfirmModalProps {
   recipientEmail: string;
   /** Resolved T&C body (proposal override or tenant default). */
   termsAndConditions: string | null;
-  /** When true, a pre-submit notice warns the signer that a
-   *  countersigned PDF will arrive by email after submission. */
-  hasMasterContract: boolean;
+  /** When true, signing creates one or more countersigned PDFs after submission. */
+  hasSigningDocuments: boolean;
   signingDocumentCount?: number;
   /**
    * Returns `null` on success, or an error message string to display
@@ -36,7 +35,7 @@ export function SignToConfirmModal({
   onClose,
   recipientEmail,
   termsAndConditions,
-  hasMasterContract,
+  hasSigningDocuments,
   signingDocumentCount = 0,
   onSubmit,
 }: SignToConfirmModalProps) {
@@ -297,7 +296,7 @@ export function SignToConfirmModal({
                     )}
                   </button>
                 </div>
-                {hasMasterContract && !submitting && (
+                {hasSigningDocuments && !submitting && (
                   <p className="mt-3 text-center text-[11px] text-white/40">
                     {signingDocumentCount > 1
                       ? 'Countersigned PDFs will be emailed to you after you submit.'

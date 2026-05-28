@@ -18,6 +18,7 @@ from __future__ import annotations
 import os
 import secrets
 import sys
+from base64 import b64encode
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
 
@@ -324,3 +325,34 @@ class TestSendSignedCopyToClient:
             f"proposal-{proposal.proposal_number}-signed.pdf"
         )
         assert attachments[0]["content"] == generated_bytes
+
+    async def test_generated_signed_pdf_embeds_drawn_signature_image(
+        self,
+        db_session: AsyncSession,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        user = await _make_user(db_session)
+        proposal = await _make_proposal(db_session, user, signed_pdf_path=None)
+        captured: dict[str, str | bytes] = {}
+
+        async def fake_render(html: str | bytes) -> bytes:
+            captured["html"] = html
+            return b"%PDF-1.7\nSIGNED HTML COPY"
+
+        monkeypatch.setattr(
+            "src.proposals.service.render_html_to_pdf",
+            fake_render,
+        )
+
+        pdf_bytes = await ProposalService(db_session).generate_proposal_pdf(
+            proposal.id,
+            user.id,
+            include_signature=True,
+        )
+
+        assert pdf_bytes == b"%PDF-1.7\nSIGNED HTML COPY"
+        html = captured["html"]
+        assert isinstance(html, str)
+        expected_signature = b64encode(proposal.signature_image or b"").decode("ascii")
+        assert f'src="data:image/png;base64,{expected_signature}"' in html
+        assert 'alt="Drawn electronic signature"' in html

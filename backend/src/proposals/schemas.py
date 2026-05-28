@@ -258,6 +258,11 @@ class ProposalResponse(ProposalBase, ProposalBillingFields):
     signer_ip: str | None = None
     signer_user_agent: str | None = None
     signed_at: datetime | None = None
+    agreed_to_terms_at: datetime | None = None
+    terms_and_conditions_snapshot: str | None = None
+    esign_disclosure_snapshot: str | None = None
+    esign_disclosure_version: str | None = None
+    acceptance_method: str | None = None
     rejection_reason: str | None = None
     stripe_invoice_id: str | None = None
     stripe_subscription_id: str | None = None
@@ -418,6 +423,10 @@ class ProposalPublicResponse(BaseModel):
     # the master PDF and returns a downloadable countersigned copy.
     has_master_contract: bool = False
     signing_document_count: int = 0
+    # Full ESIGN disclosure rendered on the public page; persisted verbatim
+    # at accept so the stored evidence matches what the signer saw.
+    esign_disclosure: str | None = None
+    esign_disclosure_version: str | None = None
     signing_documents: list[ProposalSigningDocumentPublicItem] = Field(
         default_factory=list,
         validation_alias=AliasChoices("public_signing_documents"),

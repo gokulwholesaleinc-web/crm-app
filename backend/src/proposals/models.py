@@ -244,6 +244,11 @@ class Proposal(Base, AuditableMixin):
     signer_user_agent: Mapped[str | None] = mapped_column(Text)
     signer_timezone: Mapped[str | None] = mapped_column(String(100))
     signed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    agreed_to_terms_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    terms_and_conditions_snapshot: Mapped[str | None] = mapped_column(Text)
+    esign_disclosure_snapshot: Mapped[str | None] = mapped_column(Text)
+    esign_disclosure_version: Mapped[str | None] = mapped_column(String(50))
+    acceptance_method: Mapped[str | None] = mapped_column(String(50))
     rejection_reason: Mapped[str | None] = mapped_column(Text)
     # Optional override for who may sign. NULL falls back to contact.email.
     designated_signer_email: Mapped[str | None] = mapped_column(String(255))

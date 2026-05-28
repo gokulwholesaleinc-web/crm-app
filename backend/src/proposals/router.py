@@ -73,7 +73,13 @@ from src.proposals.schemas import (
     ProposalTemplateUpdate,
     ProposalUpdate,
 )
-from src.proposals.service import ProposalService, ProposalTemplateService
+from src.proposals.service import (
+    PROPOSAL_ESIGN_DISCLOSURE_VERSION,
+    ProposalService,
+    ProposalTemplateService,
+    disclosure_company_name,
+    proposal_esign_disclosure,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -634,12 +640,18 @@ async def _attach_public_signing_documents(
     response: ProposalPublicResponse,
     proposal,
     token: str,
+    branding_data: dict | None = None,
 ) -> None:
     documents = list(proposal.signing_documents or [])
     response.signing_document_count = len(documents)
     response.has_master_contract = bool(
         proposal.master_contract_pdf_path or documents
     )
+    response.esign_disclosure = proposal_esign_disclosure(
+        has_signed_pdf_artifact=response.has_master_contract,
+        company_name=disclosure_company_name(branding_data, proposal),
+    )
+    response.esign_disclosure_version = PROPOSAL_ESIGN_DISCLOSURE_VERSION
     if not documents:
         response.signing_documents = []
         return
@@ -1194,7 +1206,7 @@ async def get_public_proposal(
         proposal.designated_signer_email
         or (proposal.contact.email if proposal.contact else None)
     )
-    await _attach_public_signing_documents(db, response, proposal, token)
+    await _attach_public_signing_documents(db, response, proposal, token, branding_data)
 
     # Per-token attachment list — opening every document is required before
     # public signing, and the accept endpoint re-checks this server-side.
@@ -1313,7 +1325,7 @@ async def accept_proposal_public(
         proposal.designated_signer_email
         or (proposal.contact.email if proposal.contact else None)
     )
-    await _attach_public_signing_documents(db, response, proposal, token)
+    await _attach_public_signing_documents(db, response, proposal, token, branding_data)
     return response
 
 

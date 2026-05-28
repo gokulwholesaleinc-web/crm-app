@@ -34,6 +34,13 @@ def pdf_logo_allowed_hosts() -> list[str] | None:
 
 def safe_pdf_url_fetcher(url: str):
     """weasyprint url_fetcher that rejects unsafe URLs before fetching."""
+    if url.startswith("data:image/png;base64,"):
+        if len(url) > 1_000_000:
+            raise UnsafeUrlError("inline PDF image exceeds size limit")
+        from weasyprint import default_url_fetcher  # pyright: ignore[reportMissingImports]
+
+        return default_url_fetcher(url)
+
     try:
         validate_public_url(
             url,

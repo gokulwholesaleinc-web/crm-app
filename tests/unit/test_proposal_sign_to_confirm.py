@@ -19,7 +19,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.auth.models import User
 from src.contacts.models import Contact
 from src.proposals.models import Proposal
-from src.proposals.service import ProposalService
+from src.proposals.service import (
+    PROPOSAL_ACCEPTANCE_METHOD_DRAWN_SIGNATURE,
+    PROPOSAL_ESIGN_DISCLOSURE_VERSION,
+    ProposalService,
+)
 from src.whitelabel.models import Tenant, TenantSettings, TenantUser
 
 # Smallest possible valid PNG (1x1 transparent). Inline so tests don't
@@ -86,6 +90,71 @@ class TestSignToConfirmAccept:
         await db_session.refresh(sent_proposal)
         assert sent_proposal.status == "accepted"
         assert sent_proposal.signature_image == _ONE_PIXEL_PNG
+
+    @pytest.mark.asyncio
+    async def test_persisted_disclosure_matches_what_signer_saw(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        sent_proposal: Proposal,
+        test_contact: Contact,
+    ):
+        """The persisted evidence snapshot is byte-identical to the
+        disclosure the public page served — guards against the on-screen
+        text and the stored record drifting apart."""
+        sent_proposal.terms_and_conditions = "Per-proposal acceptance terms."
+        await db_session.commit()
+
+        # What the signer actually saw on the public page.
+        view = await client.get(
+            f"/api/proposals/public/{sent_proposal.public_token}",
+        )
+        assert view.status_code == 200, view.text
+        served_disclosure = view.json()["esign_disclosure"]
+        assert served_disclosure
+        assert "recorded as acceptance" in served_disclosure
+
+        response = await client.post(
+            f"/api/proposals/public/{sent_proposal.public_token}/accept",
+            json=_accept_payload(test_contact.email),
+        )
+        assert response.status_code == 200, response.text
+
+        await db_session.refresh(sent_proposal)
+        assert sent_proposal.agreed_to_terms_at is not None
+        assert sent_proposal.signed_at == sent_proposal.agreed_to_terms_at
+        assert sent_proposal.terms_and_conditions_snapshot == (
+            "Per-proposal acceptance terms."
+        )
+        assert sent_proposal.esign_disclosure_version == (
+            PROPOSAL_ESIGN_DISCLOSURE_VERSION
+        )
+        # The whole point of the snapshot: it equals the served text.
+        assert sent_proposal.esign_disclosure_snapshot == served_disclosure
+        assert sent_proposal.acceptance_method == (
+            PROPOSAL_ACCEPTANCE_METHOD_DRAWN_SIGNATURE
+        )
+
+    @pytest.mark.asyncio
+    async def test_rejects_oversize_signature_image(
+        self,
+        client: AsyncClient,
+        sent_proposal: Proposal,
+        test_contact: Contact,
+    ):
+        """A signature blob over the 200 KB cap is rejected at the boundary,
+        so it can never reach the embed step and silently drop from the
+        countersigned PDF."""
+        oversize = b"\x89PNG\r\n\x1a\n" + b"\x00" * 250_000  # valid magic, >200 KB
+        payload = _accept_payload(
+            test_contact.email,
+            signature="data:image/png;base64," + b64encode(oversize).decode("ascii"),
+        )
+        response = await client.post(
+            f"/api/proposals/public/{sent_proposal.public_token}/accept",
+            json=payload,
+        )
+        assert response.status_code == 400, response.text
 
     @pytest.mark.asyncio
     async def test_rejects_when_terms_not_agreed(

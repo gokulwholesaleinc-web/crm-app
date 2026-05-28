@@ -130,6 +130,12 @@ async def _run_production_migrations():
                 "ALTER TABLE leads ALTER COLUMN last_name DROP NOT NULL",
                 # User approval gate
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_approved BOOLEAN NOT NULL DEFAULT TRUE",
+                # Proposal public-accept evidence snapshots
+                "ALTER TABLE proposals ADD COLUMN IF NOT EXISTS agreed_to_terms_at TIMESTAMPTZ",
+                "ALTER TABLE proposals ADD COLUMN IF NOT EXISTS terms_and_conditions_snapshot TEXT",
+                "ALTER TABLE proposals ADD COLUMN IF NOT EXISTS esign_disclosure_snapshot TEXT",
+                "ALTER TABLE proposals ADD COLUMN IF NOT EXISTS esign_disclosure_version VARCHAR(50)",
+                "ALTER TABLE proposals ADD COLUMN IF NOT EXISTS acceptance_method VARCHAR(50)",
             ]
             for sql in column_migrations:
                 try:

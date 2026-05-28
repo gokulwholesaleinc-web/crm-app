@@ -1,6 +1,7 @@
 """Proposal service layer."""
 
 import asyncio
+import base64
 import hashlib
 import logging
 import math
@@ -63,6 +64,54 @@ from src.proposals.schemas import (
 logger = logging.getLogger(__name__)
 
 _TEMPLATE_VAR_PATTERN = re.compile(r"\{\{(\w+)\}\}")
+PROPOSAL_ESIGN_DISCLOSURE_VERSION = "2026-05-27.sign-to-confirm.v2"
+PROPOSAL_ACCEPTANCE_METHOD_DRAWN_SIGNATURE = "drawn_signature"
+
+
+def proposal_esign_disclosure(*, has_signed_pdf_artifact: bool, company_name: str) -> str:
+    """Full ESIGN disclosure — the single source of truth for sign-to-confirm.
+
+    The public proposal endpoint serves this exact text and the accept
+    endpoint persists it, so the stored evidence record is byte-identical
+    to the disclosure the signer actually saw. Paragraphs are separated by
+    blank lines so the frontend can split and render them.
+    """
+    delivery = (
+        "You consent to receive this proposal and the countersigned PDF copy "
+        "electronically. A signed copy is emailed to the address on this "
+        "proposal after acceptance."
+        if has_signed_pdf_artifact
+        else "You consent to receive this proposal electronically. Your "
+        "submitted signature is recorded as acceptance of this proposal."
+    )
+    return "\n\n".join(
+        (
+            "By drawing and submitting your signature, you confirm that you "
+            "have read all required documents and the proposal above, and you "
+            "agree that this constitutes your legally binding electronic "
+            "signature under the US ESIGN Act (15 USC §7001) and applicable "
+            "state UETA statutes, with the same legal effect as a handwritten "
+            "signature.",
+            f"{delivery} You may withdraw consent by contacting {company_name} "
+            "directly — this does not retroactively invalidate signatures "
+            "already captured.",
+            "We record your name, email address, IP address, browser "
+            "user-agent, and timestamp at submission. This audit trail is "
+            "retained alongside the proposal for dispute resolution.",
+        )
+    )
+
+
+def disclosure_company_name(branding_data: dict | None, proposal: "Proposal") -> str:
+    """Resolve the company name shown in the disclosure.
+
+    Mirrors the public proposal page: tenant branding name first, then the
+    linked company, then a neutral fallback.
+    """
+    name = (branding_data or {}).get("company_name")
+    if not name and proposal.company is not None:
+        name = proposal.company.name
+    return name or "Proposal"
 
 
 class _UnsetType:
@@ -1070,6 +1119,18 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         normalized_signer_email = _assert_signer_matches(proposal, signer_email)
         if selected_proposal_id is not None and selected_proposal_id != proposal.id:
             raise ValueError("Selected proposal does not match the proposal being signed")
+        terms_snapshot = await self.get_effective_terms_and_conditions(proposal)
+        has_signed_pdf_artifact = bool(proposal.master_contract_pdf_path) or bool(
+            await self.list_signing_documents(proposal.id)
+        )
+        # Persist the disclosure exactly as the public page served it (same
+        # function + same branding source) so the stored evidence matches
+        # what the signer saw.
+        branding_data = await self.get_branding_for_proposal(proposal)
+        esign_disclosure_snapshot = proposal_esign_disclosure(
+            has_signed_pdf_artifact=has_signed_pdf_artifact,
+            company_name=disclosure_company_name(branding_data, proposal),
+        )
 
         # Bundle invariant: only one sibling can ever reach `accepted`. Two
         # signers hitting two different sibling URLs concurrently each pass
@@ -1122,6 +1183,11 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 signer_user_agent=signer_user_agent,
                 signer_timezone=signer_timezone,
                 signed_at=now,
+                agreed_to_terms_at=now,
+                terms_and_conditions_snapshot=terms_snapshot,
+                esign_disclosure_snapshot=esign_disclosure_snapshot,
+                esign_disclosure_version=PROPOSAL_ESIGN_DISCLOSURE_VERSION,
+                acceptance_method=PROPOSAL_ACCEPTANCE_METHOD_DRAWN_SIGNATURE,
                 signature_image=signature_image,
             )
         )
@@ -1854,6 +1920,22 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 f'<tr><th>{escape(label)}</th><td class="tabular">{escape(val)}</td></tr>'
                 for label, val in rows
             )
+            signature_mark_html = '<div class="doc-signature-line"></div>'
+            if proposal.signature_image:
+                # The bytes are validated as a real PNG at ingest
+                # (router._decode_signature_image: magic + base64 + 200KB cap),
+                # so weasyprint can decode them. If decode ever did fail,
+                # weasyprint renders a broken image rather than raising — the
+                # PDF is a convenience copy and the load-bearing evidence
+                # (signature_image, consent, timestamp, IP) lives on the row,
+                # so a re-stamp recovers the visual mark.
+                signature_b64 = base64.b64encode(proposal.signature_image).decode("ascii")
+                signature_mark_html = (
+                    '<img class="doc-signature-image" '
+                    f'src="data:image/png;base64,{signature_b64}" '
+                    'alt="Drawn electronic signature" />'
+                    '<div class="doc-signature-line"></div>'
+                )
 
             signatory_html = f"""
 <section class="doc-signatory page-break-before">
@@ -1867,7 +1949,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
   <table class="doc-signatory-table">
     <tbody>{rows_html}</tbody>
   </table>
-  <div class="doc-signature-line"></div>
+  {signature_mark_html}
   <p class="doc-signature-caption">Signed electronically for {escape(proposal.signer_name or "")}</p>
 </section>
 """
@@ -2088,7 +2170,14 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
     width: 50%;
     height: 0.75pt;
     background: #d1d5db;
-    margin: 24pt 0 6pt;
+    margin: 4pt 0 6pt;
+  }}
+  .doc-signature-image {{
+    display: block;
+    max-width: 180pt;
+    max-height: 64pt;
+    margin: 18pt 0 4pt;
+    object-fit: contain;
   }}
   .doc-signature-caption {{
     font-size: 9pt;

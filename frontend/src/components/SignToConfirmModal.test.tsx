@@ -34,7 +34,7 @@ describe('SignToConfirmModal', () => {
         onClose={vi.fn()}
         recipientEmail="jane@example.com"
         termsAndConditions="Standard terms."
-        hasMasterContract={false}
+        hasSigningDocuments={false}
         onSubmit={onSubmit}
       />,
     );
@@ -50,6 +50,39 @@ describe('SignToConfirmModal', () => {
           agreedToTerms: true,
         }),
       ),
+    );
+  });
+
+  it('only mentions countersigned PDFs when signing documents exist', async () => {
+    const { rerender } = render(
+      <SignToConfirmModal
+        isOpen
+        onClose={vi.fn()}
+        recipientEmail="jane@example.com"
+        termsAndConditions={null}
+        hasSigningDocuments={false}
+        onSubmit={vi.fn()}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(screen.queryByText(/countersigned pdf/i)).not.toBeInTheDocument(),
+    );
+
+    rerender(
+      <SignToConfirmModal
+        isOpen
+        onClose={vi.fn()}
+        recipientEmail="jane@example.com"
+        termsAndConditions={null}
+        hasSigningDocuments
+        signingDocumentCount={2}
+        onSubmit={vi.fn()}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByText(/Countersigned PDFs will be emailed/i)).toBeInTheDocument(),
     );
   });
 });

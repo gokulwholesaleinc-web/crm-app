@@ -198,6 +198,28 @@ describe('PublicProposalView', () => {
     expect(
       screen.getByRole('button', { name: /Decline this proposal/i }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Your electronic signature records your acceptance of the proposal/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/signed PDF copy will be emailed/i)).not.toBeInTheDocument();
+  });
+
+  it('mentions signed PDF delivery when proposal signing documents exist', async () => {
+    mockGet.mockResolvedValue({
+      data: {
+        ...baseProposal,
+        has_master_contract: true,
+        signing_document_count: 1,
+      },
+    });
+    renderAt();
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: /Open the signing dialog to accept this proposal/i }),
+      ).toBeInTheDocument(),
+    );
+
+    expect(screen.getByText(/A signed PDF copy will be emailed to Jane Doe/i)).toBeInTheDocument();
   });
 
   it('shows the legacy payment CTA for awaiting-payment proposals', async () => {
@@ -298,6 +320,8 @@ describe('PublicProposalView', () => {
         expect.objectContaining({ selected_proposal_id: 7 }),
       ),
     );
+    expect(screen.getByText(/Your acceptance has been recorded/i)).toBeInTheDocument();
+    expect(screen.queryByText(/A signed copy will be emailed/i)).not.toBeInTheDocument();
   });
 
   it('hides the legacy payment CTA on a bundle chooser response', async () => {

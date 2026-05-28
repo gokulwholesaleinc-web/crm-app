@@ -119,7 +119,22 @@ interface PublicProposal {
   designated_signer_email: string | null;
   has_master_contract: boolean;
   signing_document_count?: number;
+  // Full ESIGN disclosure, authored server-side so the on-screen text is
+  // byte-identical to the snapshot persisted at accept. Paragraphs split
+  // on blank lines.
+  esign_disclosure?: string | null;
 }
+
+// Shown only if the API response predates the server-authored disclosure
+// (e.g. a stale cache during the deploy window). The live disclosure always
+// comes from the server so it stays byte-identical to the persisted snapshot.
+const FALLBACK_ESIGN_DISCLOSURE =
+  'By drawing and submitting your signature, you agree that it constitutes ' +
+  'your legally binding electronic signature under the US ESIGN Act ' +
+  '(15 USC §7001) and applicable state UETA statutes, with the same legal ' +
+  'effect as a handwritten signature.\n\nWe record your name, email address, ' +
+  'IP address, browser user-agent, and timestamp at submission. This audit ' +
+  'trail is retained alongside the proposal for dispute resolution.';
 
 const DEFAULT_BRANDING: ProposalBranding = {
   company_name: null,
@@ -375,6 +390,8 @@ function PublicProposalView() {
 
   const attachments = proposal.attachments ?? [];
   const signingDocuments = proposal.signing_documents ?? [];
+  const signingDocumentCount = proposal.signing_document_count ?? signingDocuments.length;
+  const hasSigningDocuments = proposal.has_master_contract || signingDocumentCount > 0;
   const proposalOptions = [...(proposal.proposal_options ?? [])].sort(
     (a, b) => (a.bundle_sort_order ?? 0) - (b.bundle_sort_order ?? 0),
   );
@@ -613,8 +630,9 @@ function PublicProposalView() {
           <section className="mt-10 sm:mt-12 print:hidden" ref={signSectionRef}>
             <PlainSectionHeader title="Your Response" accent={primary} />
             <p className="prose-body mb-5">
-              When you're ready, draw your signature to accept this proposal. A signed PDF
-              copy will be emailed to {proposal.contact?.full_name ?? 'you'}.
+              {hasSigningDocuments
+                ? `When you're ready, draw your signature to accept this proposal. A signed PDF copy will be emailed to ${proposal.contact?.full_name ?? 'you'}.`
+                : 'When you\'re ready, draw your signature to accept this proposal. Your electronic signature records your acceptance of the proposal.'}
             </p>
 
             {signError && (
@@ -693,8 +711,8 @@ function PublicProposalView() {
           onClose={() => setSignModalOpen(false)}
           recipientEmail={recipientEmail}
           termsAndConditions={proposal.terms_and_conditions}
-          hasMasterContract={proposal.has_master_contract}
-          signingDocumentCount={proposal.signing_document_count ?? 0}
+          hasSigningDocuments={hasSigningDocuments}
+          signingDocumentCount={signingDocumentCount}
           onSubmit={submitSignature}
         />
 
@@ -721,7 +739,9 @@ function PublicProposalView() {
                 </p>
                 <p className={`text-sm mt-0.5 ${actionDone === 'accepted' ? 'text-green-800 dark:text-green-400' : 'text-red-700 dark:text-red-400'}`}>
                   {actionDone === 'accepted'
-                    ? 'A signed copy will be emailed to you shortly. You can safely close this page.'
+                    ? hasSigningDocuments
+                      ? 'A signed copy will be emailed to you shortly. You can safely close this page.'
+                      : 'Your acceptance has been recorded. You can safely close this page.'
                     : 'Thank you for your response. We appreciate your consideration.'}
                 </p>
               </div>
@@ -752,24 +772,11 @@ function PublicProposalView() {
               Electronic signature disclosure &amp; consent
             </summary>
             <div className="mt-3 space-y-2 text-[13px] leading-relaxed text-gray-600 dark:text-gray-400 text-pretty">
-              <p>
-                By typing your name and email and selecting <em>Accept &amp; Sign</em>, you confirm
-                that you have read all attached documents and the proposal above, and you
-                agree that this constitutes your legally binding electronic signature under the
-                US ESIGN Act (15 USC §7001) and applicable state UETA statutes, with the
-                same legal effect as a handwritten signature.
-              </p>
-              <p>
-                You consent to receive this proposal and the countersigned PDF copy
-                electronically. A signed copy is emailed to the address you provide at
-                acceptance. You may withdraw consent by contacting {companyDisplayName}
-                directly — this does not retroactively invalidate signatures already captured.
-              </p>
-              <p>
-                We record your name, email address, IP address, browser user-agent, and
-                timestamp at submission. This audit trail is retained alongside the
-                proposal for dispute resolution.
-              </p>
+              {(proposal.esign_disclosure ?? FALLBACK_ESIGN_DISCLOSURE)
+                .split('\n\n')
+                .map((para, i) => (
+                  <p key={i}>{para}</p>
+                ))}
             </div>
           </details>
 
