@@ -180,6 +180,13 @@ export function ProposalAuditCard({ proposal }: ProposalAuditCardProps) {
                 width={280}
                 height={120}
                 className="w-full max-w-[280px] h-auto rounded border border-gray-200 dark:border-gray-600 bg-white"
+                // The fetch succeeded but the image still failed to paint (CSP
+                // block, corrupt bytes, revoked URL). Surface it rather than
+                // leaving a broken glyph that reads as a blank signature.
+                onError={() => {
+                  setSignatureUrl(null);
+                  setSignatureUnavailable(true);
+                }}
               />
             </div>
           )}

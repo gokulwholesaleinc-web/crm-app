@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import type { Proposal } from '../../types';
@@ -99,6 +99,23 @@ describe('ProposalAuditCard', () => {
     render(<ProposalAuditCard proposal={signedProposal} />);
 
     // The legal artifact is unreachable, not absent — operator must be told.
+    expect(
+      await screen.findByText(/signature image couldn’t be loaded/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByAltText('Signature drawn by Jane Doe'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('surfaces a notice when the image fetched but fails to render', async () => {
+    render(<ProposalAuditCard proposal={signedProposal} />);
+
+    // Fetch succeeds and the <img> mounts, but rendering fails (e.g. CSP
+    // block / corrupt bytes) — the onError must flip to the notice instead
+    // of leaving a broken glyph that reads as a blank signature.
+    const img = await screen.findByAltText('Signature drawn by Jane Doe');
+    fireEvent.error(img);
+
     expect(
       await screen.findByText(/signature image couldn’t be loaded/i),
     ).toBeInTheDocument();
