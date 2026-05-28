@@ -56,6 +56,13 @@ if (typeof globalThis.IntersectionObserver === 'undefined') {
   } as unknown as typeof IntersectionObserver;
 }
 
+// jsdom doesn't implement object URLs; components that preview blob
+// responses (e.g. the captured signature image) need them.
+if (typeof URL.createObjectURL !== 'function') {
+  URL.createObjectURL = () => 'blob:mock-object-url';
+  URL.revokeObjectURL = () => {};
+}
+
 // matchMedia is not available in jsdom.
 if (typeof window.matchMedia === 'undefined') {
   Object.defineProperty(window, 'matchMedia', {

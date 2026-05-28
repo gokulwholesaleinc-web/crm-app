@@ -174,6 +174,12 @@ export interface Proposal extends ProposalBase, ProposalLegacyBillingFields {
   signer_ip?: string | null;
   signer_user_agent?: string | null;
   signed_at?: string | null;
+  /** Durable ESIGN acceptance evidence captured at sign-to-confirm. */
+  agreed_to_terms_at?: string | null;
+  terms_and_conditions_snapshot?: string | null;
+  esign_disclosure_snapshot?: string | null;
+  esign_disclosure_version?: string | null;
+  acceptance_method?: string | null;
   rejection_reason?: string | null;
   stripe_invoice_id?: string | null;
   stripe_subscription_id?: string | null;

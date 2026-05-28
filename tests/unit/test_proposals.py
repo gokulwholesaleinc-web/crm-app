@@ -19,7 +19,7 @@ pytestmark = pytest.mark.usefixtures("gmail_connected_test_user")
 
 from src.account.models import UserNotificationPrefs
 from src.auth.models import User
-from src.auth.security import get_password_hash
+from src.auth.security import create_access_token, get_password_hash
 from src.contacts.models import Contact
 from src.opportunities.models import Opportunity, PipelineStage
 from src.proposals.models import Proposal, ProposalSigningDocument, ProposalView
@@ -1463,5 +1463,95 @@ class TestMasterContractDownload:
     ):
         response = await client.get(
             f"/api/proposals/{test_proposal.id}/master-contract",
+        )
+        assert response.status_code == 401
+
+
+class TestProposalSignatureImage:
+    """GET /api/proposals/{id}/signature — serves the captured e-signature PNG.
+
+    The signature is stored as raw bytes on the row (too large to ride on
+    ``ProposalResponse``, which is also the list payload), so it gets its own
+    authed endpoint that the detail-page audit card renders.
+    """
+
+    # Smallest valid 1x1 PNG, inline so no binary fixture is needed.
+    _PNG = bytes.fromhex(
+        "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
+        "0000000d49444154789c63000000000005000158a8c4d70000000049454e44ae426082"
+    )
+
+    @pytest.mark.asyncio
+    async def test_serves_png_for_owner(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_proposal: Proposal,
+    ):
+        test_proposal.signature_image = self._PNG
+        await db_session.commit()
+
+        response = await client.get(
+            f"/api/proposals/{test_proposal.id}/signature",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200, response.text
+        assert response.headers["content-type"] == "image/png"
+        assert response.content == self._PNG
+
+    @pytest.mark.asyncio
+    async def test_404_when_no_signature(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+        test_proposal: Proposal,
+    ):
+        """No signature captured (unsigned / rep-side admin-accept) → 404 so
+        the frontend hides the image without special-casing."""
+        response = await client.get(
+            f"/api/proposals/{test_proposal.id}/signature",
+            headers=auth_headers,
+        )
+        assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_forbidden_for_non_owner(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        test_proposal: Proposal,
+    ):
+        """A sales rep who neither owns nor was shared the proposal can't pull
+        its signature — access mirrors the detail GET."""
+        test_proposal.signature_image = self._PNG
+        await db_session.commit()
+
+        other = User(
+            email="other_rep@example.com",
+            hashed_password=get_password_hash("otherpassword123"),
+            full_name="Other Rep",
+            is_active=True,
+            is_superuser=False,
+        )
+        db_session.add(other)
+        await db_session.commit()
+        await db_session.refresh(other)
+        token = create_access_token(data={"sub": str(other.id)})
+
+        response = await client.get(
+            f"/api/proposals/{test_proposal.id}/signature",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code in (403, 404)
+
+    @pytest.mark.asyncio
+    async def test_requires_auth(
+        self,
+        client: AsyncClient,
+        test_proposal: Proposal,
+    ):
+        response = await client.get(
+            f"/api/proposals/{test_proposal.id}/signature",
         )
         assert response.status_code == 401

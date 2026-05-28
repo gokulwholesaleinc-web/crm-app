@@ -1923,6 +1923,39 @@ async def get_proposal_pdf(
     )
 
 
+@router.get("/{proposal_id}/signature")
+async def get_proposal_signature_image(
+    proposal_id: int,
+    current_user: CurrentUser,
+    db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
+):
+    """Serve the captured e-signature PNG for the audit trail.
+
+    Access mirrors the detail GET (owner or shared) since the image is
+    surfaced on the same authed proposal page. The signature lives on the
+    row as raw bytes — too large to ride on ``ProposalResponse`` (also the
+    list payload) — so it gets its own endpoint. 404 when none was captured
+    so the frontend hides the ``<img>`` without special-casing.
+    """
+    service = ProposalService(db)
+    proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
+    check_record_access_or_shared(
+        proposal, current_user, data_scope.role_name,
+        shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_PROPOSALS),
+    )
+    if proposal.signature_image is None:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND,
+            detail="No signature captured for this proposal",
+        )
+    return Response(
+        content=proposal.signature_image,
+        media_type="image/png",
+        headers={"Cache-Control": "private, max-age=60"},
+    )
+
+
 @router.post("/{proposal_id}/accept", response_model=ProposalResponse)
 async def accept_proposal(
     proposal_id: int,

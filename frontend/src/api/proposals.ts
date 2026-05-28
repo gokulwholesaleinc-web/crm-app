@@ -468,6 +468,20 @@ export const downloadProposalSignedPdf = async (
 };
 
 /**
+ * Fetch the captured e-signature PNG bytes for the audit trail. Returns
+ * 404 when no signature was captured (unsigned, or rep-side admin-accept).
+ */
+export const downloadProposalSignatureImage = async (
+  proposalId: number,
+): Promise<Blob> => {
+  const response = await apiClient.get(
+    `${PROPOSALS_BASE}/${proposalId}/signature`,
+    { responseType: 'blob' },
+  );
+  return response.data;
+};
+
+/**
  * Upload (or replace) a master service agreement PDF on a proposal.
  *
  * Used by the create flow to land a stashed file after

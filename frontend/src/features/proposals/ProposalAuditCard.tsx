@@ -1,10 +1,13 @@
+import { useEffect, useState } from 'react';
 import { ShieldCheckIcon, EyeIcon } from '@heroicons/react/24/outline';
-import type { Proposal } from '../../types';
+import type { ApiError, Proposal } from '../../types';
+import { downloadProposalSignatureImage } from '../../api/proposals';
 
 /**
  * Detail-page sidebar card that surfaces the e-signature audit trail
  * + the public-link view log. Everything shown here is already
- * captured in the DB (Proposal.signer_* fields + ProposalView rows) —
+ * captured in the DB (Proposal.signer_* fields, the durable ESIGN
+ * evidence snapshots, the drawn signature image, + ProposalView rows) —
  * this component just exposes it so the CRM user has a paper trail
  * for dispute resolution and legal discovery.
  */
@@ -26,6 +29,13 @@ function formatFullTimestamp(value: string | null | undefined): string {
   }).format(new Date(value));
 }
 
+function humanizeAcceptanceMethod(method: string | null | undefined): string {
+  if (!method) return '—';
+  // Stored as a stable machine token (e.g. "drawn_signature"); render a
+  // human-readable label without losing the underlying value.
+  return method.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
+}
+
 function shortUserAgent(ua: string | null | undefined): string {
   if (!ua) return '—';
   // Keep the audit-grade detail accessible (hover title), but render a
@@ -38,6 +48,51 @@ function shortUserAgent(ua: string | null | undefined): string {
 
 export function ProposalAuditCard({ proposal }: ProposalAuditCardProps) {
   const signed = Boolean(proposal.signed_at);
+  const proposalId = proposal.id;
+  const [signatureUrl, setSignatureUrl] = useState<string | null>(null);
+  const [signatureUnavailable, setSignatureUnavailable] = useState(false);
+
+  // The drawn signature is stored as raw bytes, so it's served from its own
+  // authed endpoint and rendered via an object URL (revoked on cleanup).
+  // A 404 is the expected "no signature drawn" case (e.g. rep-side
+  // admin-accept) — hide the image silently. Any other failure on a
+  // legally-significant artifact must NOT masquerade as "no signature": flag
+  // it so the operator knows the record is unreachable, not absent.
+  useEffect(() => {
+    if (!signed) {
+      setSignatureUrl(null);
+      setSignatureUnavailable(false);
+      return;
+    }
+    let cancelled = false;
+    let objectUrl: string | null = null;
+    setSignatureUnavailable(false);
+    downloadProposalSignatureImage(proposalId)
+      .then((blob) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setSignatureUrl(objectUrl);
+      })
+      .catch((err: ApiError) => {
+        if (cancelled) return;
+        setSignatureUrl(null);
+        if (err?.status_code !== 404) {
+          console.error('[ProposalAuditCard] signature fetch failed', err);
+          setSignatureUnavailable(true);
+        }
+      });
+    return () => {
+      cancelled = true;
+      // Clear before revoking so a proposalId change doesn't briefly render
+      // <img> against an already-revoked object URL.
+      setSignatureUrl(null);
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [signed, proposalId]);
+
+  const disclosure = proposal.esign_disclosure_snapshot?.trim();
+  const termsSnapshot = proposal.terms_and_conditions_snapshot?.trim();
+
   const views = proposal.views ?? [];
   // Newest-first; the backend lists them by id ASC by default.
   const sortedViews = [...views].sort(
@@ -95,7 +150,78 @@ export function ProposalAuditCard({ proposal }: ProposalAuditCardProps) {
                 </dd>
               </div>
             )}
+            {proposal.acceptance_method && (
+              <div>
+                <dt className="text-gray-500 dark:text-gray-400">Method</dt>
+                <dd className="font-medium text-gray-900 dark:text-gray-100">
+                  {humanizeAcceptanceMethod(proposal.acceptance_method)}
+                </dd>
+              </div>
+            )}
+            {proposal.agreed_to_terms_at && (
+              <div>
+                <dt className="text-gray-500 dark:text-gray-400">Consent given at</dt>
+                <dd
+                  className="font-medium text-gray-900 dark:text-gray-100"
+                  style={{ fontVariantNumeric: 'tabular-nums' }}
+                >
+                  {formatFullTimestamp(proposal.agreed_to_terms_at)}
+                </dd>
+              </div>
+            )}
           </dl>
+
+          {signatureUrl && (
+            <div className="mt-3">
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Signature</p>
+              <img
+                src={signatureUrl}
+                alt={`Signature drawn by ${proposal.signer_name || 'the signer'}`}
+                width={280}
+                height={120}
+                className="w-full max-w-[280px] h-auto rounded border border-gray-200 dark:border-gray-600 bg-white"
+              />
+            </div>
+          )}
+
+          {signatureUnavailable && (
+            <p
+              className="mt-3 text-xs text-amber-700 dark:text-amber-400"
+              aria-live="polite"
+            >
+              The signature image couldn’t be loaded right now. The signature
+              was captured — reload to try again.
+            </p>
+          )}
+
+          {(disclosure || termsSnapshot) && (
+            <details className="mt-3 group">
+              <summary className="cursor-pointer text-xs font-medium text-green-800 dark:text-green-300 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green-600">
+                View consent record
+                {proposal.esign_disclosure_version
+                  ? ` (v${proposal.esign_disclosure_version})`
+                  : ''}
+              </summary>
+              <div className="mt-2 space-y-3 text-xs text-gray-700 dark:text-gray-300">
+                {disclosure && (
+                  <div>
+                    <p className="font-semibold text-gray-600 dark:text-gray-400 mb-1">
+                      Disclosure the signer agreed to
+                    </p>
+                    <p className="whitespace-pre-wrap break-words">{disclosure}</p>
+                  </div>
+                )}
+                {termsSnapshot && (
+                  <div>
+                    <p className="font-semibold text-gray-600 dark:text-gray-400 mb-1">
+                      Terms &amp; conditions at acceptance
+                    </p>
+                    <p className="whitespace-pre-wrap break-words">{termsSnapshot}</p>
+                  </div>
+                )}
+              </div>
+            </details>
+          )}
         </div>
       )}
 
