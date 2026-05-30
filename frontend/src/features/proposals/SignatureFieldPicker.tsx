@@ -15,12 +15,20 @@ import type { PDFDocumentProxy } from 'pdfjs-dist';
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { Modal, ModalFooter, Button } from '../../components/ui';
 import type { SignatureFieldCoords, SignatureFieldCoordsValue } from '../../types';
+import {
+  RENDER_SCALE,
+  boxToPdfCoords,
+  pdfCoordsToBox,
+  clamp,
+  type DrawnBox,
+} from '../../lib/pdfCoords';
 import { normalizeSignaturePlacements } from './signaturePlacements';
 
 GlobalWorkerOptions.workerSrc = pdfWorker;
 
-const RENDER_SCALE = 1.5;
-
+// Proposals can only place signature/date boxes — the kind stays narrow and
+// local to this picker so the proposals UI can never select text/address.
+// (The kind-agnostic coord math lives in ``lib/pdfCoords``.)
 type PlacementKind = 'signature' | 'date';
 
 export interface SignatureFieldPlacements {
@@ -36,61 +44,6 @@ interface SignatureFieldPickerProps {
   currentCoords: SignatureFieldCoordsValue | null;
   currentDateCoords: SignatureFieldCoordsValue | null;
   onSave: (placements: SignatureFieldPlacements) => Promise<void>;
-}
-
-interface DrawnBox {
-  /** Page index in pdf.js space (0-indexed). */
-  pageIdx: number;
-  /** Screen-pixel box relative to the rendered canvas. */
-  leftPx: number;
-  topPx: number;
-  widthPx: number;
-  heightPx: number;
-}
-
-function clamp(value: number, min: number, max: number): number {
-  if (value < min) return min;
-  if (value > max) return max;
-  return value;
-}
-
-/**
- * Convert a screen-pixel box on a pdf.js-rendered canvas to PDF points.
- *
- * pdf.js renders top-down; PDF points are bottom-up, so the y axis
- * flips and the saved ``y`` is the **bottom** edge of the box. The
- * canvas was rendered at ``RENDER_SCALE``, so dividing through gives
- * us back PDF points (1 pt = 1/72 in).
- */
-function boxToPdfCoords(
-  box: DrawnBox,
-  canvasHeightPx: number,
-): { x: number; y: number; w: number; h: number } {
-  const x = box.leftPx / RENDER_SCALE;
-  const w = box.widthPx / RENDER_SCALE;
-  const h = box.heightPx / RENDER_SCALE;
-  const bottomPx = box.topPx + box.heightPx;
-  const y = (canvasHeightPx - bottomPx) / RENDER_SCALE;
-  return { x, y, w, h };
-}
-
-/** Inverse of ``boxToPdfCoords``. Pre-fills the canvas with the saved box. */
-function pdfCoordsToBox(
-  coords: SignatureFieldCoords,
-  canvasHeightPx: number,
-): DrawnBox {
-  const widthPx = coords.w * RENDER_SCALE;
-  const heightPx = coords.h * RENDER_SCALE;
-  const leftPx = coords.x * RENDER_SCALE;
-  const bottomPx = canvasHeightPx - coords.y * RENDER_SCALE;
-  const topPx = bottomPx - heightPx;
-  return {
-    pageIdx: coords.page - 1,
-    leftPx,
-    topPx,
-    widthPx,
-    heightPx,
-  };
 }
 
 function placementLabel(kind: PlacementKind): string {

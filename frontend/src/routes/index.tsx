@@ -66,6 +66,9 @@ const ImportExportPage = lazy(() => import('../features/import-export/ImportExpo
 // Inbox
 const InboxPage = lazy(() => import('../features/inbox/InboxPage'));
 
+// Onboarding (client onboarding template library)
+const OnboardingLibraryPage = lazy(() => import('../features/onboarding/OnboardingLibraryPage'));
+
 // Settings
 const SettingsPage = lazy(() => import('../features/settings/SettingsPage'));
 
@@ -312,6 +315,18 @@ function AppRoutes() {
           <PrivateRoute>
             <ErrorBoundary>
               <InboxPage />
+            </ErrorBoundary>
+          </PrivateRoute>
+        }
+      />
+
+      {/* Onboarding (client onboarding template library) */}
+      <Route
+        path="/onboarding"
+        element={
+          <PrivateRoute>
+            <ErrorBoundary>
+              <OnboardingLibraryPage />
             </ErrorBoundary>
           </PrivateRoute>
         }

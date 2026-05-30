@@ -14,6 +14,7 @@ export * from './campaigns';
 export * from './dashboard';
 export * from './payments';
 export * from './proposals';
+export * from './onboarding';
 export * from './misc';
 export * from './email';
 // Contract types removed 2026-05-14 — contracts feature retired.
