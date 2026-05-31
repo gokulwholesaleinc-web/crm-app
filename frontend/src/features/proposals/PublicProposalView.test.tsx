@@ -407,9 +407,16 @@ describe('PublicProposalView', () => {
     renderAt();
     await waitFor(() => screen.getByRole('heading', { level: 1 }));
 
-    expect(
-      screen.getByRole('button', { name: /Open the signing dialog to accept this proposal/i }),
-    ).not.toBeDisabled();
+    // The button's enabled state derives from the fetched documents-viewed
+    // data, which can settle a render after the heading appears — assert via
+    // waitFor so a slower (CI) environment doesn't catch it mid-update.
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', {
+          name: /Open the signing dialog to accept this proposal/i,
+        }),
+      ).not.toBeDisabled(),
+    );
   });
 
   // Note: "Sign to Accept" opens SignToConfirmModal — its own test
