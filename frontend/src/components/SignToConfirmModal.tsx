@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
-import { ArrowsPointingOutIcon, CheckIcon, PencilIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { CheckIcon, PencilIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { SignatureCanvas, type SignatureCanvasHandle } from './SignatureCanvas';
 
 // Brand gold; the spec calls this out explicitly ("NOT teal"). Used
@@ -14,8 +14,6 @@ export interface SignToConfirmModalProps {
   onClose: () => void;
   /** Pre-filled (and locked) email — must match the proposal recipient. */
   recipientEmail: string;
-  /** Resolved T&C body (proposal override or tenant default). */
-  termsAndConditions: string | null;
   /** When true, signing creates one or more countersigned PDFs after submission. */
   hasSigningDocuments: boolean;
   signingDocumentCount?: number;
@@ -26,7 +24,6 @@ export interface SignToConfirmModalProps {
   onSubmit: (payload: {
     signatureDataUrl: string;
     email: string;
-    agreedToTerms: boolean;
   }) => Promise<string | null>;
 }
 
@@ -34,25 +31,20 @@ export function SignToConfirmModal({
   isOpen,
   onClose,
   recipientEmail,
-  termsAndConditions,
   hasSigningDocuments,
   signingDocumentCount = 0,
   onSubmit,
 }: SignToConfirmModalProps) {
   const sigRef = useRef<SignatureCanvasHandle | null>(null);
   const [hasSignature, setHasSignature] = useState(false);
-  const [agreedToTerms, setAgreedToTerms] = useState(false);
-  const [termsExpanded, setTermsExpanded] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Reset every time the modal opens so a reopen doesn't carry over
-  // a stale checkbox or signature.
+  // a stale signature.
   useEffect(() => {
     if (!isOpen) return;
     setHasSignature(false);
-    setAgreedToTerms(false);
-    setTermsExpanded(false);
     setSubmitting(false);
     setError(null);
     sigRef.current?.clear();
@@ -76,7 +68,7 @@ export function SignToConfirmModal({
     return `${window.location.pathname}${window.location.search}#esign-consent`;
   }, []);
 
-  const canSubmit = hasSignature && agreedToTerms && !submitting;
+  const canSubmit = hasSignature && !submitting;
 
   const handleSubmit = useCallback(async () => {
     if (!canSubmit) return;
@@ -90,7 +82,6 @@ export function SignToConfirmModal({
     const message = await onSubmit({
       signatureDataUrl: dataUrl,
       email: recipientEmail,
-      agreedToTerms,
     });
     if (message) {
       setError(message);
@@ -98,7 +89,7 @@ export function SignToConfirmModal({
       return;
     }
     setSubmitting(false);
-  }, [agreedToTerms, canSubmit, onSubmit, recipientEmail]);
+  }, [canSubmit, onSubmit, recipientEmail]);
 
   return (
     <Transition appear show={isOpen} as={Fragment}>
@@ -195,51 +186,6 @@ export function SignToConfirmModal({
                     </button>
                   </div>
                 </div>
-
-                {termsAndConditions && (
-                  <div className="mt-5 rounded-2xl bg-white/[0.04] ring-1 ring-white/10">
-                    <div className="flex items-center justify-between px-4 pt-3 pb-2">
-                      <p className="text-sm font-medium text-white">Terms &amp; Conditions</p>
-                      <button
-                        type="button"
-                        onClick={() => setTermsExpanded((v) => !v)}
-                        className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-white/80 hover:bg-white/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-                        style={{ color: ACCENT_GOLD }}
-                        aria-expanded={termsExpanded}
-                      >
-                        <ArrowsPointingOutIcon className="h-3.5 w-3.5" aria-hidden="true" />
-                        {termsExpanded ? 'Collapse' : 'Expand to read'}
-                      </button>
-                    </div>
-                    <div
-                      className={
-                        termsExpanded
-                          ? 'max-h-[40vh] overflow-y-auto px-4 pb-3 text-sm text-white/70 whitespace-pre-line'
-                          : 'max-h-32 overflow-hidden px-4 pb-3 text-sm text-white/70 whitespace-pre-line [mask-image:linear-gradient(to_bottom,black_60%,transparent_100%)]'
-                      }
-                    >
-                      {termsAndConditions}
-                    </div>
-                  </div>
-                )}
-
-                <label className="mt-5 flex items-start gap-3 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={agreedToTerms}
-                    onChange={(e) => setAgreedToTerms(e.target.checked)}
-                    disabled={submitting}
-                    className="mt-0.5 h-4 w-4 rounded border-white/30 bg-transparent text-transparent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/50"
-                    style={{ accentColor: ACCENT_GOLD }}
-                    aria-describedby="sign-to-confirm-terms-agreement-label"
-                  />
-                  <span
-                    id="sign-to-confirm-terms-agreement-label"
-                    className="text-sm text-white/80 leading-snug"
-                  >
-                    I have read and agree to the terms and conditions{termsAndConditions ? ' above' : ''}.
-                  </span>
-                </label>
 
                 {error && (
                   <p

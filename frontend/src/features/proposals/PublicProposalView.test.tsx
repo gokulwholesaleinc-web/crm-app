@@ -21,7 +21,6 @@ vi.mock('../../components/SignToConfirmModal', () => ({
     onSubmit: (payload: {
       signatureDataUrl: string;
       email: string;
-      agreedToTerms: boolean;
     }) => Promise<string | null>;
   }) =>
     isOpen ? (
@@ -31,7 +30,6 @@ vi.mock('../../components/SignToConfirmModal', () => ({
           void onSubmit({
             signatureDataUrl: 'data:image/png;base64,abc',
             email: 'jane@example.com',
-            agreedToTerms: true,
           })
         }
       >
@@ -70,7 +68,6 @@ const baseProposal = {
   contact: { id: 2, full_name: 'Jane Doe' },
   branding: null,
   designated_signer_email: 'jane@example.com',
-  terms_and_conditions: null,
   has_master_contract: false,
 };
 
@@ -317,7 +314,10 @@ describe('PublicProposalView', () => {
     await waitFor(() =>
       expect(mockPost).toHaveBeenCalledWith(
         '/api/proposals/public/abc123/accept',
-        expect.objectContaining({ selected_proposal_id: 7 }),
+        // The modal no longer captures an agreed-to-terms flag, but the page
+        // still sends agreed_to_terms: true to satisfy the accept endpoint
+        // (consent is now implied by drawing + submitting the signature).
+        expect.objectContaining({ selected_proposal_id: 7, agreed_to_terms: true }),
       ),
     );
     expect(screen.getByText(/Your acceptance has been recorded/i)).toBeInTheDocument();

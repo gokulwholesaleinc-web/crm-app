@@ -112,8 +112,6 @@ class ProposalBase(BaseModel):
     valid_until: date | None = None
     designated_signer_email: str | None = None
     owner_id: int | None = None
-    # Per-proposal T&C override. NULL → tenant default applies.
-    terms_and_conditions: str | None = None
 
     model_config = ConfigDict(extra="forbid")
 
@@ -138,7 +136,6 @@ class ProposalUpdate(BaseModel):
     valid_until: date | None = None
     designated_signer_email: str | None = None
     owner_id: int | None = None
-    terms_and_conditions: str | None = None
     # Visual signature placement. ``None`` (explicitly) clears the row
     # back to auto-box. New writes must be lists; read schemas still accept
     # one legacy box so old rows round-trip safely.
@@ -154,14 +151,19 @@ class ProposalAcceptRequest(BaseModel):
     ``signature_image`` is the base64-encoded PNG drawn on the canvas
     (``data:image/png;base64,...`` form is accepted; the data-URL prefix
     is stripped server-side). The signer's email must match the
-    proposal's designated recipient and the ESIGN consent box must
-    have been ticked — both enforced by the service layer.
+    proposal's designated recipient — enforced by the service layer.
+
+    ``agreed_to_terms`` is retained for backwards compatibility with older
+    clients but is no longer required (defaults to True): the redundant
+    Terms & Conditions agreement card was removed from the sign ceremony, so
+    the drawn signature alone enables signing. The binding terms live in the
+    proposal document + ESIGN disclosure consent.
     """
 
     signer_name: str
     signer_email: EmailStr
     signature_image: str = Field(min_length=1, max_length=400_000)
-    agreed_to_terms: bool
+    agreed_to_terms: bool = True
     signer_timezone: str | None = Field(default=None, max_length=100)
     selected_proposal_id: int | None = None
 
@@ -287,7 +289,6 @@ class ProposalResponse(ProposalBase, ProposalBillingFields):
     bundle_sort_order: int = 0
     bundle_is_recommended: bool = False
     bundle: ProposalBundleBrief | None = None
-    terms_and_conditions: str | None = None
     created_at: datetime
     updated_at: datetime
     contact: ContactBriefWithEmail | None = None
@@ -414,9 +415,6 @@ class ProposalPublicResponse(BaseModel):
     # Public-side attachment list. Customers must open every proposal
     # document before the public accept endpoint allows signing.
     attachments: list[ProposalAttachmentPublicItem] = []
-    # Resolved T&C body for the Sign-to-Confirm modal — proposal
-    # override if set, else tenant default. NULL = no T&C card.
-    terms_and_conditions: str | None = None
     # Designated signer's email, pre-filled (and locked) in the modal.
     designated_signer_email: str | None = None
     # When true, the accept endpoint stamps the drawn signature onto

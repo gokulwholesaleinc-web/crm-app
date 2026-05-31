@@ -68,9 +68,6 @@ export interface ProposalBase {
    * When unset, the linked contact's email is used. */
   designated_signer_email?: string | null;
   owner_id?: number | null;
-  /** Per-proposal override of the T&C body shown inside the
-   * Sign-to-Confirm modal. NULL falls back to the tenant default. */
-  terms_and_conditions?: string | null;
   /** Saved signature-box placement on the master contract. NULL =
    * stamper falls back to the auto-box on the last page. Legacy rows may
    * contain one box; new saves contain a list. */
@@ -97,7 +94,6 @@ export interface ProposalUpdate {
   valid_until?: string | null;
   designated_signer_email?: string | null;
   owner_id?: number | null;
-  terms_and_conditions?: string | null;
   /** Visual signature-box placement on the master contract. Pass an
    * object/list to set, ``null`` to clear back to the auto-box default. */
   signature_field_coords?: SignatureFieldCoordsValue | null;

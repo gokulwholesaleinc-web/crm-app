@@ -153,7 +153,6 @@ describe('ProposalForm local drafts', () => {
         timelineField: '',
         terms: '',
         validUntil: '',
-        termsAndConditions: '',
       },
     });
 
@@ -186,7 +185,6 @@ describe('ProposalForm local drafts', () => {
         timelineField: '',
         terms: '',
         validUntil: '',
-        termsAndConditions: '',
       },
     });
 
@@ -278,7 +276,6 @@ describe('ProposalForm local drafts', () => {
         timelineField: '',
         terms: '',
         validUntil: '',
-        termsAndConditions: '',
       },
     });
     window.localStorage.setItem('unrelated-key', 'keep');
@@ -380,7 +377,6 @@ describe('ProposalForm local drafts', () => {
         timelineField: '',
         terms: '',
         validUntil: '',
-        termsAndConditions: '',
       },
     });
 

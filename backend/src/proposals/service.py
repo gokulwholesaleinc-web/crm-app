@@ -1061,7 +1061,6 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         signer_name: str,
         signer_email: str,
         signature_image: bytes,
-        agreed_to_terms: bool,
         signer_ip: str | None = None,
         signer_user_agent: str | None = None,
         signer_timezone: str | None = None,
@@ -1077,12 +1076,18 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
 
         No proposal-side Stripe spawn; any new payment collection starts in
         the Payments module after acceptance. Signer
-        email must match the proposal's designated recipient and
-        ``agreed_to_terms`` must be True (ESIGN Act consent).
+        email must match the proposal's designated recipient.
+
+        The binding terms live inside the proposal document itself, so the
+        redundant Terms & Conditions agreement card + "I agree" checkbox was
+        retired: ``agreed_to_terms`` is no longer required, and the
+        per-proposal/tenant T&C-agreement snapshot is no longer captured
+        going forward (``terms_and_conditions_snapshot`` /
+        ``agreed_to_terms_at`` are set to None). The ESIGN disclosure consent
+        + drawn signature remain the binding ESIGN-Act evidence.
 
         Raises ValueError if status isn't sent/viewed, the signer
-        email doesn't match, consent isn't given, or the proposal is
-        past its ``valid_until`` date.
+        email doesn't match, or the proposal is past its ``valid_until`` date.
         """
         now = datetime.now(UTC)
         if proposal.status not in ("sent", "viewed"):
@@ -1103,23 +1108,19 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         # gate is the right place to enforce both.
         await self.validate_signing_documents_ready(proposal, require_date=False)
 
-        # Validate the submitted payload (consent + signature) BEFORE the
-        # signer-email authz check so a customer who forgot to tick the
-        # box doesn't see a confusing "email mismatch" error. The
-        # consent/signature checks are payload-shape only; they leak no
-        # information about the proposal recipient.
-        if not agreed_to_terms:
-            raise ValueError(
-                "You must agree to the terms and conditions to sign this proposal",
-            )
-
+        # Validate the submitted payload (signature) BEFORE the signer-email
+        # authz check so a customer who forgot to draw a signature doesn't see
+        # a confusing "email mismatch" error. The signature check is
+        # payload-shape only; it leaks no information about the proposal
+        # recipient. The redundant T&C-agreement gate was retired — the binding
+        # terms live in the proposal document and the ESIGN disclosure consent
+        # below is the operative consent.
         if not signature_image:
             raise ValueError("Signature image is required")
 
         normalized_signer_email = _assert_signer_matches(proposal, signer_email)
         if selected_proposal_id is not None and selected_proposal_id != proposal.id:
             raise ValueError("Selected proposal does not match the proposal being signed")
-        terms_snapshot = await self.get_effective_terms_and_conditions(proposal)
         has_signed_pdf_artifact = bool(proposal.master_contract_pdf_path) or bool(
             await self.list_signing_documents(proposal.id)
         )
@@ -1183,8 +1184,12 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 signer_user_agent=signer_user_agent,
                 signer_timezone=signer_timezone,
                 signed_at=now,
-                agreed_to_terms_at=now,
-                terms_and_conditions_snapshot=terms_snapshot,
+                # T&C-agreement capture retired: the redundant Terms &
+                # Conditions card was removed from the sign ceremony, so we no
+                # longer record a fresh snapshot/consent timestamp for it. The
+                # columns stay for historical evidence on already-signed rows.
+                agreed_to_terms_at=None,
+                terms_and_conditions_snapshot=None,
                 esign_disclosure_snapshot=esign_disclosure_snapshot,
                 esign_disclosure_version=PROPOSAL_ESIGN_DISCLOSURE_VERSION,
                 acceptance_method=PROPOSAL_ACCEPTANCE_METHOD_DRAWN_SIGNATURE,
@@ -2482,38 +2487,6 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                     missing.append(f"{att.original_filename} (ref {digest})")
 
         return attachments, missing
-
-    async def get_effective_terms_and_conditions(
-        self,
-        proposal: Proposal,
-    ) -> str | None:
-        """Resolve the T&C body rendered in the Sign-to-Confirm modal.
-
-        Per-proposal override always wins; falls back to the tenant
-        default. Returns ``None`` when neither is set so the modal
-        can omit the T&C card entirely rather than render an empty
-        scroll box.
-        """
-        if proposal.terms_and_conditions:
-            return proposal.terms_and_conditions
-        if not proposal.owner_id:
-            return None
-        from src.whitelabel.models import Tenant, TenantSettings, TenantUser  # noqa: PLC0415
-
-        # Prefer the user's primary tenant but fall back to ANY
-        # membership when no row carries is_primary=True. The strict
-        # is_primary filter silently served the generic defaults on
-        # PR #114 (see feedback_tenant_branding_is_primary) — same
-        # JOIN shape, same trap, applied here to the T&C body.
-        result = await self.db.execute(
-            select(TenantSettings.default_terms_and_conditions)
-            .join(Tenant, Tenant.id == TenantSettings.tenant_id)
-            .join(TenantUser, TenantUser.tenant_id == Tenant.id)
-            .where(TenantUser.user_id == proposal.owner_id)
-            .order_by(TenantUser.is_primary.desc())
-            .limit(1)
-        )
-        return result.scalar_one_or_none()
 
     async def upload_master_contract_pdf(
         self,

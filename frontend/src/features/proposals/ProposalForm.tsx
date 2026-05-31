@@ -73,7 +73,6 @@ export function ProposalForm({
     timelineField: initialData?.timeline ?? '',
     terms: initialData?.terms ?? '',
     validUntil: initialData?.valid_until ?? '',
-    termsAndConditions: initialData?.terms_and_conditions ?? '',
   });
 
   const [formData, setFormData] = useState<ProposalFormDraftFields>(buildInitialFormData);
@@ -250,7 +249,6 @@ export function ProposalForm({
       status: 'draft',
       contact_id: formData.contactId,
       company_id: formData.companyId,
-      terms_and_conditions: formData.termsAndConditions.trim() || null,
     };
 
     // Only nag on create; edit mode pre-selects the proposal's existing
@@ -465,29 +463,6 @@ export function ProposalForm({
             onChange={(e) => updateField('terms', e.target.value)}
             className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
             placeholder="Terms and conditions..."
-          />
-        </div>
-
-        <div>
-          <label
-            htmlFor="proposal-tc-override"
-            className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-          >
-            Signing T&amp;C override
-          </label>
-          <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-            Shown inside the customer's Sign-to-Confirm modal. Leave blank to use the
-            tenant default (Settings → Branding → Default T&amp;C).
-          </p>
-          <textarea
-            id="proposal-tc-override"
-            name="terms_and_conditions"
-            rows={4}
-            disabled={formDisabled}
-            value={formData.termsAndConditions}
-            onChange={(e) => updateField('termsAndConditions', e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
-            placeholder="Override the default signing T&Cs for this proposal only..."
           />
         </div>
 
