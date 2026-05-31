@@ -52,7 +52,9 @@ export const createOnboardingTemplate = async (
 /**
  * Update metadata and/or field definitions. Passing ``field_definitions``
  * before a PDF has been uploaded returns 422 (bounds-validation needs the
- * page count).
+ * page count). Pass ``pdf_version`` alongside ``field_definitions`` as an
+ * optimistic-lock token — a mismatch (the PDF was replaced under the open
+ * editor) returns 409.
  */
 export const updateOnboardingTemplate = async (
   templateId: number,
@@ -100,6 +102,16 @@ export const retireOnboardingTemplate = async (
 ): Promise<OnboardingTemplate> => {
   const response = await apiClient.post<OnboardingTemplate>(
     `${ONBOARDING_BASE}/${templateId}/retire`,
+  );
+  return response.data;
+};
+
+/** Restore a retired template (``is_active = true``). */
+export const restoreOnboardingTemplate = async (
+  templateId: number,
+): Promise<OnboardingTemplate> => {
+  const response = await apiClient.post<OnboardingTemplate>(
+    `${ONBOARDING_BASE}/${templateId}/restore`,
   );
   return response.data;
 };

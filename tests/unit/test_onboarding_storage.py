@@ -5,6 +5,7 @@ False and every call exercises the local-disk branch. We use a unique key
 under ``uploads/onboarding/`` and clean it up afterwards. Nothing is mocked.
 """
 
+import os
 import uuid
 from pathlib import Path
 
@@ -90,3 +91,32 @@ async def test_write_creates_nested_parent_dirs():
             while parent != root and parent.exists() and not any(parent.iterdir()):
                 parent.rmdir()
                 parent = parent.parent
+
+
+@pytest.mark.asyncio
+async def test_read_bytes_unreadable_file_raises_runtime_error():
+    """A disk read error (PermissionError, an OSError that is NOT a missing
+    file) is normalized to RuntimeError so the router maps it to 503.
+
+    No mocks: we ``write`` a real file, ``chmod 0o000`` it so the on-disk
+    ``read_bytes`` hits a genuine ``PermissionError`` (a subclass of OSError
+    but not FileNotFoundError), and assert the abstraction surfaces a
+    ``RuntimeError`` rather than the bare OSError — proving the 503 mapping in
+    ``storage.read_bytes``. Root bypasses Unix file permissions, so skip there.
+    """
+    if hasattr(os, "geteuid") and os.geteuid() == 0:
+        pytest.skip("root bypasses file perms")
+
+    key = _unique_key()
+    content = b"%PDF-1.4 onboarding unreadable " + uuid.uuid4().bytes
+    ref = await storage.write(key, content, "application/pdf")
+    path = storage._UPLOADS_ROOT / ref
+    try:
+        os.chmod(path, 0o000)
+        with pytest.raises(RuntimeError):
+            await storage.read_bytes(ref)
+    finally:
+        # Restore perms so the file is readable/removable during cleanup.
+        os.chmod(path, 0o644)
+        if path.exists():
+            path.unlink()

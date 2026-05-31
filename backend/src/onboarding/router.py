@@ -1,13 +1,12 @@
 """Onboarding template API routes (build-order §C).
 
 Phase 1 = template library CRUD only (no packets / public routes / e-sign).
-Writes gate on ``check_ownership``; reads are global (team library, §5.1).
-``FieldDefinitionError`` → 422 via a small context manager (NOT
-``value_error_as_400`` which would yield 400, build-order §G #2).
+Writes gate on ``check_ownership``; reads gate on contacts.read but stay
+global (team library, §5.1). Service errors map via context managers below:
+FieldDefinitionError → 422, Stale/Retired → 409, PdfRejected → 400,
+StorageWrite → 503 (NOT ``value_error_as_400`` blanket-400, build-order §G #2).
 """
 
-import logging
-from contextlib import contextmanager
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
@@ -15,39 +14,29 @@ from fastapi.responses import Response
 
 from src.auth.models import User
 from src.core.constants import HTTPStatus
-from src.core.http_errors import value_error_as_400
 from src.core.permissions import require_permission
-from src.core.router_utils import CurrentUser, DBSession, check_ownership, raise_not_found
+from src.core.router_utils import DBSession, check_ownership, raise_not_found
 from src.onboarding.schemas import (
     TemplateCreate,
     TemplateResponse,
     TemplateUpdate,
 )
-from src.onboarding.service import FieldDefinitionError, OnboardingTemplateService
-
-logger = logging.getLogger(__name__)
+from src.onboarding.service import OnboardingTemplateService
+from src.onboarding.validation import (
+    field_definition_error_as_422,
+    upload_errors_mapped,
+)
 
 router = APIRouter(prefix="/api/onboarding", tags=["onboarding"])
 
-# No first-class "onboarding" permission domain — staff onboarding writes are
-# customer-facing, so reuse contacts write perms (mirrors proposals router).
+# No "onboarding" permission domain — reuse contacts perms (mirrors proposals).
+# Reads gate on contacts.read (#3): still GLOBAL across owners, not bare-auth.
+OnbReadUser = Annotated[User, Depends(require_permission("contacts", "read"))]
 OnbCreateUser = Annotated[User, Depends(require_permission("contacts", "create"))]
 OnbUpdateUser = Annotated[User, Depends(require_permission("contacts", "update"))]
 
 # 25 MB cap on uploaded onboarding PDFs (matches the proposals signing-doc cap).
 _MAX_PDF_BYTES = 25 * 1024 * 1024
-
-
-@contextmanager
-def _field_definition_error_as_422():
-    """Map a service-raised ``FieldDefinitionError`` to HTTP 422."""
-    try:
-        yield
-    except FieldDefinitionError as exc:
-        logger.warning("Onboarding field_definitions validation 422: %s", exc)
-        raise HTTPException(
-            status_code=HTTPStatus.UNPROCESSABLE_ENTITY, detail=str(exc)
-        ) from exc
 
 
 async def _get_template_or_404(service: OnboardingTemplateService, template_id: int):
@@ -70,33 +59,33 @@ async def create_template(
     """Create the template metadata row (PDF + fields come later)."""
     service = OnboardingTemplateService(db)
     template = await service.create(current_user=current_user, **data.model_dump())
-    return TemplateResponse.model_validate(template)
+    return TemplateResponse.from_template(template)
 
 
 @router.get("/templates", response_model=list[TemplateResponse])
 async def list_templates(
-    current_user: CurrentUser,
+    current_user: OnbReadUser,
     db: DBSession,
     service_tag: str | None = Query(default=None),
     include_inactive: bool = Query(default=False),
 ):
-    """Global team library — every template, no owner filter (§5.1)."""
+    """Global team library — every template, no owner filter (§5.1, #3 read-gated)."""
     service = OnboardingTemplateService(db)
     templates = await service.list(
         service_tag=service_tag, include_inactive=include_inactive
     )
-    return [TemplateResponse.model_validate(t) for t in templates]
+    return [TemplateResponse.from_template(t) for t in templates]
 
 
 @router.get("/templates/{template_id}", response_model=TemplateResponse)
 async def get_template(
     template_id: int,
-    current_user: CurrentUser,
+    current_user: OnbReadUser,
     db: DBSession,
 ):
     service = OnboardingTemplateService(db)
     template = await _get_template_or_404(service, template_id)
-    return TemplateResponse.model_validate(template)
+    return TemplateResponse.from_template(template)
 
 
 @router.patch("/templates/{template_id}", response_model=TemplateResponse)
@@ -110,13 +99,13 @@ async def update_template(
     service = OnboardingTemplateService(db)
     template = await _get_template_or_404(service, template_id)
     check_ownership(template, current_user, "onboarding template")
-    with _field_definition_error_as_422():
+    with field_definition_error_as_422():
         template = await service.update(
             template,
             current_user=current_user,
             **data.model_dump(exclude_unset=True),
         )
-    return TemplateResponse.model_validate(template)
+    return TemplateResponse.from_template(template)
 
 
 @router.post("/templates/{template_id}/pdf", response_model=TemplateResponse)
@@ -141,20 +130,20 @@ async def upload_template_pdf(
             detail="PDF exceeds 25 MB limit.",
         )
     content = await file.read()
-    with value_error_as_400():
+    with upload_errors_mapped():
         template = await service.upload_pdf(
             template, current_user=current_user, content=content
         )
-    return TemplateResponse.model_validate(template)
+    return TemplateResponse.from_template(template)
 
 
 @router.get("/templates/{template_id}/pdf")
 async def get_template_pdf(
     template_id: int,
-    current_user: CurrentUser,
+    current_user: OnbReadUser,
     db: DBSession,
 ):
-    """Stream the stored template PDF bytes."""
+    """Stream the stored template PDF bytes (read-gated on contacts.read)."""
     service = OnboardingTemplateService(db)
     template = await _get_template_or_404(service, template_id)
     try:
@@ -181,4 +170,18 @@ async def retire_template(
     template = await _get_template_or_404(service, template_id)
     check_ownership(template, current_user, "onboarding template")
     template = await service.retire(template, current_user=current_user)
-    return TemplateResponse.model_validate(template)
+    return TemplateResponse.from_template(template)
+
+
+@router.post("/templates/{template_id}/restore", response_model=TemplateResponse)
+async def restore_template(
+    template_id: int,
+    current_user: OnbUpdateUser,
+    db: DBSession,
+):
+    """Restore a retired template (is_active=True) so it can be edited again."""
+    service = OnboardingTemplateService(db)
+    template = await _get_template_or_404(service, template_id)
+    check_ownership(template, current_user, "onboarding template")
+    template = await service.restore(template, current_user=current_user)
+    return TemplateResponse.from_template(template)

@@ -5,7 +5,9 @@ import {
   ArrowUpTrayIcon,
   PencilSquareIcon,
   ArchiveBoxXMarkIcon,
+  ArrowUturnLeftIcon,
   ClipboardDocumentCheckIcon,
+  Cog6ToothIcon,
 } from '@heroicons/react/24/outline';
 import { Button, Modal, ModalFooter, Input, ConfirmDialog, Badge } from '../../components/ui';
 import { SkeletonTable } from '../../components/ui/Skeleton';
@@ -21,11 +23,13 @@ import {
   downloadOnboardingTemplatePdf,
   updateOnboardingTemplate,
   retireOnboardingTemplate,
+  restoreOnboardingTemplate,
   ONBOARDING_PDF_MAX_BYTES,
 } from '../../api/onboarding';
 import type {
   OnboardingTemplate,
   OnboardingTemplateCreate,
+  OnboardingTemplateUpdate,
   OnboardingFieldDefinition,
 } from '../../types';
 
@@ -34,11 +38,33 @@ const OnboardingTemplateEditor = lazy(() => import('./OnboardingTemplateEditor')
 
 const ONBOARDING_KEY = ['onboarding-templates'] as const;
 
+/** Fields the edit-details form can change (subset of the PATCH contract). */
+type OnboardingTemplateMetaUpdate = Pick<
+  OnboardingTemplateUpdate,
+  'name' | 'description' | 'service_tag' | 'requires_esign'
+>;
+
+/**
+ * An edit-conflict 409 on the field-save PATCH. The backend returns 409 for
+ * EITHER a stale PDF (pdf_version bumped under the open editor) OR a retired
+ * template (no edits allowed). We don't disambiguate here — the server detail
+ * is surfaced verbatim. The flattened ``ApiError`` from ``api/client.ts``
+ * carries ``status_code``.
+ */
+function isEditConflict(err: unknown): boolean {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    (err as { status_code?: number }).status_code === 409
+  );
+}
+
 function OnboardingLibraryPage() {
   usePageTitle('Onboarding');
   const queryClient = useQueryClient();
   const [includeInactive, setIncludeInactive] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
+  const [metaTarget, setMetaTarget] = useState<OnboardingTemplate | null>(null);
   const [retireTarget, setRetireTarget] = useState<OnboardingTemplate | null>(null);
   const [editorState, setEditorState] = useState<{
     template: OnboardingTemplate;
@@ -71,13 +97,37 @@ function OnboardingLibraryPage() {
   });
 
   const saveFieldsMutation = useMutation({
-    mutationFn: ({ id, fields }: { id: number; fields: OnboardingFieldDefinition[] }) =>
-      updateOnboardingTemplate(id, { field_definitions: fields }),
+    mutationFn: ({
+      id,
+      fields,
+      pdfVersion,
+    }: {
+      id: number;
+      fields: OnboardingFieldDefinition[];
+      pdfVersion: number;
+    }) =>
+      updateOnboardingTemplate(id, {
+        field_definitions: fields,
+        // Optimistic-lock token: rejected 409 if the PDF was replaced
+        // (version bumped) while this editor was open.
+        pdf_version: pdfVersion,
+      }),
+    onSuccess: () => invalidate(),
+  });
+
+  const editMetaMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: OnboardingTemplateMetaUpdate }) =>
+      updateOnboardingTemplate(id, data),
     onSuccess: () => invalidate(),
   });
 
   const retireMutation = useMutation({
     mutationFn: (id: number) => retireOnboardingTemplate(id),
+    onSuccess: () => invalidate(),
+  });
+
+  const restoreMutation = useMutation({
+    mutationFn: (id: number) => restoreOnboardingTemplate(id),
     onSuccess: () => invalidate(),
   });
 
@@ -131,7 +181,7 @@ function OnboardingLibraryPage() {
   };
 
   const openEditor = async (template: OnboardingTemplate) => {
-    if (!template.pdf_path) {
+    if (!template.has_pdf) {
       showError('Upload a PDF before placing fields.');
       return;
     }
@@ -157,11 +207,40 @@ function OnboardingLibraryPage() {
   const handleSaveFields = async (fields: OnboardingFieldDefinition[]) => {
     if (!editorState) return;
     try {
-      await saveFieldsMutation.mutateAsync({ id: editorState.template.id, fields });
+      await saveFieldsMutation.mutateAsync({
+        id: editorState.template.id,
+        fields,
+        // Captured when the editor opened — see editorState.template.
+        pdfVersion: editorState.template.pdf_version,
+      });
       showSuccess('Fields saved.');
     } catch (err) {
+      // 409 = the edit conflicted: either the PDF was replaced under the open
+      // editor (stale coords) or the template was retired. We don't know which,
+      // so surface the server's detail verbatim, then close + refetch so the
+      // user reopens against the current server state.
+      if (isEditConflict(err)) {
+        showError(extractApiErrorDetail(err) ?? 'This template can no longer be edited.');
+        closeEditor();
+        invalidate();
+        return;
+      }
       showError(extractApiErrorDetail(err) ?? 'Failed to save fields');
       throw err;
+    }
+  };
+
+  const handleEditMeta = async (data: OnboardingTemplateMetaUpdate) => {
+    if (!metaTarget) return;
+    try {
+      await editMetaMutation.mutateAsync({ id: metaTarget.id, data });
+      setMetaTarget(null);
+      showSuccess('Template details updated.');
+    } catch (err) {
+      // Toast only; the modal stays open so the user can retry. No re-throw —
+      // the form fires this via `void`, so a rejection would only surface as
+      // an unhandled promise rejection.
+      showError(extractApiErrorDetail(err) ?? 'Failed to update template');
     }
   };
 
@@ -173,6 +252,15 @@ function OnboardingLibraryPage() {
       setRetireTarget(null);
     } catch (err) {
       showError(extractApiErrorDetail(err) ?? 'Failed to retire template');
+    }
+  };
+
+  const handleRestore = async (template: OnboardingTemplate) => {
+    try {
+      await restoreMutation.mutateAsync(template.id);
+      showSuccess('Template restored.');
+    } catch (err) {
+      showError(extractApiErrorDetail(err) ?? 'Failed to restore template');
     }
   };
 
@@ -248,7 +336,9 @@ function OnboardingLibraryPage() {
             loadingEditorId={loadingEditorId}
             onUpload={triggerUpload}
             onEdit={openEditor}
+            onEditMeta={setMetaTarget}
             onRetire={setRetireTarget}
+            onRestore={handleRestore}
           />
           <TemplateSection
             heading="Per-service templates"
@@ -258,7 +348,9 @@ function OnboardingLibraryPage() {
             loadingEditorId={loadingEditorId}
             onUpload={triggerUpload}
             onEdit={openEditor}
+            onEditMeta={setMetaTarget}
             onRetire={setRetireTarget}
+            onRestore={handleRestore}
           />
         </div>
       )}
@@ -270,6 +362,24 @@ function OnboardingLibraryPage() {
           onCancel={() => setShowCreate(false)}
           isLoading={createMutation.isPending}
         />
+      </Modal>
+
+      {/* Edit-details modal */}
+      <Modal
+        isOpen={metaTarget !== null}
+        onClose={() => setMetaTarget(null)}
+        title="Edit Template Details"
+        size="md"
+      >
+        {metaTarget && (
+          <EditTemplateMetaForm
+            key={metaTarget.id}
+            template={metaTarget}
+            onSubmit={handleEditMeta}
+            onCancel={() => setMetaTarget(null)}
+            isLoading={editMetaMutation.isPending}
+          />
+        )}
       </Modal>
 
       {/* Field editor */}
@@ -310,7 +420,9 @@ interface TemplateSectionProps {
   loadingEditorId: number | null;
   onUpload: (id: number) => void;
   onEdit: (template: OnboardingTemplate) => void;
+  onEditMeta: (template: OnboardingTemplate) => void;
   onRetire: (template: OnboardingTemplate) => void;
+  onRestore: (template: OnboardingTemplate) => void;
 }
 
 function TemplateSection({
@@ -321,7 +433,9 @@ function TemplateSection({
   loadingEditorId,
   onUpload,
   onEdit,
+  onEditMeta,
   onRetire,
+  onRestore,
 }: TemplateSectionProps) {
   return (
     <section>
@@ -340,7 +454,9 @@ function TemplateSection({
               isLoadingEditor={loadingEditorId === template.id}
               onUpload={onUpload}
               onEdit={onEdit}
+              onEditMeta={onEditMeta}
               onRetire={onRetire}
+              onRestore={onRestore}
             />
           ))}
         </div>
@@ -354,11 +470,22 @@ interface TemplateRowProps {
   isLoadingEditor: boolean;
   onUpload: (id: number) => void;
   onEdit: (template: OnboardingTemplate) => void;
+  onEditMeta: (template: OnboardingTemplate) => void;
   onRetire: (template: OnboardingTemplate) => void;
+  onRestore: (template: OnboardingTemplate) => void;
 }
 
-function TemplateRow({ template, isLoadingEditor, onUpload, onEdit, onRetire }: TemplateRowProps) {
-  const hasPdf = Boolean(template.pdf_path);
+function TemplateRow({
+  template,
+  isLoadingEditor,
+  onUpload,
+  onEdit,
+  onEditMeta,
+  onRetire,
+  onRestore,
+}: TemplateRowProps) {
+  const hasPdf = template.has_pdf;
+  const isActive = template.is_active;
   const fieldCount = template.field_definitions.length;
   return (
     <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -391,36 +518,58 @@ function TemplateRow({ template, isLoadingEditor, onUpload, onEdit, onRetire }: 
         </p>
       </div>
       <div className="flex flex-shrink-0 flex-wrap gap-2">
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          leftIcon={<ArrowUpTrayIcon className="h-4 w-4" aria-hidden="true" />}
-          onClick={() => onUpload(template.id)}
-        >
-          {hasPdf ? 'Replace PDF' : 'Upload PDF'}
-        </Button>
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          leftIcon={<PencilSquareIcon className="h-4 w-4" aria-hidden="true" />}
-          onClick={() => onEdit(template)}
-          disabled={!hasPdf}
-          isLoading={isLoadingEditor}
-          title={hasPdf ? undefined : 'Upload a PDF first'}
-        >
-          Edit fields
-        </Button>
-        {template.is_active && (
+        {isActive ? (
+          <>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              leftIcon={<ArrowUpTrayIcon className="h-4 w-4" aria-hidden="true" />}
+              onClick={() => onUpload(template.id)}
+            >
+              {hasPdf ? 'Replace PDF' : 'Upload PDF'}
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              leftIcon={<PencilSquareIcon className="h-4 w-4" aria-hidden="true" />}
+              onClick={() => onEdit(template)}
+              disabled={!hasPdf}
+              isLoading={isLoadingEditor}
+              title={hasPdf ? undefined : 'Upload a PDF first'}
+            >
+              Edit fields
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              leftIcon={<Cog6ToothIcon className="h-4 w-4" aria-hidden="true" />}
+              onClick={() => onEditMeta(template)}
+            >
+              Edit details
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              leftIcon={<ArchiveBoxXMarkIcon className="h-4 w-4" aria-hidden="true" />}
+              onClick={() => onRetire(template)}
+            >
+              Retire
+            </Button>
+          </>
+        ) : (
+          // Retired: every edit (PATCH/upload) 409s, so only restore is offered.
           <Button
             type="button"
-            variant="ghost"
+            variant="secondary"
             size="sm"
-            leftIcon={<ArchiveBoxXMarkIcon className="h-4 w-4" aria-hidden="true" />}
-            onClick={() => onRetire(template)}
+            leftIcon={<ArrowUturnLeftIcon className="h-4 w-4" aria-hidden="true" />}
+            onClick={() => onRestore(template)}
           >
-            Retire
+            Restore
           </Button>
         )}
       </div>
@@ -438,7 +587,78 @@ function CreateTemplateForm({ onSubmit, onCancel, isLoading }: CreateTemplateFor
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [serviceTag, setServiceTag] = useState('');
-  const [requiresEsign, setRequiresEsign] = useState(false);
+
+  const canSubmit = name.trim().length > 0;
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canSubmit) return;
+    // E-sign is NOT set at create — a new template has no fields yet, so the
+    // backend rejects requires_esign: true (422). It's enabled later via the
+    // edit-details PATCH, once a signature field has been placed.
+    void onSubmit({
+      name: name.trim(),
+      description: description.trim() || null,
+      service_tag: serviceTag.trim() || null,
+    });
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <Input
+        label="Name"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        name="onboarding-template-name"
+        autoComplete="off"
+        placeholder="e.g. New client intake packet..."
+        required
+      />
+      <Input
+        label="Description (optional)"
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        name="onboarding-template-description"
+        autoComplete="off"
+        placeholder="What this template is for..."
+      />
+      <Input
+        label="Service tag (optional)"
+        value={serviceTag}
+        onChange={(e) => setServiceTag(e.target.value)}
+        name="onboarding-template-service-tag"
+        autoComplete="off"
+        placeholder="Leave blank for a universal template..."
+        helperText="Scopes the template to one service. Blank = universal."
+      />
+      <p className="text-xs text-gray-500 dark:text-gray-400">
+        Upload a PDF and place a signature field to enable e-signature from Edit
+        details.
+      </p>
+      <ModalFooter>
+        <Button type="button" variant="secondary" onClick={onCancel} disabled={isLoading}>
+          Cancel
+        </Button>
+        <Button type="submit" variant="primary" disabled={!canSubmit} isLoading={isLoading}>
+          Create
+        </Button>
+      </ModalFooter>
+    </form>
+  );
+}
+
+interface EditTemplateMetaFormProps {
+  template: OnboardingTemplate;
+  onSubmit: (data: OnboardingTemplateMetaUpdate) => Promise<void>;
+  onCancel: () => void;
+  isLoading: boolean;
+}
+
+function EditTemplateMetaForm({ template, onSubmit, onCancel, isLoading }: EditTemplateMetaFormProps) {
+  const [name, setName] = useState(template.name);
+  const [description, setDescription] = useState(template.description ?? '');
+  const [serviceTag, setServiceTag] = useState(template.service_tag ?? '');
+  const [requiresEsign, setRequiresEsign] = useState(template.requires_esign);
 
   const canSubmit = name.trim().length > 0;
 
@@ -495,7 +715,7 @@ function CreateTemplateForm({ onSubmit, onCancel, isLoading }: CreateTemplateFor
           Cancel
         </Button>
         <Button type="submit" variant="primary" disabled={!canSubmit} isLoading={isLoading}>
-          Create
+          Save details
         </Button>
       </ModalFooter>
     </form>

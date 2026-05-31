@@ -63,7 +63,16 @@ async def read_bytes(ref: str) -> bytes:
             if _client_error_code(exc) in ("NoSuchKey", "404", "NotFound"):
                 raise FileNotFoundError(f"object not found: {key}") from exc
             raise RuntimeError("object storage unavailable") from exc
-    return (_UPLOADS_ROOT / ref).read_bytes()
+    try:
+        return (_UPLOADS_ROOT / ref).read_bytes()
+    except FileNotFoundError:
+        raise  # missing file → 404 (the router maps FileNotFoundError)
+    except OSError as exc:
+        # An unreadable file / disk error (e.g. PermissionError) is an OSError
+        # but NOT FileNotFoundError, so without this it would escape both the
+        # router's 404 and 503 handlers as an opaque 500. Normalize it to a
+        # RuntimeError → 503, mirroring the R2 branch's ClientError handling.
+        raise RuntimeError("storage unavailable") from exc
 
 
 async def serve(ref: str) -> bytes:
