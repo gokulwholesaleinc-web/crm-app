@@ -24,7 +24,6 @@ from src.proposals.service import (
     PROPOSAL_ESIGN_DISCLOSURE_VERSION,
     ProposalService,
 )
-from src.whitelabel.models import Tenant, TenantSettings, TenantUser
 
 # Smallest possible valid PNG (1x1 transparent). Inline so tests don't
 # need a binary fixture file on disk.
@@ -121,11 +120,12 @@ class TestSignToConfirmAccept:
         assert response.status_code == 200, response.text
 
         await db_session.refresh(sent_proposal)
-        assert sent_proposal.agreed_to_terms_at is not None
-        assert sent_proposal.signed_at == sent_proposal.agreed_to_terms_at
-        assert sent_proposal.terms_and_conditions_snapshot == (
-            "Per-proposal acceptance terms."
-        )
+        # The redundant T&C-agreement was retired: even though
+        # terms_and_conditions is set above, no terms snapshot / consent
+        # timestamp is captured going forward. The ESIGN disclosure snapshot
+        # remains the operative evidence (asserted below).
+        assert sent_proposal.agreed_to_terms_at is None
+        assert sent_proposal.terms_and_conditions_snapshot is None
         assert sent_proposal.esign_disclosure_version == (
             PROPOSAL_ESIGN_DISCLOSURE_VERSION
         )
@@ -157,19 +157,20 @@ class TestSignToConfirmAccept:
         assert response.status_code == 400, response.text
 
     @pytest.mark.asyncio
-    async def test_rejects_when_terms_not_agreed(
+    async def test_accepts_without_terms_agreement(
         self,
         client: AsyncClient,
         sent_proposal: Proposal,
         test_contact: Contact,
     ):
-        """ESIGN Act consent must be ticked — 400 if agreed_to_terms is False."""
+        """The redundant T&C-agreement gate was retired — a drawn signature
+        alone signs. agreed_to_terms is still accepted (back-compat) but
+        ignored, so agreed=False now succeeds."""
         response = await client.post(
             f"/api/proposals/public/{sent_proposal.public_token}/accept",
             json=_accept_payload(test_contact.email, agreed=False),
         )
-        assert response.status_code == 400
-        assert "agree" in response.json()["detail"].lower()
+        assert response.status_code == 200, response.text
 
     @pytest.mark.asyncio
     async def test_rejects_invalid_base64_signature(
@@ -249,57 +250,6 @@ class TestSignToConfirmAccept:
 
         await db_session.refresh(sent_proposal)
         assert sent_proposal.signed_pdf_path is None
-
-
-class TestEffectiveTermsResolver:
-    """ProposalService.get_effective_terms_and_conditions"""
-
-    @pytest.mark.asyncio
-    async def test_per_proposal_override_wins(
-        self,
-        db_session: AsyncSession,
-        sent_proposal: Proposal,
-    ):
-        sent_proposal.terms_and_conditions = "Per-proposal override body."
-        await db_session.commit()
-
-        service = ProposalService(db_session)
-        body = await service.get_effective_terms_and_conditions(sent_proposal)
-        assert body == "Per-proposal override body."
-
-    @pytest.mark.asyncio
-    async def test_falls_back_to_tenant_default(
-        self,
-        db_session: AsyncSession,
-        sent_proposal: Proposal,
-        test_user: User,
-    ):
-        tenant = Tenant(name="Test Co", slug="test-co")
-        db_session.add(tenant)
-        await db_session.flush()
-        settings = TenantSettings(
-            tenant_id=tenant.id,
-            default_terms_and_conditions="Tenant-wide default body.",
-        )
-        membership = TenantUser(
-            tenant_id=tenant.id, user_id=test_user.id, is_primary=True,
-        )
-        db_session.add_all([settings, membership])
-        await db_session.commit()
-
-        service = ProposalService(db_session)
-        body = await service.get_effective_terms_and_conditions(sent_proposal)
-        assert body == "Tenant-wide default body."
-
-    @pytest.mark.asyncio
-    async def test_returns_none_when_nothing_configured(
-        self,
-        db_session: AsyncSession,
-        sent_proposal: Proposal,
-    ):
-        service = ProposalService(db_session)
-        body = await service.get_effective_terms_and_conditions(sent_proposal)
-        assert body is None
 
 
 class TestMasterContractValidation:

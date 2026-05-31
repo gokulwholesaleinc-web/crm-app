@@ -70,7 +70,6 @@ class TestAcceptNeverSpawnsBilling:
                 signer_name="Jane Client",
                 signer_email=test_contact.email,
                 signature_image=_ONE_PIXEL_PNG,
-                agreed_to_terms=True,
             )
             mock_stripe.assert_not_called()
 
@@ -99,7 +98,6 @@ class TestAcceptNeverSpawnsBilling:
                 signer_name="Jane Client",
                 signer_email=test_contact.email,
                 signature_image=_ONE_PIXEL_PNG,
-                agreed_to_terms=True,
             )
             mock_stripe.assert_not_called()
 
@@ -125,7 +123,6 @@ class TestAcceptNeverSpawnsBilling:
                 signer_name="Jane Client",
                 signer_email=test_contact.email,
                 signature_image=_ONE_PIXEL_PNG,
-                agreed_to_terms=True,
             )
             mock_stripe.assert_not_called()
 

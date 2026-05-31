@@ -78,7 +78,6 @@ async def _accept(
             signer_name="Jane Signer",
             signer_email=signer_email,
             signature_image=_ONE_PIXEL_PNG,
-            agreed_to_terms=True,
         )
         return accepted
 
