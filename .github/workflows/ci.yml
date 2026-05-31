@@ -73,6 +73,45 @@ jobs:
           cd frontend
           npm run build
 
+  frontend-typecheck:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: cd frontend && npm ci
+
+      # vite build does NOT type-check; tsc gates real type errors (e.g. onboarding gaps).
+      - name: Type-check frontend
+        run: cd frontend && npx tsc -p tsconfig.json
+
+  frontend-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: cd frontend && npm ci
+
+      - name: Run vitest
+        run: cd frontend && npx vitest run
+
   ruff-check:
     runs-on: ubuntu-latest
 

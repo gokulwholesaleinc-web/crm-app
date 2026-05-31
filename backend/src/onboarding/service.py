@@ -34,6 +34,36 @@ class FieldDefinitionError(Exception):
     """
 
 
+class StaleTemplateError(Exception):
+    """Optimistic-lock failure (C2, finding #2) → HTTP 409.
+
+    Raised when a PATCH carries field_definitions tied to a stale
+    ``pdf_version`` — the PDF was re-uploaded after the editor opened, so
+    the submitted coords reference a document that no longer exists. NOT a
+    ``ValueError`` so it can't be downgraded to a 400.
+    """
+
+
+class RetiredTemplateError(Exception):
+    """Edit attempted on a retired (is_active=False) template → HTTP 409
+    (finding #11). Restore the template before editing. NOT a ``ValueError``.
+    """
+
+
+class PdfRejectedError(ValueError):
+    """Upload-time PDF rejection (encrypted / rotated / unreadable / empty)
+    → HTTP 400 (findings #4, #8). A ``ValueError`` subclass so the existing
+    ``value_error_as_400`` wrapper in the router maps it to 400 uniformly.
+    """
+
+
+class StorageWriteError(Exception):
+    """Persisting the uploaded PDF to the storage backend (R2/disk) failed
+    → HTTP 503. NOT a ``ValueError`` so a write outage is never mislabelled
+    as a client-side 400.
+    """
+
+
 class OnboardingTemplateService:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -91,6 +121,7 @@ class OnboardingTemplateService:
         *,
         current_user: User,
         field_definitions: list[dict] | None = None,
+        pdf_version: int | None = None,
         **fields,
     ) -> OnboardingTemplate:
         """Apply a partial update. ``fields`` are already exclude_unset.
@@ -98,7 +129,31 @@ class OnboardingTemplateService:
         ``field_definitions`` (if provided) is validated against the stored
         PDF and reassigned as a fresh list (JSONB has no in-place mutation
         tracking, but a whole-list reassignment is tracked, §G #7).
+
+        Guards (in order):
+          * #11 retired templates reject all edits (409).
+          * C2 a field-definitions PATCH carrying a stale ``pdf_version``
+            (the PDF was re-uploaded since the editor opened) → 409.
+          * #10 the resulting (requires_esign, field set) must be consistent:
+            an esign template needs ≥1 signature field. Evaluated against the
+            *merged* state so an esign-on / fields-unchanged PATCH is caught.
         """
+        # #11: a retired template is read-only until restored.
+        if not template.is_active:
+            raise RetiredTemplateError(
+                "Template is retired; restore it before editing."
+            )
+
+        # C2: optimistic lock — only meaningful when this PATCH ships fields.
+        if (
+            field_definitions is not None
+            and pdf_version is not None
+            and pdf_version != template.pdf_version
+        ):
+            raise StaleTemplateError(
+                "This template's PDF was replaced; reload before saving fields."
+            )
+
         for key, value in fields.items():
             setattr(template, key, value)
         if field_definitions is not None:
@@ -106,15 +161,55 @@ class OnboardingTemplateService:
                 template, await self._read_pdf_bytes(template), field_definitions
             )
             template.field_definitions = list(field_definitions)
+
+        # #10: reconcile esign ⇄ signature-field consistency against the
+        # merged state (the requires_esign just set above + the fields now on
+        # the row). The stamper demands a PNG whenever any signature field
+        # exists; we mirror the converse here — an esign template with zero
+        # signature fields could never collect a signature, so reject it.
+        self._assert_esign_signature_consistency(template)
+
         template.updated_by_id = current_user.id
         await self.db.flush()
         await self.db.refresh(template)
         return template
 
+    @staticmethod
+    def _assert_esign_signature_consistency(template: OnboardingTemplate) -> None:
+        """#10: a requires_esign template must carry ≥1 signature field.
+
+        Raises ``FieldDefinitionError`` (→ 422). Evaluated on the merged row
+        state so it fires for an esign-on PATCH that leaves the (sig-less)
+        fields untouched, not just for single-payload combos caught by the
+        schema validator.
+        """
+        if not template.requires_esign:
+            return
+        fields = template.field_definitions or []
+        if not any(
+            (f.get("kind") if isinstance(f, dict) else getattr(f, "kind", None))
+            == "signature"
+            for f in fields
+        ):
+            raise FieldDefinitionError(
+                "requires_esign templates must define at least one "
+                "signature field before saving."
+            )
+
     async def retire(
         self, template: OnboardingTemplate, *, current_user: User
     ) -> OnboardingTemplate:
         template.is_active = False
+        template.updated_by_id = current_user.id
+        await self.db.flush()
+        await self.db.refresh(template)
+        return template
+
+    async def restore(
+        self, template: OnboardingTemplate, *, current_user: User
+    ) -> OnboardingTemplate:
+        """Un-retire a template so it can be edited/used again (#11)."""
+        template.is_active = True
         template.updated_by_id = current_user.id
         await self.db.flush()
         await self.db.refresh(template)
@@ -134,25 +229,41 @@ class OnboardingTemplateService:
         CLEARS ``field_definitions`` because the old coords are meaningless
         against a new PDF (build-order §C re-upload semantics).
         """
-        if not content:
-            raise ValueError("Uploaded PDF is empty")
-        # Fail fast on a non-PDF before persisting anything.
-        try:
-            PdfReader(io.BytesIO(content))
-        except Exception as exc:  # pypdf raises a variety of parse errors
-            raise ValueError("Uploaded file is not a readable PDF") from exc
+        # #11: a retired template is read-only until restored.
+        if not template.is_active:
+            raise RetiredTemplateError(
+                "Template is retired; restore it before editing."
+            )
+        # Validate the bytes (empty / unreadable / encrypted / rotated)
+        # BEFORE writing anything, so a rejected upload leaves no orphan.
+        self._validate_uploaded_pdf(content)
 
         is_reupload = template.pdf_path is not None
         next_version = (template.pdf_version + 1) if is_reupload else template.pdf_version
         # Clean, feature-namespaced key — NOT generate_object_key, whose
         # "uploads/" prefix would double under the storage disk root.
         key = f"onboarding_templates/{template.id}/{uuid.uuid4().hex}.pdf"
-        ref = await storage.write(key, content, "application/pdf")
+        # Map a storage-backend failure (e.g. R2 ClientError surfaced as a
+        # RuntimeError) to a 503, not a 500. NOTE (orphan risk): the write
+        # succeeds on the object store but a later self.db.flush() failure
+        # would leave the object un-referenced; Phase 1 accepts this (few
+        # staff-managed templates, no automatic GC). A reaper is deferred.
+        try:
+            ref = await storage.write(key, content, "application/pdf")
+        except RuntimeError as exc:
+            raise StorageWriteError(
+                "Could not store the uploaded PDF (storage unavailable)."
+            ) from exc
 
         template.pdf_path = ref
         template.pdf_version = next_version
         if is_reupload:
+            # Old coords are meaningless against the new PDF. Clearing the
+            # fields would leave a requires_esign template with zero signature
+            # fields (violating #10), so reset requires_esign too — staff
+            # re-enable it after re-placing a signature field on the new PDF.
             template.field_definitions = []
+            template.requires_esign = False
         template.updated_by_id = current_user.id
         await self.db.flush()
         await self.db.refresh(template)
@@ -170,6 +281,41 @@ class OnboardingTemplateService:
                 "Upload a PDF before defining fields on this template."
             )
         return await storage.read_bytes(template.pdf_path)
+
+    @staticmethod
+    def _validate_uploaded_pdf(content: bytes) -> None:
+        """Reject empty / unreadable / encrypted / rotated PDFs at upload.
+
+        All four raise ``PdfRejectedError`` (a ``ValueError`` subclass) → 400.
+
+        * #4 encrypted: ``PdfReader`` does NOT raise on an encrypted file;
+          only page access does. We check ``reader.is_encrypted`` explicitly.
+        * #8 rotated: the editor's pdf.js viewport already applies page
+          rotation while the backend bounds-checks against the raw mediabox,
+          so a non-zero ``/Rotate`` would misplace every field. Fail closed
+          (``page.rotation`` resolves inherited rotation too); full rotation
+          support is deferred.
+        """
+        if not content:
+            raise PdfRejectedError("Uploaded PDF is empty")
+        try:
+            reader = PdfReader(io.BytesIO(content))
+        except Exception as exc:  # pypdf raises a variety of parse errors
+            raise PdfRejectedError("Uploaded file is not a readable PDF") from exc
+
+        if reader.is_encrypted:
+            raise PdfRejectedError(
+                "Encrypted/password-protected PDFs are not supported."
+            )
+
+        for page in reader.pages:
+            # ``page.rotation`` normalizes to a multiple of 90 in [0, 360) and
+            # accounts for rotation inherited from the page tree.
+            if page.rotation % 360 != 0:
+                raise PdfRejectedError(
+                    "Rotated PDF pages aren't supported yet; please upload an "
+                    "unrotated PDF."
+                )
 
     @staticmethod
     def _validate_field_definitions(

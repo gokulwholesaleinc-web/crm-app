@@ -67,6 +67,14 @@ def stamp_document(
     # Conditional empty-signature guard: only required when a signature
     # field is actually present (unlike the proposals stamper, which
     # always demands a PNG). A field set with no signature stamps fine.
+    #
+    # Note: this fires for ANY kind=="signature" field, regardless of its
+    # ``required`` flag, because signature fields are effectively
+    # always-required at stamp time. The backend enforces the
+    # requires_esign <-> signature-field consistency invariant (a template
+    # that requires e-sign must carry a signature field, and a signature
+    # field implies a signature is collected before stamping), so by the
+    # time we reach here a present signature field always expects a PNG.
     has_signature_field = any(f.get("kind") == "signature" for f in fields)
     if has_signature_field and signature_png is None:
         raise ValueError("signature image required for signature field")
@@ -265,6 +273,14 @@ def _flatten(writer: PdfWriter) -> None:
     objects are cleared in place so the writer doesn't emit a dangling
     ``/Subtype /Widget`` in the output bytes. ``/Annots`` is removed only
     if it becomes empty.
+
+    LIMITATION: a *pre-filled* AcroForm field's visible appearance is dropped
+    (we remove the widget rather than rendering its ``/AP`` into the page —
+    pypdf 6.10.2 has no reliable API for that). This is correct for the
+    intended use case: templates are BLANK forms staff place our own boxes on,
+    so there is no pre-filled content to preserve. See
+    ``test_flatten_prefilled_widget_loses_appearance``; if pre-filled source
+    forms ever need supporting, pre-flatten with Ghostscript/pdftk first.
     """
     root = writer.root_object
     if "/AcroForm" in root:

@@ -73,6 +73,33 @@ const PREFILL_OPTIONS: { value: string; label: string }[] = [
 
 const SLUG_RE = /^[a-z0-9_]+$/;
 
+/**
+ * In-editor field. ``id`` is a freely-editable, persisted property, so it
+ * can't key selection or React lists (editing it would orphan the
+ * selection — finding #5). ``_key`` is a stable internal handle assigned on
+ * add; it is STRIPPED before {@link OnboardingTemplateEditorProps.onSave}.
+ */
+interface EditorField extends OnboardingFieldDefinition {
+  _key: string;
+}
+
+/** Monotonic counter for stable internal field keys (per module load). */
+let _keySeq = 0;
+function nextKey(): string {
+  _keySeq += 1;
+  return `f${_keySeq}`;
+}
+
+/** Attach a stable internal key to each incoming persisted field. */
+function withKeys(fields: OnboardingFieldDefinition[]): EditorField[] {
+  return fields.map((f) => ({ ...f, _key: nextKey() }));
+}
+
+/** Drop the internal ``_key`` so the persisted shape stays clean. */
+function stripKeys(fields: EditorField[]): OnboardingFieldDefinition[] {
+  return fields.map(({ _key, ...field }) => field);
+}
+
 /** Build a unique, slug-safe id for a new field of the given kind. */
 function nextFieldId(kind: OnboardingFieldKind, existing: OnboardingFieldDefinition[]): string {
   const used = new Set(existing.map((f) => f.id));
@@ -121,9 +148,11 @@ export function OnboardingTemplateEditor({
   const [pageCount, setPageCount] = useState(0);
   const [pageIdx, setPageIdx] = useState(0);
   const [canvasSize, setCanvasSize] = useState<{ w: number; h: number } | null>(null);
-  const [fields, setFields] = useState<OnboardingFieldDefinition[]>(currentFields);
+  const [fields, setFields] = useState<EditorField[]>(() => withKeys(currentFields));
   const [activeKind, setActiveKind] = useState<OnboardingFieldKind>('signature');
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Selection is keyed on the stable internal ``_key``, never the editable
+  // ``id`` — editing an id must not orphan the selection (finding #5).
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [draftBox, setDraftBox] = useState<DrawnBox | null>(null);
   const [isLoadingDoc, setIsLoadingDoc] = useState(false);
   const [docError, setDocError] = useState<string | null>(null);
@@ -143,9 +172,9 @@ export function OnboardingTemplateEditor({
     setDocError(null);
     setSaveError(null);
     setDraftBox(null);
-    setSelectedId(null);
+    setSelectedKey(null);
     setCanvasSize(null);
-    setFields(initialFieldsRef.current);
+    setFields(withKeys(initialFieldsRef.current));
 
     const loadingTask = getDocument(pdfUrl);
     loadingTask.promise
@@ -268,7 +297,9 @@ export function OnboardingTemplateEditor({
     }
     const pdfBox = boxToPdfCoords(draftBox, canvasSize.h);
     const id = nextFieldId(activeKind, fields);
-    const newField: OnboardingFieldDefinition = {
+    const key = nextKey();
+    const newField: EditorField = {
+      _key: key,
       id,
       kind: activeKind,
       label: '',
@@ -279,19 +310,20 @@ export function OnboardingTemplateEditor({
       ...pdfBox,
     };
     setFields((curr) => curr.concat(newField));
-    setSelectedId(id);
+    setSelectedKey(key);
     setDraftBox(null);
   };
 
   // --- Field edits ------------------------------------------------
+  // All edits address fields by stable ``_key`` — never the editable ``id``.
 
-  const updateField = (id: string, patch: Partial<OnboardingFieldDefinition>) => {
-    setFields((curr) => curr.map((f) => (f.id === id ? { ...f, ...patch } : f)));
+  const updateField = (key: string, patch: Partial<OnboardingFieldDefinition>) => {
+    setFields((curr) => curr.map((f) => (f._key === key ? { ...f, ...patch } : f)));
   };
 
-  const removeField = (id: string) => {
-    setFields((curr) => curr.filter((f) => f.id !== id));
-    setSelectedId((curr) => (curr === id ? null : curr));
+  const removeField = (key: string) => {
+    setFields((curr) => curr.filter((f) => f._key !== key));
+    setSelectedKey((curr) => (curr === key ? null : curr));
   };
 
   // --- Save / cancel ----------------------------------------------
@@ -307,7 +339,7 @@ export function OnboardingTemplateEditor({
     setSaving(true);
     setSaveError(null);
     try {
-      await onSave(fields);
+      await onSave(stripKeys(fields));
       onClose();
     } catch (err) {
       setSaveError(extractApiErrorDetail(err) ?? 'Failed to save fields');
@@ -320,7 +352,7 @@ export function OnboardingTemplateEditor({
   const goNext = () => setPageIdx((i) => Math.min(pageCount - 1, i + 1));
 
   // Boxes visible on the current page (plus the in-flight draft box).
-  const visibleBoxes: Array<{ field: OnboardingFieldDefinition | null; box: DrawnBox }> = [];
+  const visibleBoxes: Array<{ field: EditorField | null; box: DrawnBox }> = [];
   if (canvasSize) {
     for (const field of fields) {
       if (field.page - 1 === pageIdx) {
@@ -332,7 +364,7 @@ export function OnboardingTemplateEditor({
     visibleBoxes.push({ field: null, box: draftBox });
   }
 
-  const selectedField = fields.find((f) => f.id === selectedId) ?? null;
+  const selectedField = fields.find((f) => f._key === selectedKey) ?? null;
   const fieldsOnPage = fields.filter((f) => f.page - 1 === pageIdx).length;
 
   return (
@@ -425,10 +457,10 @@ export function OnboardingTemplateEditor({
                   {visibleBoxes.map(({ field, box }, i) => {
                     const kind = field?.kind ?? activeKind;
                     const meta = KIND_META[kind];
-                    const isSelected = field !== null && field.id === selectedId;
+                    const isSelected = field !== null && field._key === selectedKey;
                     return (
                       <div
-                        key={field ? field.id : `draft-${i}`}
+                        key={field ? field._key : `draft-${i}`}
                         className={`absolute pointer-events-none border-2 ${meta.box} ${
                           isSelected ? 'ring-2 ring-offset-1 ring-gray-900 dark:ring-white' : ''
                         }`}
@@ -456,7 +488,7 @@ export function OnboardingTemplateEditor({
                               onClick={(event) => {
                                 event.preventDefault();
                                 event.stopPropagation();
-                                setSelectedId(field.id);
+                                setSelectedKey(field._key);
                               }}
                               className="pointer-events-auto absolute inset-0"
                               aria-label={`Select ${meta.label.toLowerCase()} field ${field.label || field.id}`}
@@ -470,7 +502,7 @@ export function OnboardingTemplateEditor({
                               onClick={(event) => {
                                 event.preventDefault();
                                 event.stopPropagation();
-                                removeField(field.id);
+                                removeField(field._key);
                               }}
                               className={`pointer-events-auto absolute -right-3 -top-3 inline-flex h-6 w-6 items-center justify-center rounded-full border border-white text-white shadow-sm hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-gray-900 dark:focus-visible:ring-white ${meta.accent}`}
                               aria-label={`Remove ${meta.label.toLowerCase()} field ${field.label || field.id}`}
@@ -568,10 +600,11 @@ function KindToggle({ kind, activeKind, count, onClick }: KindToggleProps) {
 }
 
 interface FieldEditorPanelProps {
-  field: OnboardingFieldDefinition | null;
-  allFields: OnboardingFieldDefinition[];
-  onChange: (id: string, patch: Partial<OnboardingFieldDefinition>) => void;
-  onRemove: (id: string) => void;
+  field: EditorField | null;
+  allFields: EditorField[];
+  /** Both address the field by its stable internal ``_key``. */
+  onChange: (key: string, patch: Partial<OnboardingFieldDefinition>) => void;
+  onRemove: (key: string) => void;
 }
 
 function FieldEditorPanel({ field, allFields, onChange, onRemove }: FieldEditorPanelProps) {
@@ -593,7 +626,7 @@ function FieldEditorPanel({ field, allFields, onChange, onRemove }: FieldEditorP
         </h3>
         <button
           type="button"
-          onClick={() => onRemove(field.id)}
+          onClick={() => onRemove(field._key)}
           className="text-xs font-medium text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 rounded"
         >
           Remove
@@ -603,7 +636,7 @@ function FieldEditorPanel({ field, allFields, onChange, onRemove }: FieldEditorP
       <Input
         label="Field id"
         value={field.id}
-        onChange={(e) => onChange(field.id, { id: e.target.value })}
+        onChange={(e) => onChange(field._key, { id: e.target.value })}
         name="onboarding-field-id"
         autoComplete="off"
         spellCheck={false}
@@ -614,7 +647,7 @@ function FieldEditorPanel({ field, allFields, onChange, onRemove }: FieldEditorP
       <Input
         label="Label"
         value={field.label}
-        onChange={(e) => onChange(field.id, { label: e.target.value })}
+        onChange={(e) => onChange(field._key, { label: e.target.value })}
         name="onboarding-field-label"
         autoComplete="off"
         placeholder="e.g. Federal EIN..."
@@ -623,7 +656,7 @@ function FieldEditorPanel({ field, allFields, onChange, onRemove }: FieldEditorP
       <Input
         label="Description (optional)"
         value={field.description ?? ''}
-        onChange={(e) => onChange(field.id, { description: e.target.value })}
+        onChange={(e) => onChange(field._key, { description: e.target.value })}
         name="onboarding-field-description"
         autoComplete="off"
         placeholder="Shown to the client as a hint..."
@@ -633,7 +666,7 @@ function FieldEditorPanel({ field, allFields, onChange, onRemove }: FieldEditorP
         label="Prefill"
         value={field.prefill ?? ''}
         onChange={(e) =>
-          onChange(field.id, {
+          onChange(field._key, {
             prefill: (e.target.value || null) as OnboardingFieldPrefill,
           })
         }
@@ -645,7 +678,7 @@ function FieldEditorPanel({ field, allFields, onChange, onRemove }: FieldEditorP
         <input
           type="checkbox"
           checked={field.required}
-          onChange={(e) => onChange(field.id, { required: e.target.checked })}
+          onChange={(e) => onChange(field._key, { required: e.target.checked })}
           className="h-4 w-4 rounded border-gray-300 text-primary-600 focus-visible:ring-primary-500"
         />
         Required

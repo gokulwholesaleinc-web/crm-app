@@ -50,8 +50,13 @@ export interface OnboardingTemplate {
   /** null = universal template; a service slug scopes it to one service. */
   service_tag?: string | null;
   owner_id?: number | null;
-  /** Storage ref; null until the first PDF upload. */
-  pdf_path?: string | null;
+  /**
+   * Whether a PDF has been uploaded. The backend deliberately does NOT
+   * expose the raw storage path (it would leak the R2 key); it sends this
+   * computed boolean instead. Drives upload-vs-replace and whether fields
+   * can be edited.
+   */
+  has_pdf: boolean;
   pdf_version: number;
   field_definitions: OnboardingFieldDefinition[];
   requires_esign: boolean;
@@ -74,6 +79,13 @@ export interface OnboardingTemplateUpdate {
   requires_esign?: boolean | null;
   /** Reassigns the whole list; rejected (422) until a PDF is uploaded. */
   field_definitions?: OnboardingFieldDefinition[] | null;
+  /**
+   * Optimistic-lock token sent alongside ``field_definitions``. The editor
+   * captures the template's ``pdf_version`` when opened; if the PDF was
+   * replaced (version bumped) before the field-save lands, the backend
+   * rejects with 409 so stale coordinates can't overwrite the new layout.
+   */
+  pdf_version?: number | null;
 }
 
 export interface OnboardingTemplateFilters {

@@ -245,6 +245,67 @@ def test_flatten_keeps_non_widget_annotations():
     assert "/Widget" not in subtypes
 
 
+def test_blank_acroform_flattens_cleanly():
+    """Should flatten a BLANK (no value) AcroForm form to a static PDF.
+
+    This is the intended use case: templates ship as blank forms onto
+    which staff place our own overlay boxes. A blank widget carries no
+    visible text, so dropping it loses nothing — the result is a valid,
+    static, AcroForm-free document.
+    """
+    source = _acroform_pdf()  # textfield with NO value
+    # Sanity: the blank widget genuinely has no value to lose.
+    src_annots = PdfReader(io.BytesIO(source)).pages[0].get("/Annots")
+    assert all(a.get_object().get("/V") in (None, "") for a in src_annots)
+
+    out = stamp_document(source, [_field("text", value="placed by staff")])
+
+    out_reader = _assert_valid_pdf(out, expected_pages=1)
+    assert "/AcroForm" not in out_reader.trailer["/Root"]
+    assert b"/Widget" not in out
+    # Our own overlay content is what survives.
+    assert "placed by staff" in out_reader.pages[0].extract_text()
+
+
+def test_flatten_prefilled_widget_loses_appearance():
+    """Documents the known limitation: a PRE-FILLED widget's visible value
+    is dropped on flatten (not rendered into page content).
+
+    pypdf 6.10.2 has no reliable API to render a widget's ``/AP /N``
+    appearance into the page, so ``_flatten`` removes the widget wholesale.
+    For the intended blank-form workflow this is correct; this test pins
+    the behavior so a future change to render-on-flatten is a deliberate,
+    test-breaking decision rather than a silent one.
+    """
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=LETTER)
+    c.drawString(72, 720, "Pre-filled form:")
+    # A field WITH a value -> the source carries a visible /V + /AP /N.
+    c.acroForm.textfield(
+        name="ein", value="12-3456789", x=72, y=600, width=200, height=20
+    )
+    c.showPage()
+    c.save()
+    source = buf.getvalue()
+
+    # Sanity: the prefilled value is present and visible in the SOURCE.
+    src_reader = PdfReader(io.BytesIO(source))
+    src_annot = src_reader.pages[0].get("/Annots")[0].get_object()
+    assert src_annot.get("/V") == "12-3456789"
+    assert "/AP" in src_annot
+
+    out = stamp_document(source, [_field("text", value="ours")])
+    out_reader = _assert_valid_pdf(out, expected_pages=1)
+
+    # The widget (and thus its rendered appearance) is gone.
+    assert b"/Widget" not in out
+    assert "/AcroForm" not in out_reader.trailer["/Root"]
+    # Documented loss: the pre-filled value does not survive in any layer.
+    assert "12-3456789" not in out_reader.pages[0].extract_text()
+    # Our own overlay, by contrast, IS preserved.
+    assert "ours" in out_reader.pages[0].extract_text()
+
+
 # --- edge inputs -----------------------------------------------------------
 
 
