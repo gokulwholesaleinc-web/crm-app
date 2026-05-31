@@ -16,6 +16,7 @@ import {
   DocumentMagnifyingGlassIcon,
   ShieldCheckIcon,
   ClipboardDocumentListIcon,
+  ClipboardDocumentCheckIcon,
   QuestionMarkCircleIcon,
   UserPlusIcon,
   ShareIcon,
@@ -42,6 +43,7 @@ export const DEFAULT_MAIN_NAVIGATION: NavItem[] = [
   { id: 'proposals', name: 'Proposals', href: '/proposals', icon: DocumentDuplicateIcon },
   // Contracts nav entry removed 2026-05-14 — contract terms now fold
   // into the Proposal T&C inline.
+  { id: 'onboarding', name: 'Onboarding', href: '/onboarding', icon: ClipboardDocumentCheckIcon },
   { id: 'payments', name: 'Payments', href: '/payments', icon: CreditCardIcon },
   { id: 'activities', name: 'Activities', href: '/activities', icon: CalendarIcon },
   { id: 'calendar', name: 'Calendar', href: '/calendar', icon: CalendarDaysIcon },

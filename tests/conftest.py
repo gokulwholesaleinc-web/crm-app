@@ -67,6 +67,7 @@ from src.leads import models as lead_models
 from src.leads.models import Lead, LeadSource
 from src.meta import models as meta_models
 from src.notifications import models as notification_models
+from src.onboarding import models as onboarding_models
 from src.opportunities import models as opportunity_models
 from src.opportunities.models import Opportunity, PipelineStage
 from src.payments import models as payment_models
@@ -108,6 +109,7 @@ _MODEL_REGISTRY_IMPORTS = (
     mailchimp_models,
     meta_models,
     notification_models,
+    onboarding_models,
     opportunity_models,
     payment_models,
     proposal_models,
