@@ -25,7 +25,6 @@ from __future__ import annotations
 import asyncio
 import io
 import os
-import socket
 import struct
 import uuid
 import zlib
@@ -50,14 +49,35 @@ def _split_url(url: str) -> tuple[str, str]:
 
 
 def _postgres_reachable() -> bool:
-    """Cheap synchronous TCP probe — no event loop at collection time."""
+    """Verify the maintenance DB with a REAL connect at collection time.
+
+    A TCP-only probe isn't enough: CI runs Postgres but under a DIFFERENT db
+    name (``crm_test_db``, not the default ``crm_db``), so a TCP probe passes
+    and the test then ERRORs at setup with ``InvalidCatalogNameError`` instead
+    of skipping. Actually connecting verifies the configured database exists;
+    any failure (down / missing db / bad creds) → skip, never error. Point
+    ``TEST_POSTGRES_URL`` at an existing DB to run it (locally: the docker
+    ``crm_db``).
+    """
+    import asyncpg
+
     parts = urlsplit(TEST_POSTGRES_URL)
-    host = parts.hostname or "localhost"
-    port = parts.port or 5432
+
+    async def _probe() -> None:
+        conn = await asyncpg.connect(
+            host=parts.hostname or "localhost",
+            port=parts.port or 5432,
+            user=parts.username,
+            password=parts.password,
+            database=(parts.path or "/").lstrip("/") or "postgres",
+            timeout=3,
+        )
+        await conn.close()
+
     try:
-        with socket.create_connection((host, port), timeout=2):
-            return True
-    except OSError:
+        asyncio.run(_probe())
+        return True
+    except Exception:
         return False
 
 

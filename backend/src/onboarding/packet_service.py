@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import UTC, datetime, timedelta
+from typing import overload
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -61,6 +62,10 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
+@overload
+def _ensure_aware(value: datetime) -> datetime: ...
+@overload
+def _ensure_aware(value: None) -> None: ...
 def _ensure_aware(value: datetime | None) -> datetime | None:
     """Treat a DB-loaded naive datetime as UTC before comparing against ``_now()``.
 
@@ -68,7 +73,9 @@ def _ensure_aware(value: datetime | None) -> datetime | None:
     NAIVE from SQLite (the test harness), and comparing a naive value against
     the aware ``_now()`` raises ``TypeError``. Mirrors the established
     ``audit/service.py::_ensure_aware`` / ``contracts/service.py`` pattern.
-    ``None`` passes through unchanged.
+    ``None`` passes through unchanged. The overloads preserve non-null-ness so a
+    guarded ``_ensure_aware(col) <= _now()`` doesn't trip pyright's
+    reportOptionalOperand.
     """
     if value is not None and value.tzinfo is None:
         return value.replace(tzinfo=UTC)
