@@ -19,6 +19,12 @@ from src.attachments.object_storage import (
 
 MAX_UPLOAD_SIZE = int(os.getenv("MAX_UPLOAD_SIZE", str(10 * 1024 * 1024)))
 
+# Cap for system-generated attachments built from in-memory bytes (a
+# completed onboarding packet's stamped PDFs). Larger than MAX_UPLOAD_SIZE
+# because a multi-page flattened PDF with an embedded signature image can
+# legitimately exceed the 10 MB interactive-upload cap.
+ONBOARDING_MAX_BYTES = 25 * 1024 * 1024
+
 ALLOWED_EXTENSIONS = {
     "pdf", "docx", "xlsx", "csv",
     "png", "jpg", "jpeg", "gif",
@@ -112,6 +118,75 @@ class AttachmentService:
             entity_type=entity_type,
             entity_id=entity_id,
             uploaded_by=user_id,
+            category=category,
+        )
+        self.db.add(attachment)
+        await self.db.flush()
+        await self.db.refresh(attachment)
+        return attachment
+
+    async def create_from_bytes(
+        self,
+        *,
+        content: bytes,
+        original_filename: str,
+        entity_type: str,
+        entity_id: int,
+        category: str | None = None,
+        uploaded_by: int | None = None,
+        mime_type: str = "application/pdf",
+    ) -> Attachment:
+        """Create an Attachment from in-memory bytes (system-generated docs).
+
+        Replicates ``upload_file``'s defense-in-depth (extension allow-list +
+        size cap) but: takes raw bytes rather than an ``UploadFile``; enforces
+        the 25 MB ``ONBOARDING_MAX_BYTES`` cap; allows ``uploaded_by=None``
+        (no human uploader); and owns the SINGLE storage write via the
+        onboarding storage module so the resulting ``file_path`` is a ref the
+        existing download path can serve. The CALLER writes any timeline
+        Activity — this method stays single-purpose (write + row + flush).
+        """
+        # Lazy import avoids a circular import (onboarding.storage imports
+        # this module for _use_object_storage / upload_file_bytes).
+        from src.onboarding import storage as onboarding_storage
+
+        ext = _get_extension(original_filename)
+        if ext not in ALLOWED_EXTENSIONS:
+            raise ValueError(
+                f"File type '.{ext}' not allowed. "
+                f"Allowed: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
+            )
+        per_entity = PER_ENTITY_ALLOWED_EXTENSIONS.get(entity_type)
+        if per_entity is not None and ext not in per_entity:
+            raise ValueError(
+                f"File type '.{ext}' not allowed on {entity_type}. "
+                f"Allowed: {', '.join(sorted(per_entity))}"
+            )
+
+        file_size = len(content)
+        if file_size == 0:
+            raise ValueError("Refusing to store an empty file")
+        if file_size > ONBOARDING_MAX_BYTES:
+            raise ValueError(
+                f"File size {file_size} bytes exceeds maximum of "
+                f"{ONBOARDING_MAX_BYTES} bytes"
+            )
+
+        unique_name = f"{uuid.uuid4().hex}.{ext}"
+        # Feature-namespaced key (mirrors onboarding template keys); storage
+        # returns "obj://<key>" on R2 or a path relative to uploads/ on disk.
+        key = f"onboarding_completed/{entity_id}/{unique_name}"
+        file_path = await onboarding_storage.write(key, content, mime_type)
+
+        attachment = Attachment(
+            filename=unique_name,
+            original_filename=original_filename,
+            file_path=file_path,
+            file_size=file_size,
+            mime_type=mime_type,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            uploaded_by=uploaded_by,
             category=category,
         )
         self.db.add(attachment)

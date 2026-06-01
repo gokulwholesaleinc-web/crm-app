@@ -68,6 +68,8 @@ const InboxPage = lazy(() => import('../features/inbox/InboxPage'));
 
 // Onboarding (client onboarding template library)
 const OnboardingLibraryPage = lazy(() => import('../features/onboarding/OnboardingLibraryPage'));
+// Public client-fill page (token-gated, no auth) — Phase 2
+const PublicOnboardingView = lazy(() => import('../features/onboarding/PublicOnboardingView'));
 
 // Settings
 const SettingsPage = lazy(() => import('../features/settings/SettingsPage'));
@@ -94,6 +96,7 @@ function AppRoutes() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/auth/google/callback" element={<GoogleAuthCallbackPage />} />
       <Route path="/proposals/public/:token" element={<PublicProposalView />} />
+      <Route path="/onboarding/:token" element={<PublicOnboardingView />} />
       {/* /quotes/public/:quoteNumber route removed 2026-05-14 */}
       {/* /contracts/sign/:token route removed 2026-05-14 — contracts retired */}
 

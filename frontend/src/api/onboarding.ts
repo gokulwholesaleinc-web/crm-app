@@ -13,6 +13,9 @@ import type {
   OnboardingTemplateCreate,
   OnboardingTemplateUpdate,
   OnboardingTemplateFilters,
+  OnboardingPacket,
+  OnboardingPacketDetail,
+  OnboardingPacketCreate,
 } from '../types';
 
 const ONBOARDING_BASE = '/api/onboarding/templates';
@@ -112,6 +115,55 @@ export const restoreOnboardingTemplate = async (
 ): Promise<OnboardingTemplate> => {
   const response = await apiClient.post<OnboardingTemplate>(
     `${ONBOARDING_BASE}/${templateId}/restore`,
+  );
+  return response.data;
+};
+
+// ---------------------------------------------------------------------------
+// Phase 2 — packets (staff "select-and-send" + per-contact packet list)
+// ---------------------------------------------------------------------------
+
+const PACKETS_BASE = '/api/onboarding/packets';
+
+/**
+ * Create a packet for a contact from one or more active templates. The 201
+ * response carries the one-time ``access_url`` (raw token) for staff to copy
+ * and share manually — it is shown exactly once and never re-served by GET
+ * (build-order note §8).
+ */
+export const createOnboardingPacket = async (
+  data: OnboardingPacketCreate,
+): Promise<OnboardingPacket> => {
+  const response = await apiClient.post<OnboardingPacket>(PACKETS_BASE, data);
+  return response.data;
+};
+
+/** List packets for a contact (access-checked; includes live delivery status). */
+export const listOnboardingPackets = async (
+  contactId: number,
+): Promise<OnboardingPacket[]> => {
+  const response = await apiClient.get<OnboardingPacket[]>(PACKETS_BASE, {
+    params: { contact_id: contactId },
+  });
+  return response.data;
+};
+
+/** Single packet detail (per-doc status). */
+export const getOnboardingPacket = async (
+  packetId: number,
+): Promise<OnboardingPacketDetail> => {
+  const response = await apiClient.get<OnboardingPacketDetail>(
+    `${PACKETS_BASE}/${packetId}`,
+  );
+  return response.data;
+};
+
+/** Revoke a live packet — kills the link and scrubs PII. */
+export const revokeOnboardingPacket = async (
+  packetId: number,
+): Promise<OnboardingPacket> => {
+  const response = await apiClient.post<OnboardingPacket>(
+    `${PACKETS_BASE}/${packetId}/revoke`,
   );
   return response.data;
 };
