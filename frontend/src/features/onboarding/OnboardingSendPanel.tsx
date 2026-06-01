@@ -22,6 +22,7 @@ import {
   revokeOnboardingPacket,
   retryOnboardingPacket,
   resendOnboardingCompletionNotice,
+  resendOnboardingPacketInvite,
 } from '../../api/onboarding';
 import { formatDate } from '../../utils/formatters';
 import { showSuccess, showError } from '../../utils/toast';
@@ -90,6 +91,18 @@ const RETRYABLE = new Set<OnboardingPacketStatus>([
 /** A completed packet can have its download notice re-sent (fresh link). */
 const RESENDABLE = new Set<OnboardingPacketStatus>(['completed']);
 
+/**
+ * A still-live (or expired) packet can have its *invite* re-minted — a fresh
+ * access token + a re-queued invite email (distinct from the completion
+ * notice). Terminal states (completed/revoked/completing/abandoned) are 409.
+ */
+const INVITE_RESENDABLE = new Set<OnboardingPacketStatus>([
+  'active',
+  'opened',
+  'in_progress',
+  'expired',
+]);
+
 export function OnboardingSendPanel({ templates }: OnboardingSendPanelProps) {
   const queryClient = useQueryClient();
   const [contactId, setContactId] = useState<number | null>(null);
@@ -156,6 +169,15 @@ export function OnboardingSendPanel({ templates }: OnboardingSendPanelProps) {
       );
     },
     onError: (err) => showError(extractApiErrorDetail(err) ?? 'Failed to resend the notice'),
+  });
+
+  const resendInviteMutation = useMutation({
+    mutationFn: (packetId: number) => resendOnboardingPacketInvite(packetId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [...PACKETS_KEY, contactId] });
+      showSuccess('Fresh invite link re-sent — check delivery status below.');
+    },
+    onError: (err) => showError(extractApiErrorDetail(err) ?? 'Failed to resend the invite'),
   });
 
   const toggleTemplate = (id: number) => {
@@ -352,6 +374,11 @@ export function OnboardingSendPanel({ templates }: OnboardingSendPanelProps) {
                         ? () => resendMutation.mutate(p.id)
                         : undefined
                     }
+                    onResendInvite={
+                      INVITE_RESENDABLE.has(p.status) && !resendInviteMutation.isPending
+                        ? () => resendInviteMutation.mutate(p.id)
+                        : undefined
+                    }
                     onRevoke={REVOKABLE.has(p.status) ? () => setRevokeTarget(p) : undefined}
                   />
                 ))}
@@ -380,10 +407,11 @@ interface PacketRowProps {
   packet: OnboardingPacket;
   onRetry?: () => void;
   onResend?: () => void;
+  onResendInvite?: () => void;
   onRevoke?: () => void;
 }
 
-function PacketRow({ packet, onRetry, onResend, onRevoke }: PacketRowProps) {
+function PacketRow({ packet, onRetry, onResend, onResendInvite, onRevoke }: PacketRowProps) {
   const emails = packet.emails ?? [];
   return (
     <li className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between">
@@ -413,7 +441,7 @@ function PacketRow({ packet, onRetry, onResend, onRevoke }: PacketRowProps) {
           </div>
         )}
       </div>
-      {(onRetry || onResend || onRevoke) && (
+      {(onRetry || onResend || onResendInvite || onRevoke) && (
         <div className="flex flex-shrink-0 flex-wrap items-center gap-1">
           {/* Retry comes first for a stuck/failed packet so the destructive
               Revoke is never the only (or primary) action offered — revoke
@@ -427,6 +455,17 @@ function PacketRow({ packet, onRetry, onResend, onRevoke }: PacketRowProps) {
               onClick={onRetry}
             >
               Retry
+            </Button>
+          )}
+          {onResendInvite && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              leftIcon={<EnvelopeIcon className="h-4 w-4" aria-hidden="true" />}
+              onClick={onResendInvite}
+            >
+              Resend invite
             </Button>
           )}
           {onResend && (

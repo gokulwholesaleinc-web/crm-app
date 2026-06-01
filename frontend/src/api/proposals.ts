@@ -76,10 +76,23 @@ export const sendProposal = async (proposalId: number): Promise<Proposal> => {
 };
 
 /**
- * Accept a proposal
+ * Accept a proposal (internal/admin offline-acceptance path).
+ *
+ * When the proposal has a placed signature box but no signature on file the
+ * backend refuses with 409 unless ``acknowledgeUnsigned`` is passed — the
+ * caller confirms an explicit offline acceptance without a signed document.
  */
-export const acceptProposal = async (proposalId: number): Promise<Proposal> => {
-  const response = await apiClient.post<Proposal>(`${PROPOSALS_BASE}/${proposalId}/accept`);
+export const acceptProposal = async (
+  proposalId: number,
+  acknowledgeUnsigned = false,
+): Promise<Proposal> => {
+  const response = await apiClient.post<Proposal>(
+    `${PROPOSALS_BASE}/${proposalId}/accept`,
+    undefined,
+    acknowledgeUnsigned
+      ? { params: { acknowledge_unsigned: true } }
+      : undefined,
+  );
   return response.data;
 };
 

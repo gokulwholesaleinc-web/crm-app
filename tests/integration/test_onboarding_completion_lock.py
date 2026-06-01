@@ -455,3 +455,126 @@ async def test_stale_lease_reclaim_fences_orphan(session_maker):
             )
         ).scalar()
         assert att_count == 1, f"orphan not fenced: {att_count} attachments"
+
+
+# --------------------------------------------------------------------------
+# (c) Selection unique-order constraint + mid-reorder collision-avoidance
+#     (Phase-3 §A) — SQLite can't enforce the UniqueConstraint, so prove the
+#     temp-offset two-pass reorder survives the real Postgres constraint.
+# --------------------------------------------------------------------------
+
+
+async def _seed_proposal_with_selections(session_maker, n: int):
+    """Seed a user, a proposal, and ``n`` selected templates (orders 0..n-1).
+
+    Returns ``(proposal_id, owner_id, [selection_id...in order])``.
+    """
+    from src.auth.models import User
+    from src.onboarding import storage
+    from src.onboarding.models import OnboardingTemplate
+    from src.onboarding.selection_service import SelectionService
+    from src.proposals.models import Proposal
+
+    async with session_maker() as db:
+        user = User(
+            email=f"sel-{uuid.uuid4().hex[:6]}@example.com",
+            hashed_password="x",
+            full_name="Owner",
+            is_active=True,
+        )
+        db.add(user)
+        await db.flush()
+
+        proposal = Proposal(
+            proposal_number=f"PR-PG-{uuid.uuid4().hex[:6]}",
+            title="PG Selection Proposal",
+            status="sent",
+            owner_id=user.id,
+            created_by_id=user.id,
+        )
+        db.add(proposal)
+        await db.flush()
+
+        template_ids = []
+        for _ in range(n):
+            key = f"onboarding_templates/seltest/{uuid.uuid4().hex}.pdf"
+            pdf_path = await storage.write(key, _one_page_pdf(), "application/pdf")
+            tmpl = OnboardingTemplate(
+                name=f"Sel Template {uuid.uuid4().hex[:4]}",
+                field_definitions=[],
+                requires_esign=False,
+                is_active=True,
+                pdf_path=pdf_path,
+            )
+            db.add(tmpl)
+            await db.flush()
+            template_ids.append(tmpl.id)
+
+        rows = await SelectionService(db).set_selections(
+            proposal.id, template_ids=template_ids, actor_id=user.id
+        )
+        await db.commit()
+        return proposal.id, user.id, [r.id for r in rows]
+
+
+@requires_postgres
+@pytest.mark.asyncio
+async def test_selection_unique_order_constraint_enforced(session_maker):
+    """Two rows on one proposal can't share a display_order (PG constraint)."""
+    from sqlalchemy.exc import IntegrityError
+
+    from src.onboarding.models import ProposalOnboardingSelection
+
+    proposal_id, _owner, _ids = await _seed_proposal_with_selections(
+        session_maker, 2
+    )
+    async with session_maker() as db:
+        rows = (
+            await db.execute(
+                select(ProposalOnboardingSelection)
+                .where(ProposalOnboardingSelection.proposal_id == proposal_id)
+                .order_by(ProposalOnboardingSelection.display_order)
+            )
+        ).scalars().all()
+        # Force a duplicate display_order → the UniqueConstraint must reject it.
+        rows[1].display_order = rows[0].display_order
+        with pytest.raises(IntegrityError):
+            await db.flush()
+
+
+@requires_postgres
+@pytest.mark.asyncio
+async def test_selection_reorder_survives_unique_order_constraint(session_maker):
+    """A full reversal reorder persists 0..N-1 under the real PG constraint.
+
+    The temp-offset two-pass must not trip uq_proposal_onboarding_selection_order
+    mid-reorder — a naive per-row UPDATE would.
+    """
+    from src.onboarding.models import ProposalOnboardingSelection
+    from src.onboarding.selection_service import SelectionService
+
+    proposal_id, owner_id, ordered_ids = await _seed_proposal_with_selections(
+        session_maker, 4
+    )
+    reversed_ids = list(reversed(ordered_ids))
+
+    async with session_maker() as db:
+        result = await SelectionService(db).reorder(
+            proposal_id, ordered_ids=reversed_ids, actor_id=owner_id
+        )
+        await db.commit()
+        assert [r.id for r in result] == reversed_ids
+
+    async with session_maker() as db:
+        persisted = (
+            await db.execute(
+                select(
+                    ProposalOnboardingSelection.id,
+                    ProposalOnboardingSelection.display_order,
+                )
+                .where(ProposalOnboardingSelection.proposal_id == proposal_id)
+                .order_by(ProposalOnboardingSelection.display_order)
+            )
+        ).all()
+        assert [row[1] for row in persisted] == [0, 1, 2, 3]
+        assert [row[0] for row in persisted] == reversed_ids

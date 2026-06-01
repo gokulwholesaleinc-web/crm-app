@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Upl
 from fastapi.responses import FileResponse, RedirectResponse, Response
 from sqlalchemy import select
 
+from src.activities.models import Activity
 from src.attachments.models import Attachment
 from src.attachments.schemas import AttachmentListResponse, AttachmentResponse
 from src.attachments.service import AttachmentService
@@ -42,6 +43,7 @@ from src.core.router_utils import (
     raise_not_found,
 )
 from src.events.service import PROPOSAL_ACCEPTED, PROPOSAL_REJECTED, PROPOSAL_SENT, emit
+from src.onboarding.trigger import create_packet_and_send
 from src.proposals.attachment_views import (
     ProposalAttachmentView,
     _hash_token,
@@ -1294,6 +1296,13 @@ async def accept_proposal_public(
     # proposal_signed notification + email is dispatched by ProposalService.accept_proposal_public
     # via notify_on_proposal_signed (matrix-gated). Don't double-fire from the router.
 
+    # Commit the accept (signature, consent snapshot, bundle sibling-rejections)
+    # BEFORE the best-effort Phase-3 trigger so a trigger failure can never roll
+    # it back, and a genuine commit failure surfaces (not swallowed). This is the
+    # public path's only accept-commit point (get_db's end-of-request commit runs
+    # AFTER the never-raises trigger, which may have rolled the session back).
+    await db.commit()
+
     # Sibling rejections in a bundle: emit PROPOSAL_REJECTED per option that
     # was flipped to rejected by _mark_bundle_accepted, so the owner's
     # notifications matrix + reporting reflect the full picture (not just
@@ -1326,6 +1335,13 @@ async def accept_proposal_public(
         or (proposal.contact.email if proposal.contact else None)
     )
     await _attach_public_signing_documents(db, response, proposal, token, branding_data)
+
+    # Phase-3 auto-send LAST (after the response is fully built + every proposal
+    # read): NEVER raises, kept OUTSIDE value_error_as_400 so a trigger issue
+    # can't masquerade as a 400. Running it here means its internal
+    # rollback-on-failure can't expire the object we just serialized.
+    # Unauthenticated signer → actor_id=None.
+    await create_packet_and_send(db, proposal=proposal, actor_id=None)
     return response
 
 
@@ -1956,11 +1972,33 @@ async def get_proposal_signature_image(
     )
 
 
+async def _proposal_has_unsigned_signature_target(
+    service: ProposalService, proposal: Proposal
+) -> bool:
+    """True iff the proposal expects a signature but none was captured (§E.1).
+
+    A signature target is a master-contract sig box, a master-contract PDF on
+    file, or any signing doc with its own sig box. ``signature_image is None``
+    means no signature was ever drawn. Pure read — no lock needed.
+    """
+    if proposal.signature_image is not None:
+        return False
+    if (
+        proposal.signature_field_coords is not None
+        or proposal.master_contract_pdf_path is not None
+    ):
+        return True
+    docs = await service.list_signing_documents(proposal.id)
+    return any(d.signature_field_coords is not None for d in docs)
+
+
 @router.post("/{proposal_id}/accept", response_model=ProposalResponse)
 async def accept_proposal(
     proposal_id: int,
     current_user: ProposalUpdateUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
+    acknowledge_unsigned: bool = Query(default=False),
 ):
     """Mark a proposal as accepted (internal/admin path).
 
@@ -1972,12 +2010,55 @@ async def accept_proposal(
     ``proposal_signed`` notification for parity. It does not create a
     proposal-side payment link; any new collection starts in the Payments
     module per the 2026-05-14 product decision.
+
+    Manual-confirmation guard (§E): if the proposal has a signature area but
+    no signature on file, the accept is refused with 409 unless the caller
+    re-submits with ``acknowledge_unsigned=true`` — recording an explicit
+    offline acceptance without a signed document.
     """
     service = ProposalService(db)
     proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
     check_ownership(proposal, current_user, EntityNames.PROPOSAL)
+
+    # E.2: pre-accept guard for an unsigned signature target.
+    needs_confirmation = await _proposal_has_unsigned_signature_target(
+        service, proposal
+    )
+    if needs_confirmation and not acknowledge_unsigned:
+        raise HTTPException(
+            status_code=HTTPStatus.CONFLICT,
+            detail=(
+                "This proposal has a signature area but no signature on file. "
+                "Accepting it now records an offline acceptance without a "
+                "signed document. Re-submit with acknowledgement to proceed."
+            ),
+        )
+
     with value_error_as_400():
         proposal = await service.mark_accepted(proposal)
+
+    # E.3: audit a confirmed unsigned accept (durable proposal Activity).
+    if needs_confirmation:
+        signer = current_user.full_name or current_user.email
+        db.add(
+            Activity(
+                activity_type="note",
+                subject="Proposal manually accepted without signature",
+                description=f"manually accepted without signature by {signer}",
+                entity_type="proposals",
+                entity_id=proposal.id,
+                is_completed=True,
+                completed_at=proposal.accepted_at,
+                owner_id=proposal.owner_id,
+                created_by_id=current_user.id,
+            )
+        )
+
+    # Commit the accept (+ the manual-accept audit) BEFORE the best-effort
+    # Phase-3 trigger so the trigger can never roll it back, and a genuine
+    # commit failure surfaces instead of being swallowed by the never-raises
+    # trigger.
+    await db.commit()
 
     if proposal.owner_id and proposal.owner_id != current_user.id:
         from src.notifications.service import notify_on_proposal_signed
@@ -2004,7 +2085,13 @@ async def accept_proposal(
         "data": {"proposal_number": proposal.proposal_number, "status": proposal.status},
     })
 
-    return ProposalResponse.model_validate(proposal)
+    response = ProposalResponse.model_validate(proposal)
+
+    # B: Phase-3 auto-send LAST — after every proposal read (notify/emit/response
+    # build) so the trigger's internal rollback-on-failure can't expire the
+    # serialized object (§E.4 / never-raises contract).
+    await create_packet_and_send(db, proposal=proposal, actor_id=current_user.id)
+    return response
 
 
 # Matches a trailing " (copy)" or " (copy N)" suffix. Used to collapse copy

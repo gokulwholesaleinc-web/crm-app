@@ -164,6 +164,11 @@ function PublicOnboardingView() {
   const [savingSig, setSavingSig] = useState(false);
   const [sigError, setSigError] = useState<string | null>(null);
 
+  // E-records consent — its own affirmative step BEFORE the signature (§D).
+  const [consentRecorded, setConsentRecorded] = useState(false);
+  const [recordingConsent, setRecordingConsent] = useState(false);
+  const [consentError, setConsentError] = useState<string | null>(null);
+
   // Submit / success state.
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -215,18 +220,30 @@ function PublicOnboardingView() {
   }, [packet?.branding?.logo_url]);
 
   // Seed local draft + version state whenever the post-gate documents arrive.
-  // ``field_values`` from the server is authoritative on (re)load; the local
-  // draft only diverges between saves.
+  // ``field_values`` from the server is authoritative on (re)load. A draft is
+  // seeded on first sight, AND re-adopted from the server when the server
+  // version moves past what we last seeded — that's the 409 path (someone else
+  // edited): a refetch must actually overwrite the now-stale local draft, not
+  // keep showing the user's stale values. ``seededVersions`` is a ref so a
+  // normal in-progress edit (no refetch → documents identity unchanged → this
+  // effect doesn't run) is never clobbered mid-typing.
   const documents = packet?.documents;
+  const seededVersionsRef = useRef<Record<number, number>>({});
   useEffect(() => {
     if (!documents) return;
     setDraftValues((prev) => {
       const next = { ...prev };
       for (const doc of documents) {
-        if (next[doc.id] === undefined) next[doc.id] = { ...doc.field_values };
+        const seeded = seededVersionsRef.current[doc.id];
+        if (next[doc.id] === undefined || seeded !== doc.field_values_version) {
+          next[doc.id] = { ...doc.field_values };
+        }
       }
       return next;
     });
+    for (const doc of documents) {
+      seededVersionsRef.current[doc.id] = doc.field_values_version;
+    }
     setDocVersions((prev) => {
       const next = { ...prev };
       for (const doc of documents) next[doc.id] = doc.field_values_version;
@@ -236,7 +253,8 @@ function PublicOnboardingView() {
       setSignatureVersion(packet.signature_version);
     }
     if (packet?.has_signature) setSignatureSaved(true);
-  }, [documents, packet?.signature_version, packet?.has_signature]);
+    if (packet?.has_consented) setConsentRecorded(true);
+  }, [documents, packet?.signature_version, packet?.has_signature, packet?.has_consented]);
 
   const brandingCompanyName = packet?.branding?.company_name;
   useEffect(() => {
@@ -421,6 +439,38 @@ function PublicOnboardingView() {
     }
   }, [token, signatureVersion, requestHeaders, fetchPacket]);
 
+  // --- E-records consent (POST /consent) ---------------------------------
+  // The affirmative consent step the signer makes BEFORE drawing a signature.
+  // Echoes the disclosure version the page rendered so a server-side version
+  // change (409) is surfaced rather than silently consenting to stale text.
+  const recordConsent = useCallback(async (): Promise<boolean> => {
+    if (!token || recordingConsent) return false;
+    setRecordingConsent(true);
+    setConsentError(null);
+    try {
+      await publicClient.post(
+        `/api/onboarding/public/${token}/consent`,
+        { disclosure_version: packet?.esign_disclosure_version ?? null },
+        { headers: requestHeaders() },
+      );
+      setConsentRecorded(true);
+      return true;
+    } catch (err) {
+      const status = errorStatus(err);
+      if (status === 409) {
+        setConsentError('This document was updated. We refreshed it — please review the disclosure and consent again.');
+        await fetchPacket();
+      } else if (status === 410) {
+        setLoadError('This onboarding link is no longer available. Please contact us for a new link.');
+      } else {
+        setConsentError(publicErrorMessage(err, 'We could not record your consent. Please try again.'));
+      }
+      return false;
+    } finally {
+      setRecordingConsent(false);
+    }
+  }, [token, recordingConsent, packet?.esign_disclosure_version, requestHeaders, fetchPacket]);
+
   // --- Submit (POST /complete) + completion poll -------------------------
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => {
@@ -525,7 +575,7 @@ function PublicOnboardingView() {
   const canSubmit =
     allDocsViewed &&
     missingRequired.length === 0 &&
-    (!requiresSignature || signatureSaved) &&
+    (!requiresSignature || (consentRecorded && signatureSaved)) &&
     !submitting;
 
   const goPrevDoc = async () => {
@@ -666,6 +716,10 @@ function PublicOnboardingView() {
             onSaveSignature={saveSignature}
             savingSig={savingSig}
             sigError={sigError}
+            consentRecorded={consentRecorded}
+            onRecordConsent={recordConsent}
+            recordingConsent={recordingConsent}
+            consentError={consentError}
             accent={accent}
             primary={primary}
             esignDisclosure={packet.esign_disclosure}
@@ -789,6 +843,10 @@ interface FillFlowProps {
   onSaveSignature: () => Promise<boolean>;
   savingSig: boolean;
   sigError: string | null;
+  consentRecorded: boolean;
+  onRecordConsent: () => Promise<boolean>;
+  recordingConsent: boolean;
+  consentError: string | null;
   accent: string;
   primary: string;
   esignDisclosure?: string | null;
@@ -822,6 +880,10 @@ function FillFlow({
   onSaveSignature,
   savingSig,
   sigError,
+  consentRecorded,
+  onRecordConsent,
+  recordingConsent,
+  consentError,
   accent,
   primary,
   esignDisclosure,
@@ -883,13 +945,45 @@ function FillFlow({
         </p>
       )}
 
+      {/* E-sign: consent FIRST (affirmative step), then the signature pad. */}
+      {onSignatureCard && !consentRecorded && (
+        <div className="mt-8 rounded-lg border border-gray-200 bg-white p-5">
+          <h2 className="text-base font-semibold text-gray-900 mb-2">
+            Before you sign: electronic records &amp; signatures
+          </h2>
+          <div className="mt-1 max-h-72 space-y-2 overflow-y-auto pr-1 text-[13px] leading-relaxed text-gray-600 text-pretty">
+            {(esignDisclosure ?? FALLBACK_ESIGN_DISCLOSURE).split('\n\n').map((para, i) => (
+              <p key={i}>{para}</p>
+            ))}
+          </div>
+          {consentError && (
+            <p role="alert" aria-live="polite" className="mt-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded px-3 py-2">
+              {consentError}
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={() => void onRecordConsent()}
+            disabled={recordingConsent || !isWritable}
+            className="mt-4 inline-flex items-center gap-2 rounded px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50 transition-opacity"
+            style={{ backgroundColor: accent, outlineColor: accent }}
+          >
+            {recordingConsent && <ArrowPathIcon className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />}
+            I consent to do business electronically
+          </button>
+        </div>
+      )}
+
       {/* Signature — drawn once on the last document, reused across all. */}
-      {onSignatureCard && (
+      {onSignatureCard && consentRecorded && (
         <div className="mt-8 rounded-lg border border-gray-200 bg-white p-5">
           <div className="flex items-center gap-2 mb-2">
             <PencilSquareIcon className="h-5 w-5 text-gray-500" aria-hidden="true" />
             <h2 className="text-base font-semibold text-gray-900">Your signature</h2>
           </div>
+          <p className="mb-3 inline-flex items-center gap-1 text-xs text-green-700" role="status">
+            <CheckIcon className="h-4 w-4" aria-hidden="true" /> Electronic-records consent recorded
+          </p>
           <p className="text-sm text-gray-600 mb-4 text-pretty">
             Draw your signature once below. It will be applied to every document that requires a signature.
           </p>
@@ -988,7 +1082,12 @@ function FillFlow({
               </ul>
             </div>
           )}
-          {requiresSignature && !signatureSaved && (
+          {requiresSignature && !consentRecorded && (
+            <p role="status" className="mb-4 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+              Please review and accept the electronic-records consent above before submitting.
+            </p>
+          )}
+          {requiresSignature && consentRecorded && !signatureSaved && (
             <p role="status" className="mb-4 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2">
               Please draw and save your signature above before submitting.
             </p>

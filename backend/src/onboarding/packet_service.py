@@ -396,6 +396,39 @@ class PacketService:
         await self.db.flush()
         return packet
 
+    # Statuses for which a staff "resend invite" is allowed (§5.1). A live
+    # packet just re-mints the link; an ``expired`` one restarts fresh.
+    RESEND_ALLOWED = WRITABLE_STATUSES + ("expired",)
+
+    async def resend_invite(
+        self, packet: OnboardingPacket, *, actor_id: int | None
+    ) -> str:
+        """Mint a FRESH access token + reset expiry; return the raw token.
+
+        Allowed for ``active | opened | in_progress | expired``; refused for
+        ``completed | revoked | completing | abandoned`` (409 → staff should
+        retry/resend completion instead). An ``expired`` packet flips back to
+        ``active`` (its old token was scrubbed by the list-time sweep). The
+        old token's verify throttle is reset (like ``revoke_packet``). Flushes
+        only — the route/caller COMMITS before queuing the invite e-mail
+        (``queue_email`` may send synchronously), so the new token is durable
+        before its link is sent.
+        """
+        if packet.status not in self.RESEND_ALLOWED:
+            raise PacketRaceError(
+                f"Packet is {packet.status}; the onboarding invite can't be resent."
+            )
+        old_hash = packet.token_hash
+        raw_token = tokens.mint_token()
+        packet.token_hash = tokens.hash_token(raw_token)
+        packet.token_expires_at = _now() + ACCESS_TOKEN_TTL
+        if packet.status == "expired":
+            packet.status = "active"
+        packet.updated_by_id = actor_id
+        tokens.reset_throttle(old_hash)
+        await self.db.flush()
+        return raw_token
+
     async def purge_pii(self, packet: OnboardingPacket) -> OnboardingPacket:
         """Staff manual scrub — null values + signature, status unchanged."""
         documents = await self.load_documents(packet.id)
@@ -478,6 +511,49 @@ class PacketService:
                 raise PacketValidationError(f"Field '{fid}' has an invalid value")
             if isinstance(val, str) and len(val.encode("utf-8")) > MAX_TEXT_VALUE_BYTES:
                 raise PacketValidationError(f"Field '{fid}' value is too long")
+
+    async def record_consent(
+        self,
+        packet: OnboardingPacket,
+        *,
+        disclosure_version: str | None = None,
+    ) -> int:
+        """Record electronic-records consent per e-sign document (§D.1).
+
+        Affirmative consent step, distinct from the signature: sets
+        ``consented_at = now()`` on every ``requires_esign`` doc whose
+        ``consented_at`` is still NULL. Idempotent (already-consented docs are
+        left untouched). Returns the number of docs newly consented (0 if all
+        were already consented or there are no e-sign docs).
+
+        Belt-and-suspenders version echo: the served disclosure text + version
+        are snapshotted at create time and never change, so if the client
+        echoes ``disclosure_version`` it MUST equal the stored snapshot version
+        — a mismatch means the client saw stale text (e.g. across a re-send),
+        which is a 409 (``PacketRaceError``) rather than recording consent to
+        text the signer didn't actually see.
+        """
+        self._assert_public_writable(packet)
+        docs = await self.load_documents(packet.id)
+        esign_docs = [d for d in docs if d.requires_esign]
+        if disclosure_version is not None:
+            for doc in esign_docs:
+                if (
+                    doc.esign_disclosure_version is not None
+                    and doc.esign_disclosure_version != disclosure_version
+                ):
+                    raise PacketRaceError(
+                        "The consent disclosure changed since you loaded it; "
+                        "reload and review it again."
+                    )
+        now = _now()
+        consented = 0
+        for doc in esign_docs:
+            if doc.consented_at is None:
+                doc.consented_at = now
+                consented += 1
+        await self.db.flush()
+        return consented
 
     async def set_signature(
         self,

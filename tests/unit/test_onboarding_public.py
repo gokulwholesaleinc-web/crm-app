@@ -362,6 +362,34 @@ async def test_signature_rejects_non_png(client, db_session, test_contact):
         await cleanup_packet_storage(db_session, service, packet.id)
 
 
+async def test_signature_corrupt_png_rejected_422(client, db_session, test_contact):
+    """A PNG with VALID magic bytes but an undecodable body is a clean 422 at
+    /signature — not a 500 later when the stamper hands it to ImageReader."""
+    import base64
+
+    service, packet, raw = await _make_packet(
+        db_session,
+        test_contact.id,
+        requires_esign=True,
+        field_definitions=[signature_field()],
+    )
+    try:
+        headers = await _session_headers(client, raw)
+        # Real PNG magic + garbage body (no IHDR) → passes the magic gate but
+        # fails the ImageReader decode.
+        corrupt = base64.b64encode(
+            b"\x89PNG\r\n\x1a\nnot-a-real-png-body"
+        ).decode("ascii")
+        resp = await client.post(
+            f"/api/onboarding/public/{raw}/signature",
+            headers=headers,
+            json={"signature_png_base64": corrupt, "base_signature_version": 0},
+        )
+        assert resp.status_code == 422
+    finally:
+        await cleanup_packet_storage(db_session, service, packet.id)
+
+
 # --------------------------------------------------------------------------
 # Abuse caps — the body cap helper + signature decoder are pure (the ASGI
 # client always sets Content-Length, so the 411/413 caps are unit-tested on
@@ -553,6 +581,12 @@ async def test_full_happy_path_complete_and_download(
             json={"signature_png_base64": _b64png(), "base_signature_version": 0},
         )
         assert sig.status_code == 200
+
+        # Record e-records consent (Phase-3 mandatory step before /complete).
+        consent = await client.post(
+            f"/api/onboarding/public/{raw}/consent", headers=headers, json={}
+        )
+        assert consent.status_code == 200, consent.text
 
         # Open (view) the document — satisfies read-before-sign.
         view = await client.get(

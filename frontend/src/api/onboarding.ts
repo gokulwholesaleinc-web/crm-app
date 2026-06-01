@@ -16,6 +16,7 @@ import type {
   OnboardingPacket,
   OnboardingPacketDetail,
   OnboardingPacketCreate,
+  OnboardingProposalSelection,
 } from '../types';
 
 const ONBOARDING_BASE = '/api/onboarding/templates';
@@ -199,4 +200,79 @@ export const resendOnboardingCompletionNotice = async (
     `${PACKETS_BASE}/${packetId}/resend-completion-notice`,
   );
   return response.data;
+};
+
+/**
+ * Re-mint a fresh access token + re-queue the *invite* for a still-live (or
+ * expired) packet — distinct from {@link resendOnboardingCompletionNotice},
+ * which re-sends the post-completion download notice. The original raw link
+ * is unrecoverable, so this is how staff hand a client a working link again.
+ * 409 for terminal states (completed/revoked/completing/abandoned). Returns
+ * the refreshed packet (no raw token is ever echoed back to staff).
+ */
+export const resendOnboardingPacketInvite = async (
+  packetId: number,
+): Promise<OnboardingPacket> => {
+  const response = await apiClient.post<OnboardingPacket>(
+    `${PACKETS_BASE}/${packetId}/resend`,
+  );
+  return response.data;
+};
+
+// ---------------------------------------------------------------------------
+// Phase 3 — proposal → onboarding-template selections (staff curation)
+// ---------------------------------------------------------------------------
+
+const proposalSelectionsBase = (proposalId: number): string =>
+  `/api/onboarding/proposals/${proposalId}/selections`;
+
+/** List a proposal's onboarding-template selections, ordered by display_order. */
+export const listProposalOnboardingSelections = async (
+  proposalId: number,
+): Promise<OnboardingProposalSelection[]> => {
+  const response = await apiClient.get<OnboardingProposalSelection[]>(
+    proposalSelectionsBase(proposalId),
+  );
+  return response.data;
+};
+
+/**
+ * Replace the whole ordered selection list for a proposal. ``templateIds`` is
+ * the full desired set in display order; a retired or PDF-less template is a
+ * 422 (surface the detail to the user).
+ */
+export const setProposalOnboardingSelections = async (
+  proposalId: number,
+  templateIds: number[],
+): Promise<OnboardingProposalSelection[]> => {
+  const response = await apiClient.put<OnboardingProposalSelection[]>(
+    proposalSelectionsBase(proposalId),
+    { template_ids: templateIds },
+  );
+  return response.data;
+};
+
+/**
+ * Reorder a proposal's selections by a permutation of their *selection* ids
+ * (not template ids). Returns the re-ordered list.
+ */
+export const reorderProposalOnboardingSelections = async (
+  proposalId: number,
+  orderedIds: number[],
+): Promise<OnboardingProposalSelection[]> => {
+  const response = await apiClient.post<OnboardingProposalSelection[]>(
+    `${proposalSelectionsBase(proposalId)}/reorder`,
+    { ordered_ids: orderedIds },
+  );
+  return response.data;
+};
+
+/** Remove one onboarding-template selection from a proposal (204). */
+export const removeProposalOnboardingSelection = async (
+  proposalId: number,
+  selectionId: number,
+): Promise<void> => {
+  await apiClient.delete(
+    `${proposalSelectionsBase(proposalId)}/${selectionId}`,
+  );
 };

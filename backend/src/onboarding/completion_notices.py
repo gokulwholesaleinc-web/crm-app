@@ -26,6 +26,24 @@ from src.onboarding.packet_service import DOWNLOAD_TOKEN_TTL, _now
 
 logger = logging.getLogger(__name__)
 
+# Stable, distinct invite subject (no ``purpose`` column — the subject is the
+# mail-type discriminator for the idempotency predicate AND the staff delivery
+# list). Deliberately different from the completion-notice subject ("Your
+# onboarding documents are ready") so the two never collide.
+INVITE_SUBJECT = "Action needed: complete your onboarding"
+
+# Client "your signed documents are ready" notice — shared by the automatic
+# post-completion send and the staff resend so the subject/body stay identical.
+CLIENT_READY_SUBJECT = "Your onboarding documents are ready"
+
+
+def _client_ready_body(client_link: str) -> str:
+    return (
+        "Thank you for completing your onboarding. You can download your "
+        f"signed documents here:\n\n{client_link}\n\n"
+        "This link expires in 7 days."
+    )
+
 
 def _download_url(raw_download: str | None) -> str | None:
     """In-session download URL carrying the freshly minted raw download token.
@@ -73,12 +91,8 @@ async def _post_commit_notices(
             db,
             packet_id=packet.id,
             to_email=packet.recipient_email,
-            subject="Your onboarding documents are ready",
-            body=(
-                "Thank you for completing your onboarding. You can download "
-                f"your signed documents here:\n\n{client_link}\n\n"
-                "This link expires in 7 days."
-            ),
+            subject=CLIENT_READY_SUBJECT,
+            body=_client_ready_body(client_link),
         )
 
     # Owner notice (the staff member who created the packet).
@@ -113,17 +127,24 @@ async def _post_commit_notices(
 
 
 async def _completion_email_exists(
-    db: AsyncSession, packet_id: int, to_email: str
+    db: AsyncSession,
+    packet_id: int,
+    to_email: str,
+    *,
+    subject: str | None = None,
 ) -> bool:
     """True iff a non-failed onboarding e-mail already exists for (packet, to).
 
-    The idempotency key shared by both the completion notices and the staff
-    resend — owner vs client is distinguished by ``to_email`` (no ``purpose``
-    column); a previously-``failed`` row does NOT suppress a needed re-send.
+    The idempotency key shared by the completion notices, the staff resend,
+    and the Phase-3 invite. Owner vs client is distinguished by ``to_email``
+    (no ``purpose`` column); the invite (which shares ``to_email`` with the
+    completion notice) is distinguished by ``subject`` — pass ``subject`` to
+    narrow the predicate to that mail type. A previously-``failed`` row does
+    NOT suppress a needed re-send.
     """
     from src.email.models import EmailQueue
 
-    existing = await db.execute(
+    query = (
         select(EmailQueue.id)
         .where(EmailQueue.entity_type == "onboarding_packets")
         .where(EmailQueue.entity_id == packet_id)
@@ -131,6 +152,9 @@ async def _completion_email_exists(
         .where(EmailQueue.status != "failed")
         .limit(1)
     )
+    if subject is not None:
+        query = query.where(EmailQueue.subject == subject)
+    existing = await db.execute(query)
     return existing.scalar_one_or_none() is not None
 
 
@@ -143,8 +167,11 @@ async def _queue_once(
     subject: str,
     body: str,
 ) -> None:
-    """Queue an e-mail unless a non-failed one already exists for (packet, to)."""
-    if await _completion_email_exists(db, packet_id, to_email):
+    """Queue an e-mail unless a non-failed one already exists for (packet, to,
+    subject). Keying on ``subject`` is essential: a Phase-3 INVITE shares the
+    recipient with the completion notice, so a subject-blind check would let the
+    earlier invite suppress the (genuinely needed) completion e-mail."""
+    if await _completion_email_exists(db, packet_id, to_email, subject=subject):
         return
     await email_service.queue_email(
         to_email=to_email,
@@ -153,6 +180,44 @@ async def _queue_once(
         entity_type="onboarding_packets",
         entity_id=packet_id,
     )
+
+
+async def queue_invite(
+    db: AsyncSession,
+    *,
+    packet: OnboardingPacket,
+    raw_access_token: str,
+    suppress_if_exists: bool = True,
+) -> bool:
+    """Queue the onboarding INVITE e-mail carrying the access link.
+
+    The raw access token is available only at create/resend time (only its
+    hash is stored), so this is its one egress — mirrors ``access_url`` in
+    ``packet_view.py``. Idempotent on (packet, recipient, INVITE_SUBJECT) when
+    ``suppress_if_exists`` (the auto-send path): a non-failed invite row
+    suppresses a duplicate. A staff resend passes ``suppress_if_exists=False``
+    (deliberate action, like ``resend_completion_notices``). Returns True iff
+    an e-mail was actually queued.
+    """
+    if suppress_if_exists and await _completion_email_exists(
+        db, packet.id, packet.recipient_email, subject=INVITE_SUBJECT
+    ):
+        return False
+    base_url = settings.FRONTEND_BASE_URL or "http://localhost:3000"
+    access_link = f"{base_url}/onboarding/{raw_access_token}"
+    await EmailService(db).queue_email(
+        to_email=packet.recipient_email,
+        subject=INVITE_SUBJECT,
+        body=(
+            "You have onboarding documents to review and complete. Open the "
+            f"secure link below to get started:\n\n{access_link}\n\n"
+            "You'll be asked to verify your email before you can fill them in. "
+            "This link expires in 30 days."
+        ),
+        entity_type="onboarding_packets",
+        entity_id=packet.id,
+    )
+    return True
 
 
 async def _owner_email(db: AsyncSession, packet: OnboardingPacket) -> str | None:
@@ -213,10 +278,8 @@ def _resend_targets(
     targets = [
         (
             packet.recipient_email,
-            "Your onboarding documents are ready",
-            "Thank you for completing your onboarding. You can download your "
-            f"signed documents here:\n\n{client_link}\n\n"
-            "This link expires in 7 days.",
+            CLIENT_READY_SUBJECT,
+            _client_ready_body(client_link),
         )
     ]
     if owner_email:
