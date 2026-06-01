@@ -14,6 +14,10 @@ import { ErrorBoundary } from '../components/ErrorBoundary';
 const LoginPage = lazy(() => import('../features/auth/LoginPage'));
 const GoogleAuthCallbackPage = lazy(() => import('../features/auth/GoogleAuthCallbackPage'));
 
+// Public legal pages (no auth — linked from the OAuth consent screen)
+const PrivacyPolicyPage = lazy(() => import('../features/legal/PrivacyPolicyPage'));
+const TermsOfServicePage = lazy(() => import('../features/legal/TermsOfServicePage'));
+
 // Dashboard
 const DashboardPage = lazy(() => import('../features/dashboard/DashboardPage'));
 
@@ -93,6 +97,8 @@ function AppRoutes() {
       {/* Public routes */}
       <Route path="/login" element={<LoginPage />} />
       <Route path="/auth/google/callback" element={<GoogleAuthCallbackPage />} />
+      <Route path="/privacy" element={<PrivacyPolicyPage />} />
+      <Route path="/terms" element={<TermsOfServicePage />} />
       <Route path="/proposals/public/:token" element={<PublicProposalView />} />
       {/* /quotes/public/:quoteNumber route removed 2026-05-14 */}
       {/* /contracts/sign/:token route removed 2026-05-14 — contracts retired */}

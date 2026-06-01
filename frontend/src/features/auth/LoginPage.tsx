@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import clsx from 'clsx';
+import { Link } from 'react-router-dom';
 import { useTenant } from '../../providers/TenantProvider';
 import { safeStorage } from '../../utils/safeStorage';
 import GoogleSignInButton from './GoogleSignInButton';
@@ -75,6 +76,16 @@ function LoginPage() {
         )}
 
         <GoogleSignInButton onError={setError} />
+
+        <p className="text-center text-xs text-gray-500 dark:text-gray-400">
+          <Link className="hover:underline focus-visible:underline" to="/privacy">
+            Privacy Policy
+          </Link>
+          <span className="mx-2" aria-hidden="true">·</span>
+          <Link className="hover:underline focus-visible:underline" to="/terms">
+            Terms of Service
+          </Link>
+        </p>
       </div>
     </div>
   );
