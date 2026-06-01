@@ -16,7 +16,7 @@ from sqlalchemy import select
 from src.contacts.models import Contact
 from src.onboarding import storage, tokens
 from src.onboarding.models import OnboardingPacket, OnboardingPacketDocument
-from src.onboarding.packet_errors import PacketRaceError
+from src.onboarding.packet_errors import PacketRaceError, PacketValidationError
 from src.onboarding.packet_service import PacketService
 
 from ._onboarding_helpers import (
@@ -320,3 +320,120 @@ async def test_revoke_route_scrubs_via_api(
     )
     assert resp2.status_code == 409
     await cleanup_packet_storage(db_session, service, packet.id)
+
+
+# --------------------------------------------------------------------------
+# e-sign ⇄ signature-field invariant (both directions) at packet creation
+# --------------------------------------------------------------------------
+
+
+async def test_create_packet_esign_override_without_signature_field_rejected(
+    db_session, test_contact
+):
+    """requires_esign_override=True on a sig-less template is a 422.
+
+    Forcing e-sign without a signature field would make the signer consent +
+    draw a PNG the stamper draws nowhere → a consented PDF with no visible
+    signature. Fail closed at create time instead.
+    """
+    template = await make_template(
+        db_session,
+        field_definitions=[text_field("full_name")],
+        requires_esign=False,
+    )
+    service = PacketService(db_session)
+    with pytest.raises(PacketValidationError):
+        await service.create_packet(
+            created_by_id=None,
+            contact_id=test_contact.id,
+            recipient_email="client@example.com",
+            template_ids=[template.id],
+            requires_esign_override=True,
+        )
+
+
+async def test_create_packet_signature_field_without_esign_rejected(
+    db_session, test_contact
+):
+    """A signature field on a non-e-sign template is a 422.
+
+    The fill page only shows the signature pad for e-sign docs, so completion
+    (which requires a signature whenever a signature field exists) could never
+    be satisfied → a permanently uncompletable packet. Reject at create time.
+    """
+    template = await make_template(
+        db_session,
+        field_definitions=[text_field("full_name"), signature_field()],
+        requires_esign=False,
+    )
+    service = PacketService(db_session)
+    with pytest.raises(PacketValidationError):
+        await service.create_packet(
+            created_by_id=None,
+            contact_id=test_contact.id,
+            recipient_email="client@example.com",
+            template_ids=[template.id],
+        )
+
+
+async def test_create_packet_esign_with_signature_field_succeeds(
+    db_session, test_contact
+):
+    """The consistent case (e-sign + a signature field) still creates fine."""
+    template = await make_template(
+        db_session,
+        field_definitions=[text_field("full_name"), signature_field()],
+        requires_esign=True,
+    )
+    service = PacketService(db_session)
+    packet, _ = await service.create_packet(
+        created_by_id=None,
+        contact_id=test_contact.id,
+        recipient_email="client@example.com",
+        template_ids=[template.id],
+    )
+    try:
+        doc = (await service.load_documents(packet.id))[0]
+        assert doc.requires_esign is True
+    finally:
+        await cleanup_packet_storage(db_session, service, packet.id)
+
+
+# --------------------------------------------------------------------------
+# Staff create: unrelated company/proposal links are access-checked
+# --------------------------------------------------------------------------
+
+
+async def test_create_packet_unscoped_company_403(
+    client, db_session, test_contact, auth_headers, test_admin_user
+):
+    """A scoped caller can't attach a company owned by someone else.
+
+    Without the company access check, the unrelated company's name would leak
+    to the recipient (disclosure / prefill / public response) and create a
+    wrong association. (test_contact is owned by the caller, so the contact
+    check passes — only the company link is unscoped.)
+    """
+    from src.companies.models import Company
+
+    other_company = Company(
+        name="Unrelated Co",
+        owner_id=test_admin_user.id,
+        created_by_id=test_admin_user.id,
+    )
+    db_session.add(other_company)
+    await db_session.commit()
+    template = await make_template(db_session)
+    await db_session.commit()
+
+    resp = await client.post(
+        "/api/onboarding/packets",
+        headers=auth_headers,
+        json={
+            "contact_id": test_contact.id,
+            "recipient_email": "client@example.com",
+            "template_ids": [template.id],
+            "company_id": other_company.id,
+        },
+    )
+    assert resp.status_code == 403

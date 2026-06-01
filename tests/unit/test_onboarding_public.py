@@ -321,6 +321,26 @@ async def test_signature_version_drift_409(client, db_session, test_contact):
         await cleanup_packet_storage(db_session, service, packet.id)
 
 
+async def test_patch_non_string_value_rejected_422(client, db_session, test_contact):
+    """A non-string field value (bool/number) is rejected 422.
+
+    The wire contract is ``Record<string, string>``; a stored scalar would
+    round-trip to the public page and crash its ``.trim()`` / controlled input.
+    """
+    service, packet, raw = await _make_packet(db_session, test_contact.id)
+    try:
+        headers = await _session_headers(client, raw)
+        doc = (await service.load_documents(packet.id))[0]
+        resp = await client.patch(
+            f"/api/onboarding/public/{raw}/documents/{doc.id}",
+            headers=headers,
+            json={"field_values": {"full_name": True}, "base_version": 0},
+        )
+        assert resp.status_code == 422
+    finally:
+        await cleanup_packet_storage(db_session, service, packet.id)
+
+
 async def test_signature_rejects_non_png(client, db_session, test_contact):
     """A non-PNG signature payload is rejected (422, PNG-magic gate)."""
     import base64
@@ -388,6 +408,62 @@ def test_within_cap_content_length_passes():
     from src.onboarding.public_helpers import assert_body_within_caps
 
     assert_body_within_caps(_request_with_headers({"content-length": "100"}))
+
+
+def _request_with_body(body: bytes, headers: dict) -> "Request":
+    """A minimal Starlette Request that yields ``body`` from its receive channel."""
+    from starlette.requests import Request
+
+    raw = [(k.lower().encode(), v.encode()) for k, v in headers.items()]
+
+    async def receive():
+        return {"type": "http.request", "body": body, "more_body": False}
+
+    return Request(
+        {"type": "http", "method": "POST", "headers": raw}, receive=receive
+    )
+
+
+async def test_parse_body_within_caps_rejects_lying_content_length_413():
+    """A SMALL Content-Length but a LARGE actual body is still capped — proving
+    the cap precedes the JSON parse (the header check alone can't catch a lie)."""
+    from fastapi import HTTPException
+
+    from src.core.constants import HTTPStatus
+    from src.onboarding.packet_schemas import DocumentPatch
+    from src.onboarding.public_helpers import MAX_BODY_BYTES, parse_body_within_caps
+
+    big = b'{"field_values":{},"base_version":0}' + b" " * (MAX_BODY_BYTES + 1)
+    req = _request_with_body(big, {"content-length": "50"})  # lying header
+    with pytest.raises(HTTPException) as exc:
+        await parse_body_within_caps(req, DocumentPatch)
+    assert exc.value.status_code == HTTPStatus.PAYLOAD_TOO_LARGE  # 413
+
+
+async def test_parse_body_within_caps_rejects_malformed_422():
+    """A non-JSON / schema-invalid body is a 422, never an opaque 500."""
+    from fastapi import HTTPException
+
+    from src.core.constants import HTTPStatus
+    from src.onboarding.packet_schemas import DocumentPatch
+    from src.onboarding.public_helpers import parse_body_within_caps
+
+    req = _request_with_body(b"not json", {"content-length": "8"})
+    with pytest.raises(HTTPException) as exc:
+        await parse_body_within_caps(req, DocumentPatch)
+    assert exc.value.status_code == HTTPStatus.UNPROCESSABLE_ENTITY  # 422
+
+
+async def test_parse_body_within_caps_returns_validated_model():
+    """A valid in-cap body parses into the model."""
+    from src.onboarding.packet_schemas import DocumentPatch
+    from src.onboarding.public_helpers import parse_body_within_caps
+
+    body = b'{"field_values":{"a":"b"},"base_version":3}'
+    req = _request_with_body(body, {"content-length": str(len(body))})
+    data = await parse_body_within_caps(req, DocumentPatch)
+    assert data.base_version == 3
+    assert data.field_values == {"a": "b"}
 
 
 def test_signature_over_200kb_rejected():
@@ -529,5 +605,101 @@ async def test_full_happy_path_complete_and_download(
         assert RECIPIENT in recipients
         assert test_user.email in recipients
         assert len(rows) == 2
+    finally:
+        await cleanup_packet_storage(db_session, service, packet.id)
+
+
+# --------------------------------------------------------------------------
+# Phase-A content validation: overflow fails as a signer-fixable 422
+# --------------------------------------------------------------------------
+
+
+async def test_complete_overflow_value_is_422_not_completion_failed(
+    client, db_session, test_contact
+):
+    """A value that fits the 4 KB cap but overflows its stamp box fails as a
+    422 in Phase A (status unchanged) — NOT stranded in ``completion_failed``
+    after Phase B."""
+    service, packet, raw = await _make_packet(db_session, test_contact.id)
+    try:
+        headers = await _session_headers(client, raw)
+        doc = (await service.load_documents(packet.id))[0]
+        # Under 4 KB, but far wider than the 300 pt text box → stamp overflow.
+        long_value = "X" * 500
+        patched = await client.patch(
+            f"/api/onboarding/public/{raw}/documents/{doc.id}",
+            headers=headers,
+            json={"field_values": {"full_name": long_value}, "base_version": 0},
+        )
+        assert patched.status_code == 200
+        # Satisfy read-before-sign.
+        await client.get(
+            f"/api/onboarding/public/{raw}/documents/{doc.id}/pdf", headers=headers
+        )
+        resp = await client.post(
+            f"/api/onboarding/public/{raw}/complete", headers=headers
+        )
+        assert resp.status_code == 422, resp.text
+        # NOT stranded: the packet never flipped to completing/failed/completed.
+        await db_session.refresh(packet)
+        assert packet.status not in ("completing", "completion_failed", "completed")
+    finally:
+        await cleanup_packet_storage(db_session, service, packet.id)
+
+
+# --------------------------------------------------------------------------
+# Public response contract: branding object + has_signature + no-store
+# --------------------------------------------------------------------------
+
+
+async def test_public_get_includes_branding_has_signature_and_no_store(
+    client, db_session, test_contact, test_tenant_settings
+):
+    """Post-gate GET carries the tenant branding object + has_signature, and the
+    PII-bearing payload sets Cache-Control: no-store."""
+    service, packet, raw = await _make_packet(
+        db_session,
+        test_contact.id,
+        requires_esign=True,
+        field_definitions=[text_field("full_name"), signature_field()],
+    )
+    try:
+        headers = await _session_headers(client, raw)
+        resp = await client.get(f"/api/onboarding/public/{raw}", headers=headers)
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert resp.headers["cache-control"] == "no-store"
+        assert body["branding"] is not None
+        assert body["branding"]["company_name"] == test_tenant_settings.company_name
+        assert body["branding"]["primary_color"] == test_tenant_settings.primary_color
+        # Before any signature is drawn.
+        assert body["has_signature"] is False
+
+        # Draw a signature; has_signature flips True on the next load so a
+        # returning signer doesn't have to redraw.
+        sig = await client.post(
+            f"/api/onboarding/public/{raw}/signature",
+            headers=headers,
+            json={"signature_png_base64": _b64png(), "base_signature_version": 0},
+        )
+        assert sig.status_code == 200
+        resp2 = await client.get(f"/api/onboarding/public/{raw}", headers=headers)
+        assert resp2.json()["has_signature"] is True
+    finally:
+        await cleanup_packet_storage(db_session, service, packet.id)
+
+
+async def test_source_pdf_has_no_store(client, db_session, test_contact):
+    """The session-gated source PDF response sets Cache-Control: no-store."""
+    service, packet, raw = await _make_packet(db_session, test_contact.id)
+    try:
+        headers = await _session_headers(client, raw)
+        doc = (await service.load_documents(packet.id))[0]
+        resp = await client.get(
+            f"/api/onboarding/public/{raw}/documents/{doc.id}/pdf", headers=headers
+        )
+        assert resp.status_code == 200
+        assert resp.headers["cache-control"] == "no-store"
+        assert resp.headers["referrer-policy"] == "no-referrer"
     finally:
         await cleanup_packet_storage(db_session, service, packet.id)

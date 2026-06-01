@@ -3,8 +3,8 @@
 Covers lazy expiry (writable packet past its TTL → scrub values + signature
 and the public gateway 410s), the interim list-time sweep aging
 ``completion_failed`` → ``abandoned`` past the 7-day window, the
-abandoned-state 410, and resend-completion-notice idempotency (a 2nd call adds
-NO duplicate EmailQueue row). E-mail is asserted as queued rows, never sent.
+abandoned-state 410, and resend-completion-notice (which re-mints a FRESH,
+working download link each call). E-mail is asserted as queued rows, never sent.
 
 These tests drive the scrub LOGIC by setting past timestamps on the live ORM
 object (so the sweep's comparison runs). The naive-vs-aware datetime handling
@@ -15,7 +15,7 @@ test_onboarding_packets.py (a regression guard for the ``_ensure_aware`` fix).
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import select
 
 from src.email.models import EmailQueue
 from src.onboarding import completion, storage, tokens
@@ -65,6 +65,14 @@ async def test_lazy_expiry_scrubs_and_410s(db_session, test_contact):
 
     Exercises the public gateway resolver directly (same session, no ASGI
     boundary) so the scrub side effect is observable on the live objects.
+
+    Durability guard (§12): the resolver COMMITS the flip + scrub before
+    raising the 410, so the side effect survives. ``get_db`` only commits a
+    request on SUCCESS — an HTTPException (neither OSError nor SQLAlchemyError)
+    skips that commit and the ``finally: close()`` would roll a mere ``flush()``
+    back, recomputing (and re-discarding) the scrub on every hit. After a real
+    ``commit()`` the session is no longer mid-transaction, which is what we
+    assert below (a ``flush()`` would leave it open).
     """
     from fastapi import HTTPException
 
@@ -80,6 +88,11 @@ async def test_lazy_expiry_scrubs_and_410s(db_session, test_contact):
         with pytest.raises(HTTPException) as exc_info:
             await load_packet_for_public(db_session, raw)
         assert exc_info.value.status_code == HTTPStatus.GONE  # 410
+
+        # The flip + scrub were COMMITTED (durable), not merely flushed: the
+        # session is no longer in a transaction. (expire_on_commit=False on the
+        # test session keeps the in-memory attrs readable below without a query.)
+        assert not db_session.in_transaction()
 
         # The packet was flipped to expired + scrubbed in place.
         assert packet.status == "expired"
@@ -177,19 +190,28 @@ async def test_retry_completion_refused_when_abandoned(db_session, test_contact)
 
 
 # --------------------------------------------------------------------------
-# resend-completion-notice idempotency
+# resend-completion-notice — re-mints a working download link
 # --------------------------------------------------------------------------
 
 
-async def test_resend_completion_notice_is_idempotent(
+async def test_resend_completion_notice_remints_working_link(
     db_session, test_contact, test_user
 ):
-    """A 2nd resend adds NO duplicate EmailQueue row for the same recipient."""
+    """Resend mints a FRESH download token + e-mails a real, resolvable link.
+
+    The raw download token from completion is unrecoverable (only its hash is
+    stored), so resend rotates it and embeds the new ``/onboarding/complete/
+    <token>`` link rather than the old linkless "contact us" body. The emailed
+    link must hash to the packet's stored ``download_token_hash`` (i.e. it
+    actually works). Resend is a deliberate staff re-delivery, so a 2nd call
+    rotates the token again and re-queues (it is not suppressed).
+    """
+    import re
+
     service, packet, raw = await _packet(
         db_session, test_contact.id, created_by_id=test_user.id
     )
     try:
-        # Mark completed so resend is meaningful.
         packet.status = "completed"
         packet.completed_at = datetime.now(UTC)
         await db_session.commit()
@@ -200,26 +222,33 @@ async def test_resend_completion_notice_is_idempotent(
         assert RECIPIENT in first
         assert test_user.email in first
 
-        count_after_first = await db_session.execute(
-            select(func.count())
-            .select_from(EmailQueue)
-            .where(EmailQueue.entity_type == "onboarding_packets")
-            .where(EmailQueue.entity_id == packet.id)
-        )
-        n1 = count_after_first.scalar()
+        await db_session.refresh(packet)
+        token_after_first = packet.download_token_hash
+        assert token_after_first  # a real download token was minted
+        assert packet.download_token_expires_at is not None
 
-        # Second resend must be a no-op (rows already exist, non-failed).
+        # The client e-mail carries a working /onboarding/complete/<token> link
+        # whose raw token hashes to the stored download_token_hash.
+        client_row = (
+            await db_session.execute(
+                select(EmailQueue)
+                .where(EmailQueue.entity_type == "onboarding_packets")
+                .where(EmailQueue.entity_id == packet.id)
+                .where(EmailQueue.to_email == RECIPIENT)
+                .order_by(EmailQueue.id.desc())
+            )
+        ).scalars().first()
+        assert "contact us" not in client_row.body.lower()
+        match = re.search(r"/onboarding/complete/(\S+)", client_row.body)
+        assert match, client_row.body
+        assert tokens.hash_token(match.group(1)) == packet.download_token_hash
+
+        # A 2nd resend rotates the token (old link dies) and re-queues.
         second = await completion.resend_completion_notices(db_session, packet=packet)
         await db_session.commit()
-        assert second == []  # nothing newly queued
-
-        count_after_second = await db_session.execute(
-            select(func.count())
-            .select_from(EmailQueue)
-            .where(EmailQueue.entity_type == "onboarding_packets")
-            .where(EmailQueue.entity_id == packet.id)
-        )
-        assert count_after_second.scalar() == n1  # no duplicates
+        assert RECIPIENT in second
+        await db_session.refresh(packet)
+        assert packet.download_token_hash != token_after_first
     finally:
         await cleanup_packet_storage(db_session, service, packet.id)
 

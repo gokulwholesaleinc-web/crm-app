@@ -167,3 +167,36 @@ export const revokeOnboardingPacket = async (
   );
   return response.data;
 };
+
+/**
+ * Re-run completion (Phase B/C) for a packet stuck in ``completion_failed`` or
+ * a stale ``completing`` — the client already submitted/signed, so this
+ * salvages their data instead of discarding it via revoke.
+ */
+export const retryOnboardingPacket = async (
+  packetId: number,
+): Promise<OnboardingPacket> => {
+  const response = await apiClient.post<OnboardingPacket>(
+    `${PACKETS_BASE}/${packetId}/retry-completion`,
+  );
+  return response.data;
+};
+
+export interface OnboardingResendResult {
+  /** The recipient + owner e-mail addresses the notice was re-queued to. */
+  resent: string[];
+}
+
+/**
+ * Resend the completion notice for a completed packet. The backend mints a
+ * fresh download token and e-mails a working link (the original raw token is
+ * unrecoverable), so the recipient can reach their signed PDFs again.
+ */
+export const resendOnboardingCompletionNotice = async (
+  packetId: number,
+): Promise<OnboardingResendResult> => {
+  const response = await apiClient.post<OnboardingResendResult>(
+    `${PACKETS_BASE}/${packetId}/resend-completion-notice`,
+  );
+  return response.data;
+};

@@ -29,13 +29,16 @@ from src.onboarding.packet_schemas import (
 )
 from src.onboarding.packet_service import _now as _utc_now
 from src.onboarding.public_helpers import (
+    NO_STORE_HEADERS,
     assert_body_within_caps,
     decode_signature_png,
     find_document_or_404,
     load_packet_for_public,
+    parse_body_within_caps,
     public_status_message,
     read_pdf_or_http,
     require_session,
+    resolve_public_branding,
 )
 from src.onboarding.validation import complete_errors_mapped, packet_errors_mapped
 from src.onboarding.view_ledger import record_packet_document_view
@@ -46,11 +49,15 @@ DB = DBSession
 
 @router.get("/{token}", response_model=None)
 @limiter.limit("60/minute")
-async def get_public_packet(token: str, request: Request, db: DB):
+async def get_public_packet(token: str, request: Request, response: Response, db: DB):
     """Pre-gate branding + counts; post-gate (valid session) full documents."""
     packet, service = await load_packet_for_public(db, token)
     company_name = await service.resolve_company_name(packet)
+    branding = await resolve_public_branding(db)
     documents = await service.load_documents(packet.id)
+
+    # The post-gate payload carries recipient field_values (PII) — never cache it.
+    response.headers["Cache-Control"] = "no-store"
 
     session = tokens.verify_session(request.headers.get("X-Onboarding-Session"))
     is_session = (
@@ -64,6 +71,7 @@ async def get_public_packet(token: str, request: Request, db: DB):
             document_count=len(documents),
             status_message=public_status_message(packet.status),
             company_name=company_name,
+            branding=branding,
         )
 
     disclosure = None
@@ -78,6 +86,7 @@ async def get_public_packet(token: str, request: Request, db: DB):
         document_count=len(documents),
         status_message=public_status_message(packet.status),
         company_name=company_name,
+        branding=branding,
         documents=[
             PublicDocument(
                 id=d.id,
@@ -90,6 +99,7 @@ async def get_public_packet(token: str, request: Request, db: DB):
             for d in documents
         ],
         signature_version=packet.signature_version,
+        has_signature=packet.signer_signature_image is not None,
         esign_disclosure=disclosure,
         esign_disclosure_version=disclosure_version,
     )
@@ -161,8 +171,8 @@ async def get_public_document_pdf(
         content=content,
         media_type="application/pdf",
         headers={
+            **NO_STORE_HEADERS,
             "Content-Disposition": f'inline; filename="{doc.original_filename}"',
-            "Referrer-Policy": "no-referrer",
         },
     )
 
@@ -170,10 +180,12 @@ async def get_public_document_pdf(
 @router.patch("/{token}/documents/{doc_id}", response_model=PatchResult)
 @limiter.limit("60/minute")
 async def patch_public_document(
-    token: str, doc_id: int, data: DocumentPatch, request: Request, db: DB
+    token: str, doc_id: int, request: Request, db: DB
 ):
     """Save field values (session-gated; 409 on version drift)."""
-    assert_body_within_caps(request)
+    # Read the body INSIDE the handler so the 1 MB cap precedes the parse
+    # (a declared body param is parsed before this runs — see §6).
+    data = await parse_body_within_caps(request, DocumentPatch)
     packet, service = await load_packet_for_public(db, token)
     require_session(request, packet)
     documents = await service.load_documents(packet.id)
@@ -188,10 +200,10 @@ async def patch_public_document(
 @router.post("/{token}/signature", response_model=SignatureResult)
 @limiter.limit("30/minute")
 async def set_public_signature(
-    token: str, data: SignatureSet, request: Request, db: DB
+    token: str, request: Request, db: DB
 ):
     """Store the drawn signature (session-gated; 409 on signature drift)."""
-    assert_body_within_caps(request)
+    data = await parse_body_within_caps(request, SignatureSet)
     packet, service = await load_packet_for_public(db, token)
     require_session(request, packet)
     signature_png = decode_signature_png(data.signature_png_base64)

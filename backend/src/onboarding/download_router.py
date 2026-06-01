@@ -21,6 +21,7 @@ from src.onboarding.models import OnboardingPacket
 from src.onboarding.packet_schemas import DownloadDocument, DownloadLandingResponse
 from src.onboarding.packet_service import PacketService
 from src.onboarding.public_helpers import (
+    NO_STORE_HEADERS,
     _ensure_aware,
     _now,
     find_document_or_404,
@@ -31,8 +32,6 @@ download_router = APIRouter(
     prefix="/api/onboarding/download", tags=["onboarding-download"]
 )
 DB = DBSession
-
-_NO_STORE = {"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"}
 
 
 async def _load_completed_by_download_token(db, download_token: str) -> OnboardingPacket:
@@ -78,7 +77,7 @@ async def download_landing(download_token: str, request: Request, db: DB):
             ]
         ).model_dump_json(),
         media_type="application/json",
-        headers=_NO_STORE,
+        headers=NO_STORE_HEADERS,
     )
 
 
@@ -106,7 +105,7 @@ async def download_document(
         content=content,
         media_type="application/pdf",
         headers={
-            **_NO_STORE,
+            **NO_STORE_HEADERS,
             "Content-Disposition": f'attachment; filename="{doc.original_filename}"',
         },
     )

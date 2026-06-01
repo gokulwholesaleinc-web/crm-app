@@ -34,6 +34,7 @@ import type {
   OnboardingPublicPacket,
   OnboardingPublicBranding,
   OnboardingPublicDocument,
+  OnboardingDownloadDocument,
   OnboardingFieldDefinition,
 } from '../../types';
 
@@ -167,6 +168,10 @@ function PublicOnboardingView() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [completed, setCompleted] = useState(false);
+  // The in-session download landing URL returned by /complete (carries the raw
+  // download token — the recipient's one in-session chance to fetch the signed
+  // PDFs before the page reloads; the e-mailed link is the durable fallback).
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
 
   useForceLightMode();
 
@@ -277,10 +282,20 @@ function PublicOnboardingView() {
     setVerifying(true);
     setVerifyError(null);
     try {
-      const res = await publicClient.post<{ session_token: string; expires_in?: number }>(
-        `/api/onboarding/public/${token}/verify`,
-        { email: trimmed },
-      );
+      const res = await publicClient.post<{
+        success: boolean;
+        session_token: string | null;
+        expires_in?: number;
+      }>(`/api/onboarding/public/${token}/verify`, { email: trimmed });
+      // The backend answers a WRONG e-mail with HTTP 200 + success:false (no
+      // enumeration), so a 200 alone is not success — gate on the flag, else
+      // the user is silently dropped back on the same form with no feedback.
+      if (!res.data.success || !res.data.session_token) {
+        setVerifyError(
+          'We could not verify that email for this link. Please check it and try again.',
+        );
+        return;
+      }
       const newToken = res.data.session_token;
       sessionTokenRef.current = newToken;
       setSessionToken(newToken);
@@ -420,15 +435,18 @@ function PublicOnboardingView() {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      const res = await publicClient.post<{ status: string }>(
-        `/api/onboarding/public/${token}/complete`,
-        {},
-        { headers: requestHeaders() },
-      );
+      const res = await publicClient.post<{
+        status: string;
+        download_url?: string | null;
+      }>(`/api/onboarding/public/${token}/complete`, {}, { headers: requestHeaders() });
+      // Capture the in-session download landing URL so the success screen can
+      // render the signed-PDF links (this is the only place the raw download
+      // token is exposed — a later refetch never carries it).
+      if (res.data.download_url) setDownloadUrl(res.data.download_url);
       if (res.data.status === 'completing') {
         // Server is stamping in the background — re-fetch the public payload.
         // The status-watch effect below keeps polling until it flips to
-        // ``completed`` (which carries the download links).
+        // ``completed``.
         await fetchPacket();
       } else {
         await fetchPacket();
@@ -473,7 +491,20 @@ function PublicOnboardingView() {
   }, [packet?.status, sessionToken, completed, fetchPacket]);
 
   // --- Derived gating ----------------------------------------------------
-  const requiresSignature = useMemo(() => docs.some((d) => d.requires_esign), [docs]);
+  // A signature is required when any doc is e-sign OR carries a signature field
+  // — matching the backend completion gate (which demands a signature whenever
+  // a signature field exists). The two are kept consistent at packet creation,
+  // but aligning the predicates keeps the pad from ever hiding on a doc the
+  // server will then refuse to complete without a signature.
+  const requiresSignature = useMemo(
+    () =>
+      docs.some(
+        (d) =>
+          d.requires_esign ||
+          d.field_definitions.some((f) => f.kind === 'signature'),
+      ),
+    [docs],
+  );
 
   const allDocsViewed = docs.length > 0 && docs.every((d) => viewedDocIds.has(d.id));
 
@@ -578,7 +609,7 @@ function PublicOnboardingView() {
 
       <main className="mx-auto max-w-3xl px-6 sm:px-10 py-10 sm:py-14">
         {completed || packet.status === 'completed' ? (
-          <CompletionScreen packet={packet} accent={accent} />
+          <CompletionScreen downloadUrl={downloadUrl} accent={accent} />
         ) : packet.status === 'completing' ? (
           <StatusNotice
             title="We're finishing your documents"
@@ -1297,13 +1328,39 @@ function FieldInput({ field, box, value, onChange, disabled, accent, primary }: 
 // Completion + status screens
 // =====================================================================
 
-function CompletionScreen({ packet, accent }: { packet: OnboardingPublicPacket; accent: string }) {
-  const downloads = packet.downloads ?? [];
+function CompletionScreen({ downloadUrl, accent }: { downloadUrl: string | null; accent: string }) {
   // The server returns app-relative download paths; prefix with the API origin
   // (when set) so the no-login proxy link resolves to the backend in prod —
   // same convention as ProposalAttachmentsSection. Absolute URLs pass through.
   const apiBase = import.meta.env.VITE_API_URL || '';
   const resolveUrl = (url: string) => (/^https?:\/\//i.test(url) ? url : `${apiBase}${url}`);
+
+  // Fetch the signed-PDF list from the in-session download landing URL. When
+  // there's no in-session URL (e.g. after a reload, or a background-completed
+  // poll), we fall back to the "arrive by email" copy — the e-mailed link works.
+  const [downloads, setDownloads] = useState<OnboardingDownloadDocument[]>([]);
+  useEffect(() => {
+    if (!downloadUrl) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await publicClient.get<{ documents: OnboardingDownloadDocument[] }>(
+          resolveUrl(downloadUrl),
+        );
+        if (!cancelled) setDownloads(res.data.documents ?? []);
+      } catch (err) {
+        // Fall back to the e-mailed copy — never block the success screen — but
+        // log so a systemic landing-endpoint outage is observable rather than
+        // silently indistinguishable from "no documents".
+        console.warn('onboarding: in-session download list fetch failed', err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // resolveUrl is a pure derivation of apiBase (stable); only the URL matters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [downloadUrl]);
   return (
     <section className="max-w-md mx-auto text-center">
       <div

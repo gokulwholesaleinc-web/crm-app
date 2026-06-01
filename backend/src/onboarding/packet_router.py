@@ -61,6 +61,18 @@ async def create_packet(
     await require_entity_access(
         db, "contacts", data.contact_id, current_user, data_scope
     )
+    # The optional company/proposal links are persisted on the packet and the
+    # company name is surfaced to the recipient (disclosure / prefill / public
+    # response), so a scoped caller must be allowed to reference them too —
+    # otherwise they could attach (and leak) another owner's company/proposal.
+    if data.company_id is not None:
+        await require_entity_access(
+            db, "companies", data.company_id, current_user, data_scope
+        )
+    if data.proposal_id is not None:
+        await require_entity_access(
+            db, "proposals", data.proposal_id, current_user, data_scope
+        )
     service = PacketService(db)
     with packet_errors_mapped():
         packet, raw_token = await service.create_packet(

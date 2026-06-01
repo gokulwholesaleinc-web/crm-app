@@ -12,7 +12,7 @@ Storage ref conventions (stored in ``OnboardingTemplate.pdf_path``):
 
 from pathlib import Path
 
-from botocore.exceptions import ClientError
+from botocore.exceptions import BotoCoreError, ClientError
 
 from src.attachments.object_storage import (
     delete_object,
@@ -31,13 +31,26 @@ _UPLOADS_ROOT = ONBOARDING_DIR.parent
 
 
 async def write(key: str, content: bytes, content_type: str = "application/pdf") -> str:
-    """Persist ``content`` under ``key`` and return its storage ref."""
+    """Persist ``content`` under ``key`` and return its storage ref.
+
+    Both backends normalize a write outage to ``RuntimeError`` so callers map
+    it uniformly to a 503 (mirrors ``read_bytes`` below): an R2 ``ClientError``
+    / transport ``BotoCoreError`` and a disk ``OSError`` (ENOSPC / EROFS /
+    PermissionError) would otherwise escape the callers' ``except RuntimeError``
+    and surface as an opaque 500.
+    """
     if _use_object_storage():
-        await upload_file_bytes(content, key, content_type)
+        try:
+            await upload_file_bytes(content, key, content_type)
+        except (BotoCoreError, ClientError) as exc:
+            raise RuntimeError("object storage unavailable") from exc
         return f"{_OBJ_PREFIX}{key}"
     dest = ONBOARDING_DIR / key
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_bytes(content)
+    try:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(content)
+    except OSError as exc:
+        raise RuntimeError("storage unavailable") from exc
     return str(dest.relative_to(_UPLOADS_ROOT))
 
 
@@ -62,6 +75,12 @@ async def read_bytes(ref: str) -> bytes:
         except ClientError as exc:
             if _client_error_code(exc) in ("NoSuchKey", "404", "NotFound"):
                 raise FileNotFoundError(f"object not found: {key}") from exc
+            raise RuntimeError("object storage unavailable") from exc
+        except BotoCoreError as exc:
+            # A transport failure (e.g. EndpointConnectionError) is NOT a
+            # ClientError, so normalize it too — otherwise it would escape every
+            # caller's ``except RuntimeError`` (the completion dry-run, Phase B
+            # stamp, and the public PDF view) as an opaque 500.
             raise RuntimeError("object storage unavailable") from exc
     try:
         return (_UPLOADS_ROOT / ref).read_bytes()

@@ -102,6 +102,27 @@ class VerifyResponse(BaseModel):
     expires_in: int | None = None
 
 
+class PublicBranding(BaseModel):
+    """Sender-brand styling for the public onboarding page.
+
+    Resolved from the (single-tenant) ``TenantSettings`` row so the public
+    page renders the provider's logo/colours/footer instead of the generic
+    indigo fallback. Field names + defaults mirror the frontend
+    ``OnboardingPublicBranding`` contract exactly.
+    """
+
+    company_name: str | None = None
+    logo_url: str | None = None
+    primary_color: str = "#6366f1"
+    secondary_color: str = "#8b5cf6"
+    accent_color: str = "#22c55e"
+    bg_color_light: str = "#f9fafb"
+    surface_color_light: str = "#ffffff"
+    footer_text: str | None = None
+    privacy_policy_url: str | None = None
+    terms_of_service_url: str | None = None
+
+
 class PublicDocument(BaseModel):
     id: int
     original_filename: str
@@ -119,6 +140,7 @@ class PublicPacketPreResponse(BaseModel):
     requires_email_verification: bool = True
     status_message: str
     company_name: str | None = None
+    branding: PublicBranding | None = None
 
 
 class PublicPacketPostResponse(BaseModel):
@@ -128,8 +150,12 @@ class PublicPacketPostResponse(BaseModel):
     document_count: int
     status_message: str
     company_name: str | None = None
+    branding: PublicBranding | None = None
     documents: list[PublicDocument] = Field(default_factory=list)
     signature_version: int = 0
+    # True once the recipient has drawn a signature this packet — lets a
+    # returning signer skip redrawing (the FE pre-marks it saved on reload).
+    has_signature: bool = False
     esign_disclosure: str | None = None
     esign_disclosure_version: str | None = None
     download_url: str | None = None

@@ -1,6 +1,11 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { PaperAirplaneIcon, NoSymbolIcon } from '@heroicons/react/24/outline';
+import {
+  PaperAirplaneIcon,
+  NoSymbolIcon,
+  ArrowPathIcon,
+  EnvelopeIcon,
+} from '@heroicons/react/24/outline';
 import {
   Button,
   Input,
@@ -15,6 +20,8 @@ import {
   createOnboardingPacket,
   listOnboardingPackets,
   revokeOnboardingPacket,
+  retryOnboardingPacket,
+  resendOnboardingCompletionNotice,
 } from '../../api/onboarding';
 import { formatDate } from '../../utils/formatters';
 import { showSuccess, showError } from '../../utils/toast';
@@ -74,6 +81,15 @@ const REVOKABLE = new Set<OnboardingPacketStatus>([
   'completion_failed',
 ]);
 
+/** A stuck/failed packet can be re-finalized (salvages the client's data). */
+const RETRYABLE = new Set<OnboardingPacketStatus>([
+  'completion_failed',
+  'completing',
+]);
+
+/** A completed packet can have its download notice re-sent (fresh link). */
+const RESENDABLE = new Set<OnboardingPacketStatus>(['completed']);
+
 export function OnboardingSendPanel({ templates }: OnboardingSendPanelProps) {
   const queryClient = useQueryClient();
   const [contactId, setContactId] = useState<number | null>(null);
@@ -120,6 +136,26 @@ export function OnboardingSendPanel({ templates }: OnboardingSendPanelProps) {
   const revokeMutation = useMutation({
     mutationFn: (packetId: number) => revokeOnboardingPacket(packetId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: [...PACKETS_KEY, contactId] }),
+  });
+
+  const retryMutation = useMutation({
+    mutationFn: (packetId: number) => retryOnboardingPacket(packetId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [...PACKETS_KEY, contactId] });
+      showSuccess('Retrying finalization — refresh in a moment to see the result.');
+    },
+    onError: (err) => showError(extractApiErrorDetail(err) ?? 'Failed to retry finalization'),
+  });
+
+  const resendMutation = useMutation({
+    mutationFn: (packetId: number) => resendOnboardingCompletionNotice(packetId),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: [...PACKETS_KEY, contactId] });
+      showSuccess(
+        `Download link re-queued to ${result.resent.length} recipient(s) — check delivery status below.`,
+      );
+    },
+    onError: (err) => showError(extractApiErrorDetail(err) ?? 'Failed to resend the notice'),
   });
 
   const toggleTemplate = (id: number) => {
@@ -306,6 +342,16 @@ export function OnboardingSendPanel({ templates }: OnboardingSendPanelProps) {
                   <PacketRow
                     key={p.id}
                     packet={p}
+                    onRetry={
+                      RETRYABLE.has(p.status) && !retryMutation.isPending
+                        ? () => retryMutation.mutate(p.id)
+                        : undefined
+                    }
+                    onResend={
+                      RESENDABLE.has(p.status) && !resendMutation.isPending
+                        ? () => resendMutation.mutate(p.id)
+                        : undefined
+                    }
                     onRevoke={REVOKABLE.has(p.status) ? () => setRevokeTarget(p) : undefined}
                   />
                 ))}
@@ -332,10 +378,12 @@ export function OnboardingSendPanel({ templates }: OnboardingSendPanelProps) {
 
 interface PacketRowProps {
   packet: OnboardingPacket;
+  onRetry?: () => void;
+  onResend?: () => void;
   onRevoke?: () => void;
 }
 
-function PacketRow({ packet, onRevoke }: PacketRowProps) {
+function PacketRow({ packet, onRetry, onResend, onRevoke }: PacketRowProps) {
   const emails = packet.emails ?? [];
   return (
     <li className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between">
@@ -365,17 +413,44 @@ function PacketRow({ packet, onRevoke }: PacketRowProps) {
           </div>
         )}
       </div>
-      {onRevoke && (
-        <div className="flex-shrink-0">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            leftIcon={<NoSymbolIcon className="h-4 w-4" aria-hidden="true" />}
-            onClick={onRevoke}
-          >
-            Revoke
-          </Button>
+      {(onRetry || onResend || onRevoke) && (
+        <div className="flex flex-shrink-0 flex-wrap items-center gap-1">
+          {/* Retry comes first for a stuck/failed packet so the destructive
+              Revoke is never the only (or primary) action offered — revoke
+              would scrub the salvageable signature the retry needs. */}
+          {onRetry && (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              leftIcon={<ArrowPathIcon className="h-4 w-4" aria-hidden="true" />}
+              onClick={onRetry}
+            >
+              Retry
+            </Button>
+          )}
+          {onResend && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              leftIcon={<EnvelopeIcon className="h-4 w-4" aria-hidden="true" />}
+              onClick={onResend}
+            >
+              Resend link
+            </Button>
+          )}
+          {onRevoke && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              leftIcon={<NoSymbolIcon className="h-4 w-4" aria-hidden="true" />}
+              onClick={onRevoke}
+            >
+              Revoke
+            </Button>
+          )}
         </div>
       )}
     </li>

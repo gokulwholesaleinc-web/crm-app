@@ -19,8 +19,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.activities.models import Activity
 from src.config import settings
 from src.email.service import EmailService
+from src.onboarding import tokens
 from src.onboarding.models import OnboardingPacket
 from src.onboarding.packet_errors import PacketRaceError
+from src.onboarding.packet_service import DOWNLOAD_TOKEN_TTL, _now
 
 logger = logging.getLogger(__name__)
 
@@ -167,18 +169,33 @@ async def _owner_email(db: AsyncSession, packet: OnboardingPacket) -> str | None
 async def resend_completion_notices(
     db: AsyncSession, *, packet: OnboardingPacket
 ) -> list[str]:
-    """Idempotently re-queue the completion notices (only for completed)."""
+    """Re-queue the completion notices with a FRESH, working download link.
+
+    The raw download token minted at completion is unrecoverable (only its hash
+    is stored), so a resend mints a NEW download token, repoints the packet's
+    ``download_token_hash`` at it (the previous emailed link dies), and embeds
+    the working link — instead of the old "contact us" dead end. This is a
+    deliberate staff action, so it is NOT suppressed by the completion-notice
+    idempotency guard (that only protects the automatic post-completion send).
+    """
     if packet.status != "completed":
         raise PacketRaceError("Packet is not completed; nothing to resend.")
     resent: list[str] = []
     email_service = EmailService(db)
+    base_url = settings.FRONTEND_BASE_URL or "http://localhost:3000"
+
+    raw_download = tokens.mint_token()
+    packet.download_token_hash = tokens.hash_token(raw_download)
+    packet.download_token_expires_at = _now() + DOWNLOAD_TOKEN_TTL
+    # COMMIT (not flush) the rotated token BEFORE queuing — ``queue_email`` may
+    # send synchronously, so the new token must be durable first; otherwise a
+    # failing trailing request-commit could roll the hash back to the (already
+    # unrecoverable) old value, leaving the recipient a dead emailed link.
+    await db.commit()
+    client_link = f"{base_url}/onboarding/complete/{raw_download}"
 
     owner_email = await _owner_email(db, packet)
-    # The raw download token is unrecoverable post-completion, so resend
-    # points the client at the staff-shareable landing path instead.
-    for to_email, subject, body in _resend_targets(packet, owner_email):
-        if await _completion_email_exists(db, packet.id, to_email):
-            continue
+    for to_email, subject, body in _resend_targets(packet, owner_email, client_link):
         await email_service.queue_email(
             to_email=to_email,
             subject=subject,
@@ -191,14 +208,15 @@ async def resend_completion_notices(
 
 
 def _resend_targets(
-    packet: OnboardingPacket, owner_email: str | None
+    packet: OnboardingPacket, owner_email: str | None, client_link: str
 ) -> list[tuple[str, str, str]]:
     targets = [
         (
             packet.recipient_email,
             "Your onboarding documents are ready",
-            "Your completed onboarding documents are available — contact us "
-            "if you need the download link re-sent.",
+            "Thank you for completing your onboarding. You can download your "
+            f"signed documents here:\n\n{client_link}\n\n"
+            "This link expires in 7 days.",
         )
     ]
     if owner_email:

@@ -169,6 +169,7 @@ async def _phase_a_claim(
     try:
         _validate_documents_for_completion(docs)
         _assert_signature_present(p, docs)
+        await _validate_documents_stampable(docs, p.signer_signature_image)
     except PacketValidationError:
         await db.rollback()
         raise
@@ -244,6 +245,35 @@ def _validate_documents_for_completion(docs: list[OnboardingPacketDocument]) -> 
                     )
 
 
+async def _validate_documents_stampable(
+    docs: list[OnboardingPacketDocument], signature_png: bytes | None
+) -> None:
+    """Dry-run the stamp of every document so content errors surface in Phase A.
+
+    A bad date, a value that overflows its box, or an undecodable signature PNG
+    raise ``ValueError`` in the stamper. Without this, that only happens in
+    Phase B — AFTER the packet has flipped to ``completing`` — so the signer
+    gets a dead-end ``completion_failed`` instead of a fixable 422. Running the
+    same ``stamp_document`` path here (output discarded) catches those as a
+    clean ``PacketValidationError`` (→ 422, status unchanged).
+
+    Only content (``ValueError``) errors fail here; a storage read failure is
+    infra (not the signer's fault), so it's skipped and left to Phase B's
+    fail-closed handling.
+    """
+    for doc in docs:
+        try:
+            source = await storage.read_bytes(doc.pdf_path)
+        except (FileNotFoundError, RuntimeError):
+            continue
+        try:
+            await asyncio.to_thread(
+                stamp_document, source, _fields_with_values(doc), signature_png
+            )
+        except ValueError as exc:
+            raise PacketValidationError(str(exc)) from exc
+
+
 def _assert_signature_present(
     packet: OnboardingPacket, docs: list[OnboardingPacketDocument]
 ) -> None:
@@ -299,11 +329,13 @@ async def _phase_b_stamp(db: AsyncSession, *, packet_id: int) -> None:
         if not leased:
             continue  # another worker holds the lease or already attached
 
-        # Stamp → attach → fence is one fail-closed unit: any failure (overflow,
-        # bad data, storage/attach error) marks the packet completion_failed
-        # (staff retry) rather than stranding it in `completing` or emitting a
-        # silently-wrong document. Geometry/overflow is normally caught in
-        # Phase A; a late failure here is treated as infra, not a client 422.
+        # Stamp → attach → fence is one fail-closed unit: any failure (storage
+        # /attach error, or a content error not caught by the Phase-A dry-run)
+        # marks the packet completion_failed (staff retry) rather than stranding
+        # it in `completing` or emitting a silently-wrong document. Content
+        # errors (bad date/overflow/undecodable PNG) are now validated in Phase
+        # A via _validate_documents_stampable, so a failure here is genuinely
+        # infra/concurrency, not a client 422.
         try:
             stamped = await _stamp_one(doc, packet.signer_signature_image)
             att = await AttachmentService(db).create_from_bytes(

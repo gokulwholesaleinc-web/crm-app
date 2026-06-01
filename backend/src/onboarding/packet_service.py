@@ -17,7 +17,7 @@ import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.companies.models import Company
@@ -180,8 +180,11 @@ class PacketService:
                 if requires_esign_override is not None
                 else template.requires_esign
             )
-            pdf_path = await self._copy_template_pdf(template, packet.id)
             field_defs = list(template.field_definitions or [])
+            self._assert_esign_signature_consistency(
+                template.id, requires_esign, field_defs
+            )
+            pdf_path = await self._copy_template_pdf(template, packet.id)
             doc = OnboardingPacketDocument(
                 packet_id=packet.id,
                 display_order=order,
@@ -268,6 +271,41 @@ class PacketService:
             if cname:
                 values["company.name"] = cname
         return values
+
+    @staticmethod
+    def _assert_esign_signature_consistency(
+        template_id: int, requires_esign: bool, field_defs: list[dict]
+    ) -> None:
+        """Reject a packet document whose e-sign flag and signature field disagree.
+
+        Invariant #10, enforced in BOTH directions at send time (the template
+        guard only enforces esign→signature):
+
+          * ``requires_esign`` with NO signature field — forced via
+            ``requires_esign_override`` on a sig-less template — can never
+            collect a signature, yet the signer is asked to consent and draw
+            one; the stamper draws nothing, producing an invisibly-"signed" PDF.
+          * a signature field on a NON-esign doc never shows the signature pad
+            on the fill page (it gates on ``requires_esign``), so completion is
+            blocked forever waiting for a signature the recipient can't provide.
+
+        Either mismatch is a fail-closed 422 (``PacketValidationError``) rather
+        than a silently broken or uncompletable packet.
+        """
+        has_signature_field = any(
+            (f.get("kind") if isinstance(f, dict) else None) == "signature"
+            for f in field_defs
+        )
+        if requires_esign and not has_signature_field:
+            raise PacketValidationError(
+                f"Template {template_id} requires e-sign but has no signature "
+                "field; it cannot collect a signature."
+            )
+        if has_signature_field and not requires_esign:
+            raise PacketValidationError(
+                f"Template {template_id} has a signature field, so e-sign "
+                "cannot be disabled for it."
+            )
 
     @staticmethod
     def _seed_prefill(
@@ -379,21 +417,38 @@ class PacketService:
         field_values: dict,
         base_version: int,
     ) -> int:
-        """Merge field_values into a document; 409 on version drift."""
+        """Merge field_values into a document; 409 on version drift.
+
+        The check-and-bump is a single conditional ``UPDATE ... WHERE
+        field_values_version = base_version`` whose ``rowcount`` is the fence —
+        two concurrent saves that both read version N can't both win (the
+        loser matches 0 rows → 409). A read-compare-then-increment under READ
+        COMMITTED would lose-update silently.
+        """
         self._assert_public_writable(packet)
         self._validate_field_values(doc, field_values)
-        if base_version != doc.field_values_version:
+        merged = dict(doc.field_values or {})
+        merged.update(field_values)
+        result = await self.db.execute(
+            update(OnboardingPacketDocument)
+            .where(OnboardingPacketDocument.id == doc.id)
+            .where(OnboardingPacketDocument.field_values_version == base_version)
+            .values(field_values=merged, field_values_version=base_version + 1)
+            .returning(OnboardingPacketDocument.field_values_version)
+        )
+        row = result.first()
+        if row is None:
             raise PacketRaceError(
                 "This document changed since you loaded it; reload and retry."
             )
-        merged = dict(doc.field_values or {})
-        merged.update(field_values)
-        doc.field_values = merged  # whole-dict reassign (JSONB tracking)
-        doc.field_values_version += 1
         if packet.status in ("active", "opened"):
             packet.status = "in_progress"
         await self.db.flush()
-        return doc.field_values_version
+        # Running the UPDATE through ``session.execute`` synchronizes the
+        # in-memory ``doc`` (it is not left dirty), so the fence isn't clobbered
+        # by a later flush. The route returns the authoritative new version from
+        # RETURNING below.
+        return row[0]
 
     @staticmethod
     def _validate_field_values(doc: OnboardingPacketDocument, values: dict) -> None:
@@ -407,7 +462,12 @@ class PacketService:
         for fid, val in values.items():
             if fid not in known_ids:
                 raise PacketValidationError(f"Unknown field '{fid}'")
-            if val is not None and not isinstance(val, str | int | float | bool):
+            # Field values are strings only (the wire contract is
+            # Record<string, string>). A stored bool/int/float would round-trip
+            # to the public page and crash its ``.trim()`` / controlled-input
+            # render, and mis-stamps as ``str(value)``. Reject non-strings (None
+            # is allowed to clear a field).
+            if val is not None and not isinstance(val, str):
                 raise PacketValidationError(f"Field '{fid}' has an invalid value")
             if isinstance(val, str) and len(val.encode("utf-8")) > MAX_TEXT_VALUE_BYTES:
                 raise PacketValidationError(f"Field '{fid}' value is too long")
@@ -419,13 +479,29 @@ class PacketService:
         signature_png: bytes,
         base_signature_version: int,
     ) -> int:
-        """Store the drawn signature PNG; 409 on signature_version drift."""
+        """Store the drawn signature PNG; 409 on signature_version drift.
+
+        Same atomic fence as ``patch_document`` — a conditional ``UPDATE ...
+        WHERE signature_version = base_signature_version`` so two concurrent
+        signature saves can't both bump from the same base (lost update).
+        """
         self._assert_public_writable(packet)
-        if base_signature_version != packet.signature_version:
+        result = await self.db.execute(
+            update(OnboardingPacket)
+            .where(OnboardingPacket.id == packet.id)
+            .where(OnboardingPacket.signature_version == base_signature_version)
+            .values(
+                signer_signature_image=signature_png,
+                signature_version=base_signature_version + 1,
+            )
+            .returning(OnboardingPacket.signature_version)
+        )
+        row = result.first()
+        if row is None:
             raise PacketRaceError(
                 "Signature changed since you loaded it; reload and retry."
             )
-        packet.signer_signature_image = signature_png
-        packet.signature_version += 1
-        await self.db.flush()
-        return packet.signature_version
+        # Running the UPDATE through ``session.execute`` synchronizes the
+        # in-memory ``packet`` (not left dirty), so the fence isn't clobbered by
+        # a later flush. Completion also re-reads the row under a FOR UPDATE lock.
+        return row[0]
