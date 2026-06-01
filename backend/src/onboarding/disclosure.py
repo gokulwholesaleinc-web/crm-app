@@ -31,7 +31,7 @@ text changes so older evidence stays attributable.
 
 from typing import Literal
 
-ONBOARDING_ESIGN_DISCLOSURE_VERSION = "2026-06-01.onboarding.v2-consumer-econsent-draft"
+ONBOARDING_ESIGN_DISCLOSURE_VERSION = "2026-06-01.onboarding.v3-consumer-econsent-draft"
 
 # Whether the signer is an individual acting for personal/household purposes
 # (``"consumer"`` — ESIGN §7001(c) consumer disclosures apply) or signing on
@@ -76,6 +76,15 @@ def onboarding_esign_disclosure(
             "to download and save (or print) electronic documents. If your "
             "system cannot meet these requirements, you may be unable to sign "
             "electronically."
+        )
+        # ESIGN Act §7001(c)(1)(D): if the hardware/software needed to access
+        # the records later changes in a way that creates a material risk the
+        # consumer can't access them, re-notify + re-obtain consent.
+        paragraphs.append(
+            "If the system requirements needed to access these electronic "
+            "records change in a way that creates a material risk you can no "
+            "longer access them, we will notify you and ask you to re-confirm "
+            "your consent."
         )
         paragraphs.append(
             "You have the right to receive these documents on paper instead of "
