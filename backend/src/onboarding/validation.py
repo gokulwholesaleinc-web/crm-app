@@ -17,6 +17,13 @@ from fastapi import HTTPException
 
 from src.core.constants import HTTPStatus
 from src.core.http_errors import value_error_as_400
+from src.onboarding.packet_errors import (
+    PacketGoneError,
+    PacketInfraError,
+    PacketNotFoundError,
+    PacketRaceError,
+    PacketValidationError,
+)
 from src.onboarding.service import (
     FieldDefinitionError,
     RetiredTemplateError,
@@ -60,3 +67,43 @@ def upload_errors_mapped():
         raise HTTPException(
             status_code=HTTPStatus.SERVICE_UNAVAILABLE, detail=str(exc)
         ) from exc
+
+
+@contextmanager
+def packet_errors_mapped():
+    """Map Phase-2 packet errors to HTTP status (NOT a blanket 400).
+
+    race/version/wrong-status → 409, validation/overflow → 422, infra/storage
+    → 503, token-not-found/expired → 404, terminal-dead → 410. Each source
+    exception is a non-ValueError class so the status can't be downgraded.
+    """
+    try:
+        yield
+    except PacketRaceError as exc:
+        logger.info("Onboarding packet conflict 409: %s", exc)
+        raise HTTPException(
+            status_code=HTTPStatus.CONFLICT, detail=str(exc)
+        ) from exc
+    except PacketValidationError as exc:
+        logger.info("Onboarding packet validation 422: %s", exc)
+        raise HTTPException(
+            status_code=HTTPStatus.UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    except PacketGoneError as exc:
+        logger.info("Onboarding packet gone 410: %s", exc)
+        raise HTTPException(
+            status_code=HTTPStatus.GONE, detail=str(exc)
+        ) from exc
+    except PacketNotFoundError as exc:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND, detail=str(exc)
+        ) from exc
+    except PacketInfraError as exc:
+        logger.warning("Onboarding packet infra failure 503: %s", exc)
+        raise HTTPException(
+            status_code=HTTPStatus.SERVICE_UNAVAILABLE, detail=str(exc)
+        ) from exc
+
+
+# Alias: completion uses the same mapping (race→409, validation→422, infra→503).
+complete_errors_mapped = packet_errors_mapped

@@ -94,6 +94,36 @@ async def test_write_creates_nested_parent_dirs():
 
 
 @pytest.mark.asyncio
+async def test_write_disk_error_normalized_to_runtime_error():
+    """A disk WRITE error (PermissionError / ENOSPC / EROFS) is normalized to
+    RuntimeError so callers map it to 503 — mirroring read_bytes.
+
+    No mocks: we create a real read-only directory under the uploads root and
+    write into it, so ``write_bytes`` hits a genuine ``PermissionError`` (an
+    OSError that is NOT FileNotFoundError). Without the normalization this would
+    escape the callers' ``except RuntimeError`` as an opaque 500. Root bypasses
+    Unix permissions, so skip there.
+    """
+    if hasattr(os, "geteuid") and os.geteuid() == 0:
+        pytest.skip("root bypasses file perms")
+
+    subdir = f"test_ro_{uuid.uuid4().hex}"
+    ro_dir = storage.ONBOARDING_DIR / subdir
+    ro_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        os.chmod(ro_dir, 0o500)  # read + execute, NOT writable
+        with pytest.raises(RuntimeError):
+            await storage.write(
+                f"{subdir}/blocked.pdf", b"%PDF-1.4", "application/pdf"
+            )
+    finally:
+        os.chmod(ro_dir, 0o755)
+        for child in ro_dir.iterdir():
+            child.unlink()
+        ro_dir.rmdir()
+
+
+@pytest.mark.asyncio
 async def test_read_bytes_unreadable_file_raises_runtime_error():
     """A disk read error (PermissionError, an OSError that is NOT a missing
     file) is normalized to RuntimeError so the router maps it to 503.

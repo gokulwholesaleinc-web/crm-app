@@ -92,3 +92,139 @@ export interface OnboardingTemplateFilters {
   service_tag?: string;
   include_inactive?: boolean;
 }
+
+// ---------------------------------------------------------------------------
+// Phase 2 — packets (staff select-and-send + public client-fill flow)
+// ---------------------------------------------------------------------------
+
+/**
+ * Packet lifecycle status (build-order note §2). ``active``/``opened``/
+ * ``in_progress`` are all writable; the rest are read-only or terminal.
+ */
+export type OnboardingPacketStatus =
+  | 'active'
+  | 'opened'
+  | 'in_progress'
+  | 'completing'
+  | 'completed'
+  | 'expired'
+  | 'revoked'
+  | 'completion_failed'
+  | 'abandoned';
+
+/**
+ * Delivery state of a notice/invite email linked to a packet — surfaced to
+ * staff only, never on the public matrix (note §2). Mirrors EmailQueue.status.
+ */
+export type OnboardingPacketDelivery =
+  | 'pending'
+  | 'sent'
+  | 'failed'
+  | 'retry'
+  | 'throttled';
+
+/** A queued email tagged to a packet (completion notice / owner email). */
+export interface OnboardingPacketEmail {
+  id: number;
+  subject: string;
+  status: OnboardingPacketDelivery;
+  to_email: string;
+  created_at: string;
+}
+
+/** Per-document summary in the staff packet detail view (NO field values). */
+export interface OnboardingPacketDocumentSummary {
+  id: number;
+  original_filename: string;
+  display_order: number;
+  requires_esign: boolean;
+  status: string;
+  completed_at?: string | null;
+}
+
+/**
+ * Staff-facing packet row. Carries NO raw token and NO field values; the
+ * one-time ``access_url`` is present ONLY on the create (POST /packets)
+ * response (note §8) — never re-served by GET.
+ */
+export interface OnboardingPacket {
+  id: number;
+  contact_id: number;
+  company_id?: number | null;
+  status: OnboardingPacketStatus;
+  recipient_email_masked?: string | null;
+  recipient_name?: string | null;
+  document_count: number;
+  created_at: string;
+  token_expires_at: string;
+  completed_at?: string | null;
+  first_opened_at?: string | null;
+  /** Present only on the POST /packets 201 response — show once, copy, drop. */
+  access_url?: string | null;
+  emails?: OnboardingPacketEmail[];
+}
+
+export interface OnboardingPacketDetail extends OnboardingPacket {
+  documents: OnboardingPacketDocumentSummary[];
+}
+
+export interface OnboardingPacketCreate {
+  contact_id: number;
+  recipient_email: string;
+  recipient_name?: string | null;
+  company_id?: number | null;
+  template_ids: number[];
+}
+
+// --- Public client-fill flow (bare axios client, X-Onboarding-Session) ---
+
+export interface OnboardingPublicBranding {
+  company_name: string | null;
+  logo_url: string | null;
+  primary_color: string;
+  secondary_color: string;
+  accent_color: string;
+  bg_color_light: string;
+  surface_color_light: string;
+  footer_text: string | null;
+  privacy_policy_url: string | null;
+  terms_of_service_url: string | null;
+}
+
+/** A document the client steps through and fills on the public page. */
+export interface OnboardingPublicDocument {
+  id: number;
+  original_filename: string;
+  field_definitions: OnboardingFieldDefinition[];
+  /** Saved values keyed by field id. Reassigned whole on each PATCH (§4.3). */
+  field_values: Record<string, string>;
+  field_values_version: number;
+  requires_esign: boolean;
+}
+
+/** A completed document download entry returned by the §5.3 landing endpoint. */
+export interface OnboardingDownloadDocument {
+  doc_id: number;
+  title: string;
+  url: string;
+}
+
+/**
+ * The public packet payload. Pre-gate (no valid session) carries only
+ * branding + counts + a status message; post-gate (valid session) adds the
+ * documents, signature version, disclosure, and (when completed) downloads.
+ */
+export interface OnboardingPublicPacket {
+  status: OnboardingPacketStatus;
+  branding: OnboardingPublicBranding | null;
+  document_count: number;
+  requires_email_verification: boolean;
+  status_message?: string | null;
+  // Post-gate only:
+  documents?: OnboardingPublicDocument[];
+  signature_version?: number;
+  esign_disclosure?: string | null;
+  esign_disclosure_version?: string | null;
+  has_signature?: boolean;
+  downloads?: OnboardingDownloadDocument[];
+}

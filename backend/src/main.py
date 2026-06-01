@@ -49,6 +49,11 @@ from src.leads.router import router as leads_router
 from src.meta.router import router as meta_router
 from src.notes.router import router as notes_router
 from src.notifications.router import router as notifications_router
+from src.onboarding.download_router import (
+    download_router as onboarding_download_router,
+)
+from src.onboarding.packet_router import router as onboarding_packet_router
+from src.onboarding.public_router import router as onboarding_public_router
 from src.onboarding.router import router as onboarding_router
 from src.payments.router import router as payments_router
 from src.proposals.router import router as proposals_router
@@ -160,7 +165,12 @@ app.add_middleware(
     allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
+    allow_headers=[
+        "Authorization",
+        "Content-Type",
+        "X-Requested-With",
+        "X-Onboarding-Session",
+    ],
 )
 
 # Tenant resolution middleware (runs after CORS)
@@ -201,6 +211,9 @@ app.include_router(sharing_router)
 app.include_router(payments_router)
 app.include_router(proposals_router)
 app.include_router(onboarding_router)
+app.include_router(onboarding_packet_router)
+app.include_router(onboarding_public_router)
+app.include_router(onboarding_download_router)
 # Contracts router unmounted 2026-05-14 — Lorenzo collapsed contract terms
 # into the Proposal T&C inline. Model + tables preserved for historical
 # data on the ``contracts`` table.

@@ -35,6 +35,8 @@ import type {
 
 // The editor pulls in pdf.js — code-split it so the library list stays light.
 const OnboardingTemplateEditor = lazy(() => import('./OnboardingTemplateEditor'));
+// The send panel pulls in the contacts query + packet API — code-split too.
+const OnboardingSendPanel = lazy(() => import('./OnboardingSendPanel'));
 
 const ONBOARDING_KEY = ['onboarding-templates'] as const;
 
@@ -62,6 +64,7 @@ function isEditConflict(err: unknown): boolean {
 function OnboardingLibraryPage() {
   usePageTitle('Onboarding');
   const queryClient = useQueryClient();
+  const [view, setView] = useState<'templates' | 'send'>('templates');
   const [includeInactive, setIncludeInactive] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [metaTarget, setMetaTarget] = useState<OnboardingTemplate | null>(null);
@@ -287,11 +290,51 @@ function OnboardingLibraryPage() {
             Reusable client onboarding document templates with placed fields.
           </p>
         </div>
-        <Button leftIcon={<PlusIcon className="h-5 w-5" />} onClick={() => setShowCreate(true)} className="w-full sm:w-auto">
-          New Template
-        </Button>
+        {view === 'templates' && (
+          <Button leftIcon={<PlusIcon className="h-5 w-5" />} onClick={() => setShowCreate(true)} className="w-full sm:w-auto">
+            New Template
+          </Button>
+        )}
       </div>
 
+      {/* View toggle: manage the template library vs send a packet to a client. */}
+      <div className="inline-flex rounded-md border border-gray-200 dark:border-gray-700 p-0.5" role="tablist" aria-label="Onboarding view">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={view === 'templates'}
+          onClick={() => setView('templates')}
+          className={`rounded px-3 py-1.5 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 ${
+            view === 'templates'
+              ? 'bg-primary-600 text-white'
+              : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+          }`}
+        >
+          Templates
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={view === 'send'}
+          onClick={() => setView('send')}
+          className={`rounded px-3 py-1.5 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 ${
+            view === 'send'
+              ? 'bg-primary-600 text-white'
+              : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+          }`}
+        >
+          Send to client
+        </button>
+      </div>
+
+      {view === 'send' && (
+        <Suspense fallback={<SkeletonTable rows={3} cols={2} />}>
+          <OnboardingSendPanel templates={templates} />
+        </Suspense>
+      )}
+
+      {view === 'templates' && (
+      <>
       {/* Inactive toggle */}
       <label className="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
         <input
@@ -353,6 +396,8 @@ function OnboardingLibraryPage() {
             onRestore={handleRestore}
           />
         </div>
+      )}
+      </>
       )}
 
       {/* Create modal */}
