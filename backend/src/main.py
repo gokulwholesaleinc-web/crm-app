@@ -55,6 +55,7 @@ from src.onboarding.download_router import (
 from src.onboarding.packet_router import router as onboarding_packet_router
 from src.onboarding.public_router import router as onboarding_public_router
 from src.onboarding.router import router as onboarding_router
+from src.onboarding.selection_router import router as onboarding_selection_router
 from src.payments.router import router as payments_router
 from src.proposals.router import router as proposals_router
 from src.reports.router import router as reports_router
@@ -211,6 +212,7 @@ app.include_router(sharing_router)
 app.include_router(payments_router)
 app.include_router(proposals_router)
 app.include_router(onboarding_router)
+app.include_router(onboarding_selection_router)
 app.include_router(onboarding_packet_router)
 app.include_router(onboarding_public_router)
 app.include_router(onboarding_download_router)

@@ -17,6 +17,8 @@ from src.core.router_utils import DBSession
 from src.onboarding import completion, tokens
 from src.onboarding.packet_schemas import (
     CompleteResponse,
+    ConsentRequest,
+    ConsentResult,
     DocumentPatch,
     PatchResult,
     PublicDocument,
@@ -100,6 +102,9 @@ async def get_public_packet(token: str, request: Request, response: Response, db
         ],
         signature_version=packet.signature_version,
         has_signature=packet.signer_signature_image is not None,
+        has_consented=all(
+            d.consented_at is not None for d in documents if d.requires_esign
+        ),
         esign_disclosure=disclosure,
         esign_disclosure_version=disclosure_version,
     )
@@ -214,6 +219,25 @@ async def set_public_signature(
             base_signature_version=data.base_signature_version,
         )
     return SignatureResult(signature_version=version)
+
+
+@router.post("/{token}/consent", response_model=ConsentResult)
+@limiter.limit("30/minute")
+async def record_public_consent(token: str, request: Request, db: DB):
+    """Record electronic-records consent per e-sign doc (session-gated; §D.1).
+
+    The affirmative consent step the signer makes BEFORE drawing a signature.
+    Idempotent. 409 if the echoed ``disclosure_version`` doesn't match the
+    stored snapshot. ``/complete`` 422s until this has been recorded.
+    """
+    data = await parse_body_within_caps(request, ConsentRequest)
+    packet, service = await load_packet_for_public(db, token)
+    require_session(request, packet)
+    with packet_errors_mapped():
+        consented = await service.record_consent(
+            packet, disclosure_version=data.disclosure_version
+        )
+    return ConsentResult(consented=True, documents_consented=consented)
 
 
 @router.post("/{token}/complete", response_model=CompleteResponse)

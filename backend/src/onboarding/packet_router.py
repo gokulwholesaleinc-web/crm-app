@@ -132,6 +132,36 @@ async def revoke_packet(
     return await build_packet_response(db, service, packet)
 
 
+@router.post("/packets/{packet_id}/resend", response_model=PacketResponse)
+async def resend_invite(
+    packet_id: int,
+    current_user: UpdateUser,
+    db: DBSession,
+    data_scope: Scope,
+):
+    """Re-mint the access link + re-queue the onboarding invite (§C.2).
+
+    Allowed for active/opened/in_progress/expired; 409 for terminal states.
+    Commits the fresh token BEFORE queuing the invite (``queue_email`` may
+    send synchronously, so the link must be durable first — same rule as
+    ``resend_completion_notices``). The invite is NOT suppressed by the
+    idempotency guard (deliberate staff action).
+    """
+    from src.onboarding.completion_notices import queue_invite
+
+    service, packet = await _load_packet_checked(
+        db, packet_id, current_user, data_scope
+    )
+    with packet_errors_mapped():
+        raw_token = await service.resend_invite(packet, actor_id=current_user.id)
+    await db.commit()
+    await queue_invite(
+        db, packet=packet, raw_access_token=raw_token, suppress_if_exists=False
+    )
+    packet = await service.get_packet(packet_id)
+    return await build_packet_response(db, service, packet)
+
+
 @router.post("/packets/{packet_id}/retry-completion", response_model=PacketResponse)
 async def retry_completion(
     packet_id: int,

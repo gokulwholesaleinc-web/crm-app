@@ -209,6 +209,22 @@ def decode_signature_png(signature_png_base64: str) -> bytes:
             status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
             detail="Signature image must be a PNG.",
         )
+    # Magic bytes alone don't prove the PNG is decodable — a truncated/corrupt
+    # payload (valid header, garbage body) passes the check above but raises
+    # OSError when the stamper hands it to reportlab's ImageReader (PIL),
+    # surfacing as a completion-time 500. Decode it HERE through the exact same
+    # ImageReader so a bad PNG is a clean 422 at the signature step instead.
+    import io
+
+    from reportlab.lib.utils import ImageReader
+
+    try:
+        ImageReader(io.BytesIO(raw)).getSize()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
+            detail="Signature image is not a readable PNG.",
+        ) from exc
     return raw
 
 

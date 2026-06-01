@@ -78,6 +78,29 @@ class PacketResponse(BaseModel):
     access_url: str | None = None
 
 
+class SelectionResponse(BaseModel):
+    """One proposal→onboarding-template selection row (staff view, §4.7)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    proposal_id: int
+    template_id: int
+    display_order: int
+
+
+class SelectionSet(BaseModel):
+    """Replace the whole ordered selection list for a proposal."""
+
+    template_ids: list[int] = Field(default_factory=list)
+
+
+class SelectionReorder(BaseModel):
+    """Reassign display_order from a permutation of the current selection ids."""
+
+    ordered_ids: list[int] = Field(default_factory=list)
+
+
 class ResendResult(BaseModel):
     resent: list[str]
 
@@ -156,6 +179,11 @@ class PublicPacketPostResponse(BaseModel):
     # True once the recipient has drawn a signature this packet — lets a
     # returning signer skip redrawing (the FE pre-marks it saved on reload).
     has_signature: bool = False
+    # True once every e-sign doc has recorded electronic-records consent (the
+    # affirmative /consent step) — lets a returning signer skip re-consenting,
+    # and the fill page gate the signature pad on it. ``all()`` over an empty
+    # esign set is True, so a non-esign packet reads as already-consented.
+    has_consented: bool = False
     esign_disclosure: str | None = None
     esign_disclosure_version: str | None = None
     download_url: str | None = None
@@ -177,6 +205,22 @@ class SignatureSet(BaseModel):
 
 class SignatureResult(BaseModel):
     signature_version: int
+
+
+class ConsentRequest(BaseModel):
+    """E-records consent affirmation (§D.1).
+
+    ``disclosure_version`` is the version the client actually rendered; when
+    provided it is checked against the stored per-doc snapshot version (409 on
+    mismatch). Omit it to skip the echo check.
+    """
+
+    disclosure_version: str | None = None
+
+
+class ConsentResult(BaseModel):
+    consented: bool
+    documents_consented: int
 
 
 class CompleteResponse(BaseModel):

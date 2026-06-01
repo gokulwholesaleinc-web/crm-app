@@ -117,14 +117,25 @@ export function useDownloadProposalPDF() {
 }
 
 /**
- * Hook to accept a proposal
+ * Hook to accept a proposal (internal/admin offline-acceptance path).
+ *
+ * ``acknowledgeUnsigned`` is forwarded to the backend's manual-confirmation
+ * guard: omit it on the first attempt and, if the proposal has an unsigned
+ * signature target, the call rejects with 409 so the UI can confirm and
+ * re-submit with the acknowledgement.
  */
 export function useAcceptProposal() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (proposalId: number) => proposalsApi.accept(proposalId),
-    onSuccess: (_data, proposalId) => {
+    mutationFn: ({
+      proposalId,
+      acknowledgeUnsigned = false,
+    }: {
+      proposalId: number;
+      acknowledgeUnsigned?: boolean;
+    }) => proposalsApi.accept(proposalId, acknowledgeUnsigned),
+    onSuccess: (_data, { proposalId }) => {
       queryClient.invalidateQueries({ queryKey: proposalKeys.lists() });
       queryClient.invalidateQueries({ queryKey: proposalKeys.detail(proposalId) });
     },

@@ -74,6 +74,11 @@ async def _complete_packet_via_routes(client, db_session, contact_id, created_by
         headers=headers,
         json={"signature_png_base64": _b64png(), "base_signature_version": 0},
     )
+    # Phase-3: e-records consent is now a mandatory affirmative step before
+    # /complete (it 422s otherwise).
+    await client.post(
+        f"/api/onboarding/public/{raw}/consent", headers=headers, json={}
+    )
     await client.get(
         f"/api/onboarding/public/{raw}/documents/{doc.id}/pdf", headers=headers
     )

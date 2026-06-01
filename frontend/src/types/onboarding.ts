@@ -176,6 +176,32 @@ export interface OnboardingPacketCreate {
   template_ids: number[];
 }
 
+// ---------------------------------------------------------------------------
+// Phase 3 — proposal → onboarding-template selections (staff curation)
+// ---------------------------------------------------------------------------
+
+/**
+ * One proposal→onboarding-template selection row (staff view). The ordered
+ * list of these drives Phase-3 auto-send: on admin-accept the proposal's
+ * selected templates become the packet's documents, in ``display_order``.
+ */
+export interface OnboardingProposalSelection {
+  id: number;
+  proposal_id: number;
+  template_id: number;
+  display_order: number;
+}
+
+/** Replace the whole ordered selection list for a proposal. */
+export interface OnboardingSelectionSet {
+  template_ids: number[];
+}
+
+/** Reorder the selections by a permutation of their selection ids. */
+export interface OnboardingSelectionReorder {
+  ordered_ids: number[];
+}
+
 // --- Public client-fill flow (bare axios client, X-Onboarding-Session) ---
 
 export interface OnboardingPublicBranding {
@@ -226,5 +252,7 @@ export interface OnboardingPublicPacket {
   esign_disclosure?: string | null;
   esign_disclosure_version?: string | null;
   has_signature?: boolean;
+  /** True once every e-sign doc has recorded electronic-records consent. */
+  has_consented?: boolean;
   downloads?: OnboardingDownloadDocument[];
 }

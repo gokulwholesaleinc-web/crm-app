@@ -39,6 +39,7 @@ import {
   useRemoveProposalBundleOption,
 } from '../../hooks/useProposals';
 import { ProposalAuditCard } from './ProposalAuditCard';
+import { ProposalOnboardingSelectionsCard } from './ProposalOnboardingSelectionsCard';
 // Lazy-loaded because pdf.js (~300 KB gzipped) only needs to land in
 // the bundle when an admin actually opens the picker.
 const SignatureFieldPicker = lazy(() =>
@@ -87,6 +88,7 @@ import type {
   ProposalAttachment,
   ProposalSigningDocument,
   SignatureFieldCoordsValue,
+  ApiError,
 } from '../../types';
 import {
   formatSignaturePlacementSummary,
@@ -135,6 +137,10 @@ function ProposalDetailPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDealWonBanner, setShowDealWonBanner] = useState(false);
   const [sendFailure, setSendFailure] = useState<ProposalSendFailure | null>(null);
+  // Manual-confirmation gate (§E.5): set when admin-accept returns 409 because
+  // the proposal has an unsigned signature box. Opening the dialog lets staff
+  // confirm an offline acceptance, which re-POSTs with acknowledge_unsigned.
+  const [showUnsignedAcceptConfirm, setShowUnsignedAcceptConfirm] = useState(false);
   const actionRowRef = useRef<HTMLDivElement>(null);
   const signingDocumentsRef = useRef<HTMLDivElement>(null);
   const prevStatusRef = useRef<string | undefined>(undefined);
@@ -254,10 +260,31 @@ function ProposalDetailPage() {
 
   const handleAccept = async () => {
     try {
-      await acceptProposalMutation.mutateAsync(proposal.id);
+      await acceptProposalMutation.mutateAsync({ proposalId: proposal.id });
       showSuccess('Proposal accepted');
-    } catch {
-      showError('Failed to accept proposal');
+    } catch (err) {
+      // 409 = the manual-confirmation guard: the proposal has a signature box
+      // but no signature on file. Surface the confirm dialog instead of a
+      // dead-end error (§E.5).
+      if ((err as ApiError | undefined)?.status_code === 409) {
+        setShowUnsignedAcceptConfirm(true);
+        return;
+      }
+      showError(extractApiErrorDetail(err) ?? 'Failed to accept proposal');
+    }
+  };
+
+  const handleConfirmUnsignedAccept = async () => {
+    try {
+      await acceptProposalMutation.mutateAsync({
+        proposalId: proposal.id,
+        acknowledgeUnsigned: true,
+      });
+      showSuccess('Proposal accepted');
+    } catch (err) {
+      showError(extractApiErrorDetail(err) ?? 'Failed to accept proposal');
+    } finally {
+      setShowUnsignedAcceptConfirm(false);
     }
   };
 
@@ -876,6 +903,16 @@ function ProposalDetailPage() {
               isLocked={Boolean(proposal.signed_at)}
             />
           </div>
+
+          {/* Onboarding documents — templates auto-sent to the client when
+              this proposal is accepted (Phase 3). Locked once signed, since
+              the packet is minted at/just after acceptance. */}
+          <div data-guide="proposal-detail-onboarding-selections">
+            <ProposalOnboardingSelectionsCard
+              proposalId={proposal.id}
+              isLocked={Boolean(proposal.signed_at)}
+            />
+          </div>
         </div>
 
         {/* Sidebar */}
@@ -1072,6 +1109,21 @@ function ProposalDetailPage() {
         cancelLabel="Cancel"
         variant="danger"
         isLoading={deleteProposalMutation.isPending}
+      />
+
+      {/* Manual-confirmation gate for an unsigned signature target (§E.5).
+          Distinct from the public Sign-to-Confirm flow — this records an
+          offline acceptance with no captured signature. */}
+      <ConfirmDialog
+        isOpen={showUnsignedAcceptConfirm}
+        onClose={() => setShowUnsignedAcceptConfirm(false)}
+        onConfirm={handleConfirmUnsignedAccept}
+        title="Accept without a signature?"
+        message="This is a manual confirmation: no client signature will be captured and the placed signature box(es) will remain blank. Continue?"
+        confirmLabel="Accept anyway"
+        cancelLabel="Cancel"
+        variant="warning"
+        isLoading={acceptProposalMutation.isPending}
       />
     </div>
   );

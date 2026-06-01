@@ -232,6 +232,57 @@ class OnboardingPacketDocument(Base, AuditableMixin):
     )
 
 
+class ProposalOnboardingSelection(Base, AuditableMixin):
+    """Staff-curated onboarding template attached to a proposal (Phase 3, §4.7).
+
+    One row per (proposal, template); ``display_order`` is the packet document
+    order the auto-send trigger uses when the proposal is accepted. Both FKs
+    CASCADE on delete — a soft-retire (``is_active=false``) keeps the row and
+    the trigger skips it at fire time; only a hard template/proposal delete
+    drops it. ``AuditableMixin`` supplies created/updated audit columns.
+
+    The two unique constraints make the ordering gap-free and collision-free;
+    the reorder service bumps rows to a temporary high offset before writing
+    the final ``0..N-1`` values so a per-row UPDATE can't trip
+    ``uq_proposal_onboarding_selection_order`` mid-reorder.
+    """
+
+    __tablename__ = "proposal_onboarding_selections"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # The proposal_id index is declared ONCE in __table_args__ below
+    # (``ix_proposal_onboarding_selections_proposal``) to match migration 051
+    # exactly — do NOT add ``index=True`` here too, or create_all (test/dev DBs)
+    # would build a second, migration-less index and drift from prod.
+    proposal_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("proposals.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    template_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("onboarding_templates.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    display_order: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "proposal_id", "template_id", name="uq_proposal_onboarding_selection"
+        ),
+        UniqueConstraint(
+            "proposal_id",
+            "display_order",
+            name="uq_proposal_onboarding_selection_order",
+        ),
+        Index(
+            "ix_proposal_onboarding_selections_proposal", "proposal_id"
+        ),
+    )
+
+
 class OnboardingPacketDocumentView(Base):
     """Per-token view row for a packet document (read-before-sign ledger).
 

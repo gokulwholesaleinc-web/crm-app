@@ -168,6 +168,7 @@ async def _phase_a_claim(
     # row locks aren't held longer than the sibling guards above.
     try:
         _validate_documents_for_completion(docs)
+        _assert_consent_recorded(docs)
         _assert_signature_present(p, docs)
         await _validate_documents_stampable(docs, p.signer_signature_image)
     except PacketValidationError:
@@ -212,15 +213,12 @@ async def _phase_a_claim(
             "The packet changed while finalizing; reload and retry."
         )
     # Record the e-sign audit trail on the claimed packet (persisted with the
-    # claim commit): from where the signer submitted, and the consent timestamp
-    # on each signature-bearing document. The disclosure snapshot names exactly
-    # these fields, so they must actually be captured.
+    # claim commit): from where the signer submitted. Consent (``consented_at``)
+    # is now its own affirmative step recorded by ``POST /consent`` BEFORE
+    # submit (gated above by ``_assert_consent_recorded``), not an implicit
+    # side effect of claiming here (§D.2).
     p.signer_ip = signer_ip
     p.signer_user_agent = signer_user_agent
-    consented = _now()
-    for d in docs:
-        if d.requires_esign and d.consented_at is None:
-            d.consented_at = consented
     await db.commit()  # release the FOR UPDATE lock; PATCH/signature now 409
 
 
@@ -251,15 +249,18 @@ async def _validate_documents_stampable(
     """Dry-run the stamp of every document so content errors surface in Phase A.
 
     A bad date, a value that overflows its box, or an undecodable signature PNG
-    raise ``ValueError`` in the stamper. Without this, that only happens in
-    Phase B — AFTER the packet has flipped to ``completing`` — so the signer
-    gets a dead-end ``completion_failed`` instead of a fixable 422. Running the
-    same ``stamp_document`` path here (output discarded) catches those as a
-    clean ``PacketValidationError`` (→ 422, status unchanged).
+    raise ``ValueError`` (bad date/overflow) or ``OSError`` (a corrupt PNG that
+    passed the magic-byte gate but PIL can't decode) in the stamper. Without
+    this, that only happens in Phase B — AFTER the packet has flipped to
+    ``completing`` — so the signer gets a dead-end ``completion_failed`` instead
+    of a fixable 422. Running the same ``stamp_document`` path here (output
+    discarded) catches those as a clean ``PacketValidationError`` (→ 422, status
+    unchanged).
 
-    Only content (``ValueError``) errors fail here; a storage read failure is
-    infra (not the signer's fault), so it's skipped and left to Phase B's
-    fail-closed handling.
+    Only CONTENT errors fail here; a storage read failure is infra (not the
+    signer's fault) and is already normalized to ``RuntimeError`` by
+    ``read_bytes`` (caught below + skipped), so any ``OSError`` reaching the
+    stamp call is a decode failure of the signer's own PNG, not storage.
     """
     for doc in docs:
         try:
@@ -270,8 +271,25 @@ async def _validate_documents_stampable(
             await asyncio.to_thread(
                 stamp_document, source, _fields_with_values(doc), signature_png
             )
-        except ValueError as exc:
+        except (ValueError, OSError) as exc:
             raise PacketValidationError(str(exc)) from exc
+
+
+def _assert_consent_recorded(docs: list[OnboardingPacketDocument]) -> None:
+    """Every e-sign doc must have ``consented_at`` set before completion (§D.2).
+
+    Consent is a deliberate affirmative step (``POST /consent``) recorded
+    BEFORE submit — ESIGN best practice — not an implicit side effect of
+    clicking Submit. A missing-consent ``/complete`` is a clean 422 with the
+    packet status unchanged (raised inside Phase A's pre-claim try-block, so
+    no claim happens).
+    """
+    for doc in docs:
+        if doc.requires_esign and doc.consented_at is None:
+            raise PacketValidationError(
+                "Please review and accept the electronic-records consent "
+                "before submitting."
+            )
 
 
 def _assert_signature_present(
