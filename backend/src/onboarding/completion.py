@@ -106,13 +106,13 @@ async def complete_packet(
     # completion_failed (Phase B infra error), or still completing (a concurrent
     # worker holds a lease and is finishing). Return the REAL status so the
     # client poll never contradicts the row.
-    packet = await service.get_packet(packet.id)
-    if packet is None:
+    refreshed = await service.get_packet(packet.id)
+    if refreshed is None:
         return {"status": "completion_failed"}
-    if packet.status != "completed":
-        return {"status": packet.status}
+    if refreshed.status != "completed":
+        return {"status": refreshed.status}
 
-    await notify_after_commit(db, packet=packet, raw_download=raw_download)
+    await notify_after_commit(db, packet=refreshed, raw_download=raw_download)
     return {"status": "completed", "download_url": _download_url(raw_download)}
 
 
@@ -513,10 +513,10 @@ async def retry_completion(db: AsyncSession, *, packet: OnboardingPacket) -> dic
     raw_download = await _phase_c_finalize(db, packet_id=packet.id)
 
     service = PacketService(db)
-    packet = await service.get_packet(packet.id)
-    if packet is None:
+    refreshed = await service.get_packet(packet.id)
+    if refreshed is None:
         return {"status": "completion_failed"}
-    if packet.status != "completed":
-        return {"status": packet.status}
-    await notify_after_commit(db, packet=packet, raw_download=raw_download)
+    if refreshed.status != "completed":
+        return {"status": refreshed.status}
+    await notify_after_commit(db, packet=refreshed, raw_download=raw_download)
     return {"status": "completed", "download_url": _download_url(raw_download)}
