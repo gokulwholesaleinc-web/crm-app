@@ -5,7 +5,7 @@
  * (which OAuth reviewers specifically check for).
  */
 import LegalLayout, { Section } from './LegalLayout';
-import { APP_URL, COMPANY_NAME, LEGAL_ENTITY, PRIVACY_EMAIL } from './companyInfo';
+import { APP_URL, COMPANY_ADDRESS, COMPANY_NAME, LEGAL_ENTITY, PRIVACY_EMAIL } from './companyInfo';
 
 export default function PrivacyPolicyPage() {
   return (
@@ -164,8 +164,11 @@ export default function PrivacyPolicyPage() {
           Questions or requests:{' '}
           <a className="text-indigo-600 hover:underline" href={`mailto:${PRIVACY_EMAIL}`}>
             {PRIVACY_EMAIL}
-          </a>{' '}
-          ({LEGAL_ENTITY}).
+          </a>
+          .
+        </p>
+        <p>
+          {LEGAL_ENTITY}, {COMPANY_ADDRESS}.
         </p>
       </Section>
     </LegalLayout>

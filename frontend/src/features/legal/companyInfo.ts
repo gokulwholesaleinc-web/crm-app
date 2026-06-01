@@ -3,19 +3,17 @@
  * Privacy Policy and Terms of Service pages (and linked from the OAuth consent
  * screen at https://www.linkcreativeagency.com/privacy and /terms).
  *
- * TODO (confirm with Lorenzo / counsel before relying on these in production):
- *  - LEGAL_ENTITY: the exact registered entity name (e.g. "LinkCreative Agency LLC").
- *  - PRIVACY_EMAIL / LEGAL_EMAIL: the real contact inboxes.
- *  - GOVERNING_LAW / VENUE: the specific U.S. state for the Terms.
+ * Confirmed by the business 2026-06-01. One interim value remains:
+ *  - PRIVACY_EMAIL / LEGAL_EMAIL: currently a working owner/forwarding inbox on
+ *    a different domain ("for now"); swap to a dedicated Link Creative inbox
+ *    (e.g. privacy@linkcreativeagency.com) once it exists and receives mail.
  *  - LAST_UPDATED: bump whenever the wording changes.
  */
-export const COMPANY_NAME = 'LinkCreative';
-export const LEGAL_ENTITY = 'LinkCreative'; // TODO: exact registered entity name
+export const COMPANY_NAME = 'Link Creative';
+export const LEGAL_ENTITY = 'Link Creative Co';
+export const COMPANY_ADDRESS = '350 W Ontario St #5E, Chicago, IL 60654';
 export const APP_URL = 'https://www.linkcreativeagency.com';
-export const PRIVACY_EMAIL = 'privacy@linkcreativeagency.com'; // TODO: confirm
-export const LEGAL_EMAIL = 'legal@linkcreativeagency.com'; // TODO: confirm
-// TODO: set a specific U.S. state once confirmed (e.g. "the State of Texas").
-export const GOVERNING_LAW =
-  'the laws of the United States and the U.S. state in which ' +
-  `${LEGAL_ENTITY} is established`;
+export const PRIVACY_EMAIL = 'Harsh@midwestsystemsolutions.com'; // interim — see note above
+export const LEGAL_EMAIL = 'Harsh@midwestsystemsolutions.com'; // interim — see note above
+export const GOVERNING_LAW = 'the laws of the State of Illinois';
 export const LAST_UPDATED = 'June 1, 2026';

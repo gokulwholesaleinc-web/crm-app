@@ -3,7 +3,14 @@
  * the sign-in page. No-auth; depends on no app providers.
  */
 import LegalLayout, { Section } from './LegalLayout';
-import { APP_URL, COMPANY_NAME, GOVERNING_LAW, LEGAL_EMAIL, LEGAL_ENTITY } from './companyInfo';
+import {
+  APP_URL,
+  COMPANY_ADDRESS,
+  COMPANY_NAME,
+  GOVERNING_LAW,
+  LEGAL_EMAIL,
+  LEGAL_ENTITY,
+} from './companyInfo';
 
 export default function TermsOfServicePage() {
   return (
@@ -114,8 +121,11 @@ export default function TermsOfServicePage() {
           Questions:{' '}
           <a className="text-indigo-600 hover:underline" href={`mailto:${LEGAL_EMAIL}`}>
             {LEGAL_EMAIL}
-          </a>{' '}
-          ({LEGAL_ENTITY}).
+          </a>
+          .
+        </p>
+        <p>
+          {LEGAL_ENTITY}, {COMPANY_ADDRESS}.
         </p>
       </Section>
     </LegalLayout>
