@@ -6,8 +6,9 @@ Create Date: 2026-05-18
 """
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision = "044_admin_audit_work_sessions"
 down_revision = "043_guide_progress"

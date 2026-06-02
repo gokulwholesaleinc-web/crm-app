@@ -9,7 +9,6 @@ the real public routes + a real session; no mocks.
 import base64
 
 import pytest
-
 from src.onboarding import tokens
 from src.onboarding.packet_service import PacketService
 

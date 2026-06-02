@@ -341,9 +341,9 @@ async def test_concurrent_claim_exactly_one_wins(session_maker):
 @pytest.mark.asyncio
 async def test_concurrent_phase_b_attaches_exactly_once(session_maker):
     """Two concurrent Phase-B passes leave the doc with a SINGLE attachment_id."""
+    from src.attachments.models import Attachment
     from src.onboarding.completion import _phase_b_stamp
     from src.onboarding.models import OnboardingPacket, OnboardingPacketDocument
-    from src.attachments.models import Attachment
 
     packet_id, doc_id, _raw, _signer = await _seed_completable_packet(session_maker)
 
@@ -395,8 +395,8 @@ async def test_stale_lease_reclaim_fences_orphan(session_maker):
     the doc still has exactly ONE attachment and the Attachment table is not
     polluted with the orphan.
     """
-    from src.onboarding.completion import _phase_b_stamp
     from src.attachments.models import Attachment
+    from src.onboarding.completion import _phase_b_stamp
     from src.onboarding.models import OnboardingPacket, OnboardingPacketDocument
 
     packet_id, doc_id, _raw, _signer = await _seed_completable_packet(session_maker)
@@ -522,7 +522,6 @@ async def _seed_proposal_with_selections(session_maker, n: int):
 async def test_selection_unique_order_constraint_enforced(session_maker):
     """Two rows on one proposal can't share a display_order (PG constraint)."""
     from sqlalchemy.exc import IntegrityError
-
     from src.onboarding.models import ProposalOnboardingSelection
 
     proposal_id, _owner, _ids = await _seed_proposal_with_selections(

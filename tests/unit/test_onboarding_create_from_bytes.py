@@ -11,7 +11,6 @@ import uuid
 
 import pytest
 from sqlalchemy import select
-
 from src.attachments.models import Attachment
 from src.attachments.service import ONBOARDING_MAX_BYTES, AttachmentService
 from src.onboarding import storage

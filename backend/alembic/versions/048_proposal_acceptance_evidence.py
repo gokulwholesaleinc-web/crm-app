@@ -6,6 +6,7 @@ Create Date: 2026-05-27
 """
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision = "048_proposal_acceptance_evidence"

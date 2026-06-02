@@ -15,7 +15,6 @@ import secrets
 
 import pytest
 from sqlalchemy import select
-
 from src.activities.models import Activity
 from src.email.models import EmailQueue
 from src.onboarding.completion_notices import INVITE_SUBJECT, queue_invite
@@ -116,7 +115,10 @@ async def test_admin_accept_creates_packet_and_invite(
         invites = await _invite_rows(db_session, packet.id)
         assert len(invites) == 1
         assert invites[0].to_email == test_contact.email
-        assert invites[0].status in ("pending", "sent", "throttled", "retry")
+        # The invite MUST be attributed to the packet owner — outbound mail has
+        # no fallback sender, so a NULL sent_by_id can only ever fail to deliver.
+        assert invites[0].sent_by_id == test_admin_user.id
+        assert packet.created_by_id == test_admin_user.id
     finally:
         await cleanup_packet_storage(db_session, PacketService(db_session), packet.id)
 
@@ -156,6 +158,8 @@ async def test_public_accept_creates_packet_and_invite(
     try:
         invites = await _invite_rows(db_session, packet.id)
         assert len(invites) == 1
+        # Attributed to the proposal owner so it can actually send (no fallback).
+        assert invites[0].sent_by_id == test_user.id
     finally:
         await cleanup_packet_storage(db_session, PacketService(db_session), packet.id)
 
@@ -233,6 +237,33 @@ async def test_accept_no_recipient_email_writes_activity_no_packet(
     assert "recipient email" in acts[0].description
 
 
+async def test_accept_no_owner_writes_activity_no_packet(
+    client, db_session, test_admin_user, test_contact, admin_auth_headers
+):
+    """An owner-less proposal mints NO packet — the invite would queue with
+    sent_by_id=None (no fallback sender → permanent send failure) and be
+    invisible to every non-admin in the email queue. A skip Activity records
+    the reason instead, and the accept still returns 200.
+    """
+    # owner_id=None → no connected Gmail to send the invite from.
+    proposal = await _make_sent_proposal(
+        db_session, None, contact_id=test_contact.id
+    )
+    template = await make_template(db_session)
+    # Selections must be set by a real actor even though the proposal is ownerless.
+    await _select(db_session, proposal.id, [template.id], test_admin_user.id)
+
+    resp = await client.post(
+        f"/api/proposals/{proposal.id}/accept", headers=admin_auth_headers
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["status"] == "accepted"
+    assert await _packets_for_proposal(db_session, proposal.id) == []
+    acts = await _skip_activities(db_session, proposal.id)
+    assert len(acts) == 1
+    assert "no owner" in acts[0].description
+
+
 async def test_trigger_never_500s_the_accept_on_create_packet_error(
     client, db_session, test_admin_user, test_contact, admin_auth_headers
 ):
@@ -287,6 +318,8 @@ async def test_invite_idempotent_non_failed_row_suppresses(
         assert second is False
         invites = await _invite_rows(db_session, packet.id)
         assert len(invites) == 1
+        # The queued invite carries a real sender (the packet owner).
+        assert invites[0].sent_by_id == test_user.id
     finally:
         await cleanup_packet_storage(db_session, service, packet.id)
 
@@ -350,6 +383,7 @@ async def test_completion_notice_not_suppressed_by_invite(
             to_email=test_contact.email,
             subject=completion_subject,
             body="download link here",
+            sent_by_id=test_user.id,
         )
         await db_session.commit()
 
@@ -374,6 +408,7 @@ async def test_completion_notice_not_suppressed_by_invite(
             to_email=test_contact.email,
             subject=completion_subject,
             body="download link here",
+            sent_by_id=test_user.id,
         )
         await db_session.commit()
         same_subject = (

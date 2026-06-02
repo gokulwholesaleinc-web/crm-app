@@ -22,6 +22,7 @@ from src.onboarding.models import (
 )
 from src.onboarding.packet_errors import (
     PacketNotFoundError,
+    PacketRaceError,
     PacketValidationError,
 )
 from src.proposals.models import Proposal
@@ -29,6 +30,13 @@ from src.proposals.models import Proposal
 # A temporary offset larger than any realistic selection count, so the
 # first pass of a reorder can't collide with a row's eventual final order.
 _TEMP_ORDER_OFFSET = 1_000_000
+
+# Proposal statuses at/after acceptance: the auto-send trigger has already
+# read these selections and minted (or attempted) the onboarding packet, so the
+# selection set is frozen — editing it now would silently diverge from what the
+# client was actually sent. Mirrors the post-accept set in ``proposals/service``
+# (``accepted`` → ``awaiting_payment`` → ``paid``).
+_FROZEN_PROPOSAL_STATUSES = ("accepted", "awaiting_payment", "paid")
 
 
 class SelectionService:
@@ -135,6 +143,7 @@ class SelectionService:
         harmless for the trigger (it orders by display_order, not the literal
         values) and avoids a needless renumber/flush. Staff reorder if they care.
         """
+        await self._lock_proposal(proposal_id)
         result = await self.db.execute(
             select(ProposalOnboardingSelection)
             .where(ProposalOnboardingSelection.id == selection_id)
@@ -149,19 +158,30 @@ class SelectionService:
         await self.db.flush()
 
     async def _lock_proposal(self, proposal_id: int) -> None:
-        """Serialize concurrent selection mutations for one proposal.
+        """Lock the proposal row and refuse edits once it has been accepted.
 
-        Two staff saving selections for the same proposal at once would race the
-        ``(proposal_id, display_order)`` unique constraint into a raw
-        IntegrityError / lost update. Taking a ``FOR UPDATE`` lock on the
-        proposal row first serializes them (dialect-aware ``with_for_update`` is
-        a silent no-op on SQLite, so the test harness is unaffected).
+        Two jobs: (1) serialize concurrent selection mutations — two staff
+        saving for the same proposal at once would race the ``(proposal_id,
+        display_order)`` unique constraint into a raw IntegrityError / lost
+        update, so a ``FOR UPDATE`` lock on the proposal row serializes them
+        (dialect-aware ``with_for_update`` is a silent no-op on SQLite, so the
+        test harness is unaffected). (2) Reject the edit if the proposal is
+        already accepted — the auto-send trigger has already read these
+        selections and minted the packet, so a late change would diverge from
+        what the client was actually sent. Read the status under the SAME lock
+        so a concurrent accept can't slip in between the check and the write.
         """
-        await self.db.execute(
-            select(Proposal.id)
+        result = await self.db.execute(
+            select(Proposal.status)
             .where(Proposal.id == proposal_id)
             .with_for_update()
         )
+        status = result.scalar_one_or_none()
+        if status in _FROZEN_PROPOSAL_STATUSES:
+            raise PacketRaceError(
+                "This proposal has already been accepted; its onboarding "
+                "documents are locked and can no longer be changed."
+            )
 
     async def _assert_templates_active(self, template_ids: list[int]) -> None:
         """422 if any template is missing, retired, or has no PDF.

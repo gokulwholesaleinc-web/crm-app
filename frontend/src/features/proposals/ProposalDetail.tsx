@@ -905,12 +905,14 @@ function ProposalDetailPage() {
           </div>
 
           {/* Onboarding documents — templates auto-sent to the client when
-              this proposal is accepted (Phase 3). Locked once signed, since
-              the packet is minted at/just after acceptance. */}
+              this proposal is accepted (Phase 3). Locked on ACCEPTANCE, not
+              signing: the packet is minted on accept, and the offline/admin
+              accept path sets accepted_at WITHOUT signed_at, so a signed_at-only
+              lock would leave selections editable after the packet was sent. */}
           <div data-guide="proposal-detail-onboarding-selections">
             <ProposalOnboardingSelectionsCard
               proposalId={proposal.id}
-              isLocked={Boolean(proposal.signed_at)}
+              isLocked={Boolean(proposal.accepted_at)}
             />
           </div>
         </div>

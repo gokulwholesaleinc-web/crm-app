@@ -6,8 +6,9 @@ Create Date: 2026-05-18
 """
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision = "043_guide_progress"
 down_revision = "042_proposal_signing_documents"

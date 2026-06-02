@@ -14,8 +14,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import select
-
-from src.onboarding import storage, tokens
+from src.onboarding import tokens
 from src.onboarding.models import OnboardingPacket
 from src.onboarding.packet_service import PacketService
 

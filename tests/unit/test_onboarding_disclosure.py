@@ -7,7 +7,6 @@ real e-sign document; nothing mocked.
 """
 
 import pytest
-
 from src.onboarding.disclosure import (
     ONBOARDING_ESIGN_DISCLOSURE_VERSION,
     onboarding_esign_disclosure,

@@ -9,7 +9,6 @@ transaction so the outer session survives). Real rows on SQLite; the
 
 import pytest
 from sqlalchemy import func, select
-
 from src.onboarding import tokens
 from src.onboarding.models import OnboardingPacketDocumentView
 from src.onboarding.packet_service import PacketService
