@@ -1,4 +1,5 @@
 import { useRef, useState, Suspense, lazy } from 'react';
+import clsx from 'clsx';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   PlusIcon,
@@ -9,7 +10,7 @@ import {
   ClipboardDocumentCheckIcon,
   Cog6ToothIcon,
 } from '@heroicons/react/24/outline';
-import { Button, Modal, ModalFooter, Input, ConfirmDialog, Badge } from '../../components/ui';
+import { Button, Modal, ModalFooter, Input, ConfirmDialog, Badge, Switch } from '../../components/ui';
 import { SkeletonTable } from '../../components/ui/Skeleton';
 import { useAuthQuery } from '../../hooks/useAuthQuery';
 import { usePageTitle } from '../../hooks/usePageTitle';
@@ -298,33 +299,32 @@ function OnboardingLibraryPage() {
       </div>
 
       {/* View toggle: manage the template library vs send a packet to a client. */}
-      <div className="inline-flex rounded-md border border-gray-200 dark:border-gray-700 p-0.5" role="tablist" aria-label="Onboarding view">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={view === 'templates'}
-          onClick={() => setView('templates')}
-          className={`rounded px-3 py-1.5 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 ${
-            view === 'templates'
-              ? 'bg-primary-600 text-white'
-              : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-          }`}
-        >
-          Templates
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={view === 'send'}
-          onClick={() => setView('send')}
-          className={`rounded px-3 py-1.5 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 ${
-            view === 'send'
-              ? 'bg-primary-600 text-white'
-              : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-          }`}
-        >
-          Send to client
-        </button>
+      <div
+        className="inline-flex items-center gap-1 rounded-lg bg-gray-100 p-1 dark:bg-gray-800"
+        role="tablist"
+        aria-label="Onboarding view"
+      >
+        {([
+          ['templates', 'Templates'],
+          ['send', 'Send to client'],
+        ] as const).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={view === key}
+            onClick={() => setView(key)}
+            className={clsx(
+              'rounded-md px-3.5 py-1.5 text-sm font-medium transition-colors',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500',
+              view === key
+                ? 'bg-primary-600 text-white shadow-sm'
+                : 'text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white',
+            )}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
       {view === 'send' && (
@@ -336,15 +336,12 @@ function OnboardingLibraryPage() {
       {view === 'templates' && (
       <>
       {/* Inactive toggle */}
-      <label className="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-        <input
-          type="checkbox"
-          checked={includeInactive}
-          onChange={(e) => setIncludeInactive(e.target.checked)}
-          className="h-4 w-4 rounded border-gray-300 text-primary-600 focus-visible:ring-primary-500"
-        />
-        Show retired templates
-      </label>
+      <Switch
+        checked={includeInactive}
+        onChange={setIncludeInactive}
+        label="Show retired templates"
+        size="sm"
+      />
 
       {error && (
         <div className="rounded-md bg-red-50 dark:bg-red-900/20 p-4">
@@ -746,15 +743,12 @@ function EditTemplateMetaForm({ template, onSubmit, onCancel, isLoading }: EditT
         placeholder="Leave blank for a universal template..."
         helperText="Scopes the template to one service. Blank = universal."
       />
-      <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-        <input
-          type="checkbox"
-          checked={requiresEsign}
-          onChange={(e) => setRequiresEsign(e.target.checked)}
-          className="h-4 w-4 rounded border-gray-300 text-primary-600 focus-visible:ring-primary-500"
-        />
-        Requires e-signature
-      </label>
+      <Switch
+        checked={requiresEsign}
+        onChange={setRequiresEsign}
+        label="Requires e-signature"
+        description="Adds the ESIGN consent step; needs a placed signature field."
+      />
       <ModalFooter>
         <Button type="button" variant="secondary" onClick={onCancel} disabled={isLoading}>
           Cancel

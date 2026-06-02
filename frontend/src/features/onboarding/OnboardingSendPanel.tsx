@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import clsx from 'clsx';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   PaperAirplaneIcon,
@@ -6,6 +7,7 @@ import {
   ArrowPathIcon,
   EnvelopeIcon,
 } from '@heroicons/react/24/outline';
+import { CheckIcon } from '@heroicons/react/20/solid';
 import {
   Button,
   Input,
@@ -301,26 +303,40 @@ export function OnboardingSendPanel({ templates }: OnboardingSendPanelProps) {
               <div className="mt-2 space-y-1.5">
                 {activeTemplates.map((t) => {
                   const disabled = !t.has_pdf;
+                  const selected = selectedTemplateIds.has(t.id);
                   return (
-                    <label
+                    <button
                       key={t.id}
-                      className={`flex items-center gap-2.5 rounded border px-3 py-2 text-sm ${
+                      type="button"
+                      role="checkbox"
+                      aria-checked={selected}
+                      disabled={disabled}
+                      onClick={() => toggleTemplate(t.id)}
+                      className={clsx(
+                        'flex w-full items-center gap-2.5 rounded-lg border px-3 py-2 text-left text-sm transition-colors',
+                        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500',
                         disabled
-                          ? 'border-gray-200 dark:border-gray-700 opacity-60 cursor-not-allowed'
-                          : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/40 cursor-pointer'
-                      }`}
+                          ? 'cursor-not-allowed border-gray-200 opacity-60 dark:border-gray-700'
+                          : selected
+                            ? 'border-primary-500 bg-primary-50 dark:border-primary-500/60 dark:bg-primary-500/10'
+                            : 'border-gray-200 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-700/40',
+                      )}
                     >
-                      <input
-                        type="checkbox"
-                        checked={selectedTemplateIds.has(t.id)}
-                        onChange={() => toggleTemplate(t.id)}
-                        disabled={disabled}
-                        className="h-4 w-4 rounded border-gray-300 text-primary-600 focus-visible:ring-primary-500"
-                      />
+                      <span
+                        aria-hidden="true"
+                        className={clsx(
+                          'flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border transition-colors',
+                          selected
+                            ? 'border-primary-600 bg-primary-600 text-white'
+                            : 'border-gray-300 bg-white dark:border-gray-500 dark:bg-gray-800',
+                        )}
+                      >
+                        {selected && <CheckIcon className="h-3.5 w-3.5" />}
+                      </span>
                       <span className="min-w-0 flex-1 truncate text-gray-900 dark:text-gray-100">{t.name}</span>
                       {t.requires_esign && <Badge variant="yellow" size="sm">E-sign</Badge>}
                       {disabled && <span className="text-xs text-gray-400">No PDF</span>}
-                    </label>
+                    </button>
                   );
                 })}
               </div>
