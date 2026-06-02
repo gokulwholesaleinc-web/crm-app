@@ -139,6 +139,53 @@ describe('OnboardingTemplateEditor — canSave gating + onSave payload', () => {
   });
 });
 
+describe('OnboardingTemplateEditor — type chips select + same-kind stepper', () => {
+  function renderEditor(fields: OnboardingFieldDefinition[]) {
+    return render(
+      <OnboardingTemplateEditor
+        isOpen
+        onClose={vi.fn()}
+        templateName="Intake packet"
+        pdfUrl="blob:test"
+        currentFields={fields}
+        onSave={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+  }
+
+  it('a chip opens that field, and the stepper swaps between two same-kind fields', async () => {
+    renderEditor([
+      makeField({ id: 'text_1', kind: 'text', label: 'First text', x: 100, y: 100 }),
+      makeField({ id: 'text_2', kind: 'text', label: 'Second text', x: 100, y: 300 }),
+      makeField({ id: 'sig_1', kind: 'signature', label: 'Client sig', x: 100, y: 500 }),
+    ]);
+    await waitFor(() => expect(renderMock).toHaveBeenCalled());
+
+    // Nothing selected yet → the draw/select prompt is shown.
+    expect(screen.getByText(/Select a field on the page/i)).toBeInTheDocument();
+
+    // Clicking the Signature chip swaps the panel to the signature field.
+    fireEvent.click(screen.getByRole('button', { name: /^signature/i }));
+    expect(await screen.findByText('Signature field')).toBeInTheDocument();
+    expect(screen.getByLabelText('Field id')).toHaveValue('sig_1');
+
+    // Clicking the Text chip opens the first text field with a "1/2" stepper.
+    fireEvent.click(screen.getByRole('button', { name: /^text/i }));
+    expect(await screen.findByText('Text field')).toBeInTheDocument();
+    expect(screen.getByLabelText('Field id')).toHaveValue('text_1');
+    expect(screen.getByText('1/2')).toBeInTheDocument();
+
+    // The panel ▶ steps to the second text field.
+    fireEvent.click(screen.getByRole('button', { name: /next text field/i }));
+    expect(screen.getByLabelText('Field id')).toHaveValue('text_2');
+    expect(screen.getByText('2/2')).toBeInTheDocument();
+
+    // Re-clicking the Text chip cycles back to the first.
+    fireEvent.click(screen.getByRole('button', { name: /^text/i }));
+    expect(screen.getByLabelText('Field id')).toHaveValue('text_1');
+  });
+});
+
 describe('OnboardingTemplateEditor — 409 stale-save handling', () => {
   it('surfaces the rejection message and does not re-clear the panel on a failed save', async () => {
     // onSave rejects like the parent would on a non-409 error path: editor
