@@ -99,6 +99,28 @@ async def _create_packet_and_send(
         )
         return
 
+    if owner_id is None:
+        # No packet owner → the minted packet's invite would be queued with
+        # ``sent_by_id=None``. EmailService has no transactional fallback, so
+        # that row can only ever FAIL the send, and (sent_by_id NULL + no staff
+        # address in participant_emails) it is invisible to every non-admin in
+        # the email queue list. Minting it anyway would strand a dead-on-arrival
+        # invite nobody is told about. Record a durable, staff-visible reason
+        # and create no packet, mirroring the other skip paths below.
+        await _skip_activity(
+            db,
+            proposal_id=proposal_id,
+            owner_id=owner_id,
+            actor_id=actor_id,
+            description=(
+                "Proposal accepted but it has no owner to send onboarding from "
+                "(all mail goes out via the owner's connected Gmail). The "
+                "onboarding packet was not created — assign an owner and send "
+                "onboarding manually."
+            ),
+        )
+        return
+
     if contact_id is None:
         await _skip_activity(
             db,

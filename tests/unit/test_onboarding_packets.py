@@ -11,11 +11,8 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import select
-
 from src.contacts.models import Contact
-from src.onboarding import storage, tokens
-from src.onboarding.models import OnboardingPacket, OnboardingPacketDocument
+from src.onboarding import tokens
 from src.onboarding.packet_errors import PacketRaceError, PacketValidationError
 from src.onboarding.packet_service import PacketService
 

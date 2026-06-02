@@ -10,14 +10,12 @@ No mocks. Real templates, real PDFs, real signature PNG, real stamping. E-mail
 side effects are asserted as ``EmailQueue`` rows + status, never a live send.
 """
 
-import time
-import uuid
 
 import pytest
-
 from src.onboarding import storage, tokens
 from src.onboarding.models import OnboardingPacket
 from src.onboarding.packet_service import PacketService
+from starlette.requests import Request
 
 from ._onboarding_helpers import (
     cleanup_packet_storage,
@@ -397,10 +395,8 @@ async def test_signature_corrupt_png_rejected_422(client, db_session, test_conta
 # --------------------------------------------------------------------------
 
 
-def _request_with_headers(headers: dict) -> "Request":
+def _request_with_headers(headers: dict) -> Request:
     """Build a minimal Starlette Request carrying the given headers."""
-    from starlette.requests import Request
-
     raw = [(k.lower().encode(), v.encode()) for k, v in headers.items()]
     return Request({"type": "http", "method": "POST", "headers": raw})
 
@@ -408,7 +404,6 @@ def _request_with_headers(headers: dict) -> "Request":
 def test_missing_content_length_is_411():
     """A mutation body with no Content-Length is rejected 411 pre-parse."""
     from fastapi import HTTPException
-
     from src.core.constants import HTTPStatus
     from src.onboarding.public_helpers import assert_body_within_caps
 
@@ -420,7 +415,6 @@ def test_missing_content_length_is_411():
 def test_over_cap_content_length_is_413():
     """An over-cap Content-Length is rejected 413 pre-parse."""
     from fastapi import HTTPException
-
     from src.core.constants import HTTPStatus
     from src.onboarding.public_helpers import MAX_BODY_BYTES, assert_body_within_caps
 
@@ -438,10 +432,8 @@ def test_within_cap_content_length_passes():
     assert_body_within_caps(_request_with_headers({"content-length": "100"}))
 
 
-def _request_with_body(body: bytes, headers: dict) -> "Request":
+def _request_with_body(body: bytes, headers: dict) -> Request:
     """A minimal Starlette Request that yields ``body`` from its receive channel."""
-    from starlette.requests import Request
-
     raw = [(k.lower().encode(), v.encode()) for k, v in headers.items()]
 
     async def receive():
@@ -456,7 +448,6 @@ async def test_parse_body_within_caps_rejects_lying_content_length_413():
     """A SMALL Content-Length but a LARGE actual body is still capped — proving
     the cap precedes the JSON parse (the header check alone can't catch a lie)."""
     from fastapi import HTTPException
-
     from src.core.constants import HTTPStatus
     from src.onboarding.packet_schemas import DocumentPatch
     from src.onboarding.public_helpers import MAX_BODY_BYTES, parse_body_within_caps
@@ -471,7 +462,6 @@ async def test_parse_body_within_caps_rejects_lying_content_length_413():
 async def test_parse_body_within_caps_rejects_malformed_422():
     """A non-JSON / schema-invalid body is a 422, never an opaque 500."""
     from fastapi import HTTPException
-
     from src.core.constants import HTTPStatus
     from src.onboarding.packet_schemas import DocumentPatch
     from src.onboarding.public_helpers import parse_body_within_caps
@@ -499,7 +489,6 @@ def test_signature_over_200kb_rejected():
     import base64
 
     from fastapi import HTTPException
-
     from src.core.constants import HTTPStatus
     from src.onboarding.public_helpers import (
         MAX_SIGNATURE_BYTES,
@@ -624,7 +613,6 @@ async def test_full_happy_path_complete_and_download(
         assert packet.status == "completed"
         assert packet.signer_signature_image is None
         from sqlalchemy import select
-
         from src.email.models import EmailQueue
 
         rows = (
@@ -639,6 +627,102 @@ async def test_full_happy_path_complete_and_download(
         assert RECIPIENT in recipients
         assert test_user.email in recipients
         assert len(rows) == 2
+        # Both notices are attributed to the packet owner so they can actually
+        # send — outbound mail has no fallback sender, a NULL sender only fails.
+        assert all(r.sent_by_id == packet.created_by_id for r in rows)
+        assert packet.created_by_id == test_user.id
+    finally:
+        await cleanup_packet_storage(db_session, service, packet.id)
+
+
+# --------------------------------------------------------------------------
+# Completion-claim fence: a stale save can't mutate after /complete claims it
+# --------------------------------------------------------------------------
+
+
+async def test_patch_document_refused_after_completion_claim(
+    db_session, test_contact
+):
+    """A field save that loaded BEFORE a /complete claim must be refused (409),
+    not silently overwrite the field_values Phase B is about to stamp.
+
+    The document version fence is insufficient on its own — completion does not
+    bump ``field_values_version`` — so the service must also fence on the packet
+    status. Here the in-memory packet still shows a writable status (the request
+    loaded before the claim), while the DB row has been flipped to
+    ``completing`` (the claim). The save must lose at the DB level.
+    """
+    from sqlalchemy import update
+    from src.onboarding.packet_errors import PacketRaceError
+
+    service, packet, raw = await _make_packet(db_session, test_contact.id)
+    try:
+        doc = (await service.load_documents(packet.id))[0]
+        v1 = await service.patch_document(
+            packet, doc, field_values={"full_name": "Original"}, base_version=0
+        )
+        await db_session.commit()
+        assert v1 == 1
+
+        # Simulate a concurrent /complete claim WITHOUT refreshing this request's
+        # in-memory packet (synchronize_session=False keeps packet.status stale).
+        await db_session.execute(
+            update(OnboardingPacket)
+            .where(OnboardingPacket.id == packet.id)
+            .values(status="completing")
+            .execution_options(synchronize_session=False)
+        )
+        await db_session.commit()
+        assert packet.status in ("active", "opened", "in_progress")  # stale
+
+        with pytest.raises(PacketRaceError):
+            await service.patch_document(
+                packet, doc, field_values={"full_name": "TAMPERED"}, base_version=1
+            )
+
+        # The field_values Phase B will stamp are untouched.
+        reloaded = (await service.load_documents(packet.id))[0]
+        assert reloaded.field_values == {"full_name": "Original"}
+        assert reloaded.field_values_version == 1
+    finally:
+        await cleanup_packet_storage(db_session, service, packet.id)
+
+
+async def test_set_signature_refused_after_completion_claim(
+    db_session, test_contact
+):
+    """A signature save loaded before a /complete claim is refused (409).
+
+    Same fence as the field save: the signature_version alone can't protect this
+    (completion doesn't bump it), so set_signature also gates on packet status.
+    """
+    from sqlalchemy import update
+    from src.onboarding.packet_errors import PacketRaceError
+
+    service, packet, raw = await _make_packet(
+        db_session,
+        test_contact.id,
+        requires_esign=True,
+        field_definitions=[text_field("full_name"), signature_field()],
+    )
+    try:
+        await db_session.execute(
+            update(OnboardingPacket)
+            .where(OnboardingPacket.id == packet.id)
+            .values(status="completing")
+            .execution_options(synchronize_session=False)
+        )
+        await db_session.commit()
+        assert packet.status not in ("completing",)  # in-memory still stale
+
+        with pytest.raises(PacketRaceError):
+            await service.set_signature(
+                packet, signature_png=png_bytes(), base_signature_version=0
+            )
+
+        reloaded = await service.get_packet(packet.id)
+        assert reloaded.signer_signature_image is None
+        assert reloaded.signature_version == 0
     finally:
         await cleanup_packet_storage(db_session, service, packet.id)
 

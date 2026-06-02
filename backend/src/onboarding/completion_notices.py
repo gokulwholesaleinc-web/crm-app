@@ -83,6 +83,10 @@ async def _post_commit_notices(
     email_service = EmailService(db)
     base_url = settings.FRONTEND_BASE_URL or "http://localhost:3000"
 
+    # Both notices are sent FROM the packet owner's connected Gmail (the staff
+    # member who created the packet) — there is no transactional fallback sender.
+    sender_id = packet.created_by_id
+
     # Client download link (carries the raw download token — its only egress).
     if raw_download:
         client_link = f"{base_url}/onboarding/complete/{raw_download}"
@@ -93,6 +97,7 @@ async def _post_commit_notices(
             to_email=packet.recipient_email,
             subject=CLIENT_READY_SUBJECT,
             body=_client_ready_body(client_link),
+            sent_by_id=sender_id,
         )
 
     # Owner notice (the staff member who created the packet).
@@ -109,6 +114,7 @@ async def _post_commit_notices(
                 "been completed and the signed documents are attached to the "
                 "contact record."
             ),
+            sent_by_id=sender_id,
         )
 
     # Contact timeline.
@@ -166,17 +172,24 @@ async def _queue_once(
     to_email: str,
     subject: str,
     body: str,
+    sent_by_id: int | None,
 ) -> None:
     """Queue an e-mail unless a non-failed one already exists for (packet, to,
     subject). Keying on ``subject`` is essential: a Phase-3 INVITE shares the
     recipient with the completion notice, so a subject-blind check would let the
-    earlier invite suppress the (genuinely needed) completion e-mail."""
+    earlier invite suppress the (genuinely needed) completion e-mail.
+
+    ``sent_by_id`` is the sending staff member — all outbound mail goes through
+    their connected Gmail (``EmailService`` has no transactional fallback), so a
+    ``None`` here marks the row failed instead of delivering. It must be the
+    packet owner, never omitted."""
     if await _completion_email_exists(db, packet_id, to_email, subject=subject):
         return
     await email_service.queue_email(
         to_email=to_email,
         subject=subject,
         body=body,
+        sent_by_id=sent_by_id,
         entity_type="onboarding_packets",
         entity_id=packet_id,
     )
@@ -214,6 +227,9 @@ async def queue_invite(
             "You'll be asked to verify your email before you can fill them in. "
             "This link expires in 30 days."
         ),
+        # Sent FROM the packet owner's Gmail (no fallback sender) — without this
+        # the invite row can only ever fail, so the client never gets the link.
+        sent_by_id=packet.created_by_id,
         entity_type="onboarding_packets",
         entity_id=packet.id,
     )
@@ -265,6 +281,8 @@ async def resend_completion_notices(
             to_email=to_email,
             subject=subject,
             body=body,
+            # Sent FROM the packet owner's Gmail (no fallback sender).
+            sent_by_id=packet.created_by_id,
             entity_type="onboarding_packets",
             entity_id=packet.id,
         )

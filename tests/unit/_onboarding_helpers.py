@@ -9,6 +9,7 @@ end-to-end without a single mock. Imported by ``test_onboarding_*`` files.
 
 from __future__ import annotations
 
+import contextlib
 import io
 import struct
 import uuid
@@ -16,7 +17,6 @@ import zlib
 
 from reportlab.lib.pagesizes import LETTER
 from reportlab.pdfgen import canvas
-
 from src.onboarding import storage
 from src.onboarding.models import OnboardingTemplate
 
@@ -132,7 +132,6 @@ async def cleanup_packet_storage(db, service, packet_id: int) -> None:
     trigger a sync lazy-load (``MissingGreenlet``) on the async session.
     """
     from sqlalchemy import select
-
     from src.attachments.models import Attachment
     from src.onboarding.models import OnboardingPacketDocument
 
@@ -158,7 +157,6 @@ async def cleanup_packet_storage(db, service, packet_id: int) -> None:
         except Exception:  # noqa: BLE001 — best-effort test cleanup
             pass
     for pdf_path in paths:
-        try:
+        # best-effort test cleanup — a missing/again-deleted file is fine
+        with contextlib.suppress(Exception):
             await storage.delete(pdf_path)
-        except Exception:  # noqa: BLE001 — best-effort test cleanup
-            pass

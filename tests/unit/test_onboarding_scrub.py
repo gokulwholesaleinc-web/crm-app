@@ -16,7 +16,6 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import select
-
 from src.email.models import EmailQueue
 from src.onboarding import completion, storage, tokens
 from src.onboarding.packet_errors import PacketGoneError, PacketRaceError
@@ -75,7 +74,6 @@ async def test_lazy_expiry_scrubs_and_410s(db_session, test_contact):
     assert below (a ``flush()`` would leave it open).
     """
     from fastapi import HTTPException
-
     from src.core.constants import HTTPStatus
     from src.onboarding.public_helpers import load_packet_for_public
 
@@ -239,6 +237,8 @@ async def test_resend_completion_notice_remints_working_link(
             )
         ).scalars().first()
         assert "contact us" not in client_row.body.lower()
+        # Resent notice is attributed to the packet owner (no fallback sender).
+        assert client_row.sent_by_id == test_user.id
         match = re.search(r"/onboarding/complete/(\S+)", client_row.body)
         assert match, client_row.body
         assert tokens.hash_token(match.group(1)) == packet.download_token_hash

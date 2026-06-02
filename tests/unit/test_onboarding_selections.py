@@ -11,10 +11,10 @@ import secrets
 
 import pytest
 from sqlalchemy import select
-
 from src.onboarding.models import OnboardingTemplate, ProposalOnboardingSelection
 from src.onboarding.packet_errors import (
     PacketNotFoundError,
+    PacketRaceError,
     PacketValidationError,
 )
 from src.onboarding.selection_service import (
@@ -176,6 +176,42 @@ async def test_remove_foreign_selection_404(db_session, test_user):
         await svc.remove(p2.id, rows[0].id)
 
 
+async def test_selection_edits_frozen_after_accept(db_session, test_user):
+    """Once the proposal is accepted, set/reorder/remove are refused (409).
+
+    The auto-send trigger reads these selections on accept and mints the packet,
+    so a late edit would diverge from what the client was actually sent. The
+    guard must cover every mutation path, including a previously-uncovered DELETE.
+    """
+    proposal = await _make_proposal(db_session, test_user.id)
+    t1 = await make_template(db_session)
+    t2 = await make_template(db_session)
+    svc = SelectionService(db_session)
+    rows = await svc.set_selections(
+        proposal.id, template_ids=[t1.id], actor_id=test_user.id
+    )
+    await db_session.commit()
+
+    # Proposal gets accepted (the trigger has now read + sent these selections).
+    proposal.status = "accepted"
+    await db_session.commit()
+
+    with pytest.raises(PacketRaceError, match="already been accepted"):
+        await svc.set_selections(
+            proposal.id, template_ids=[t2.id], actor_id=test_user.id
+        )
+    with pytest.raises(PacketRaceError):
+        await svc.reorder(
+            proposal.id, ordered_ids=[rows[0].id], actor_id=test_user.id
+        )
+    with pytest.raises(PacketRaceError):
+        await svc.remove(proposal.id, rows[0].id)
+
+    # The selection set is untouched by the rejected edits.
+    listed = await svc.list_selections(proposal.id)
+    assert [r.template_id for r in listed] == [t1.id]
+
+
 async def test_active_selection_template_ids_skips_retired(db_session, test_user):
     """The trigger read drops a template retired AFTER it was selected."""
     proposal = await _make_proposal(db_session, test_user.id)
@@ -262,3 +298,23 @@ async def test_set_selections_route_retired_template_422(
         json={"template_ids": [retired.id]},
     )
     assert resp.status_code == 422, resp.text
+
+
+async def test_set_selections_route_409_after_accept(
+    client, db_session, test_user, test_contact, admin_auth_headers
+):
+    """The PUT route surfaces a post-accept edit as a 409 (locked)."""
+    proposal = await _make_proposal(
+        db_session, test_user.id, contact_id=test_contact.id
+    )
+    t1 = await make_template(db_session)
+    await db_session.commit()
+    proposal.status = "accepted"
+    await db_session.commit()
+
+    resp = await client.put(
+        f"/api/onboarding/proposals/{proposal.id}/selections",
+        headers=admin_auth_headers,
+        json={"template_ids": [t1.id]},
+    )
+    assert resp.status_code == 409, resp.text

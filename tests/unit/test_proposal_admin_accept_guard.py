@@ -11,7 +11,6 @@ import secrets
 
 import pytest
 from sqlalchemy import select
-
 from src.activities.models import Activity
 from src.proposals.models import Proposal, ProposalSigningDocument
 

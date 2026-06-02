@@ -469,11 +469,47 @@ class PacketService:
         self._validate_field_values(doc, field_values)
         merged = dict(doc.field_values or {})
         merged.update(field_values)
+        # Advance active/opened → in_progress atomically, BEFORE the document
+        # write. Two reasons: (1) lock order — Phase A's completion claim locks
+        # the packet THEN its documents, so taking the packet write first here
+        # keeps both paths packet→document and avoids a deadlock; (2) it can't
+        # clobber a claim — the conditional WHERE only matches active/opened, so
+        # once a concurrent /complete has flipped the packet to ``completing``
+        # this is a no-op (0 rows) rather than a stale in-memory write resetting
+        # the status to in_progress. ``synchronize_session=False`` leaves the
+        # in-memory object untouched (the route returns the version, not status).
+        await self.db.execute(
+            update(OnboardingPacket)
+            .where(OnboardingPacket.id == packet.id)
+            .where(OnboardingPacket.status.in_(("active", "opened")))
+            .values(status="in_progress")
+            .execution_options(synchronize_session=False)
+        )
         result = await self.db.execute(
             update(OnboardingPacketDocument)
             .where(OnboardingPacketDocument.id == doc.id)
             .where(OnboardingPacketDocument.field_values_version == base_version)
+            # Packet-writable fence: refuse the write once a /complete claim has
+            # flipped the packet out of a writable status AFTER this request
+            # loaded it. The version fence alone is insufficient — completion
+            # does NOT bump field_values_version, so without this a stale save
+            # could land after the claim and mutate the very field_values Phase
+            # B is about to stamp.
+            .where(
+                select(OnboardingPacket.id)
+                .where(OnboardingPacket.id == packet.id)
+                .where(OnboardingPacket.status.in_(WRITABLE_STATUSES))
+                .exists()
+            )
             .values(field_values=merged, field_values_version=base_version + 1)
+            # synchronize_session="fetch": pre-select the PKs matching the FULL
+            # WHERE (including the packet-writable fence) before updating, so the
+            # in-memory ``doc`` is only synced when the DB row actually matched.
+            # The default 'evaluate' would set the new values on the stale ORM
+            # object on the REJECT path (it can't see the committed claim),
+            # leaving a phantom; 'fetch' reflects the real 0-row outcome while
+            # still keeping the object correct on success.
+            .execution_options(synchronize_session="fetch")
             .returning(OnboardingPacketDocument.field_values_version)
         )
         row = result.first()
@@ -481,13 +517,7 @@ class PacketService:
             raise PacketRaceError(
                 "This document changed since you loaded it; reload and retry."
             )
-        if packet.status in ("active", "opened"):
-            packet.status = "in_progress"
         await self.db.flush()
-        # Running the UPDATE through ``session.execute`` synchronizes the
-        # in-memory ``doc`` (it is not left dirty), so the fence isn't clobbered
-        # by a later flush. The route returns the authoritative new version from
-        # RETURNING below.
         return row[0]
 
     @staticmethod
@@ -573,10 +603,26 @@ class PacketService:
             update(OnboardingPacket)
             .where(OnboardingPacket.id == packet.id)
             .where(OnboardingPacket.signature_version == base_signature_version)
+            # Packet-writable fence: a /complete claim flips the packet to
+            # ``completing`` and the recipient must not be able to overwrite the
+            # signature Phase B is stamping. The signature_version alone doesn't
+            # protect this — completion doesn't bump it — so gate on the status
+            # too. This UPDATE also serializes behind Phase A's FOR UPDATE on the
+            # packet row, so it sees the committed post-claim status.
+            .where(OnboardingPacket.status.in_(WRITABLE_STATUSES))
             .values(
                 signer_signature_image=signature_png,
                 signature_version=base_signature_version + 1,
             )
+            # synchronize_session="fetch": pre-select the matching PK using the
+            # FULL WHERE (including the status fence) before updating, so the
+            # in-memory packet is synced ONLY when the DB row actually matched.
+            # The default 'evaluate' reads the request's stale (pre-claim) status
+            # and would set signature_version on the in-memory object even on the
+            # REJECT path where the DB matched 0 rows, leaving a phantom; 'fetch'
+            # reflects the real outcome and still keeps the object correct on a
+            # successful save (the shared test session reads the same instance).
+            .execution_options(synchronize_session="fetch")
             .returning(OnboardingPacket.signature_version)
         )
         row = result.first()

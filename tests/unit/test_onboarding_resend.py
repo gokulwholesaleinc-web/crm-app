@@ -10,7 +10,6 @@ E-mail side effects are asserted as ``EmailQueue`` rows, never a live send.
 
 import pytest
 from sqlalchemy import select
-
 from src.email.models import EmailQueue
 from src.onboarding import tokens
 from src.onboarding.completion_notices import INVITE_SUBJECT
