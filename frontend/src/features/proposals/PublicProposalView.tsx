@@ -115,7 +115,6 @@ interface PublicProposal {
   signing_documents?: ProposalAttachmentPublic[];
   // Sign-to-Confirm modal inputs — resolved server-side so the modal
   // doesn't have to chain another fetch on open.
-  terms_and_conditions: string | null;
   designated_signer_email: string | null;
   has_master_contract: boolean;
   signing_document_count?: number;
@@ -283,11 +282,9 @@ function PublicProposalView() {
     async ({
       signatureDataUrl,
       email,
-      agreedToTerms,
     }: {
       signatureDataUrl: string;
       email: string;
-      agreedToTerms: boolean;
     }): Promise<string | null> => {
       if (!proposal) return 'Proposal is no longer available.';
       const recipient = proposal.contact?.full_name ?? email;
@@ -298,7 +295,11 @@ function PublicProposalView() {
             signer_name: recipient,
             signer_email: email,
             signature_image: signatureDataUrl,
-            agreed_to_terms: agreedToTerms,
+            // Consent to use an electronic signature is now implied by
+            // drawing + submitting the signature (the ESIGN disclosure is
+            // shown in the page footer); there is no separate T&C checkbox.
+            // Sent as true to satisfy the accept endpoint's required field.
+            agreed_to_terms: true,
             signer_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
             selected_proposal_id: proposal.id ?? undefined,
           },
@@ -710,7 +711,6 @@ function PublicProposalView() {
           isOpen={signModalOpen && canRespond}
           onClose={() => setSignModalOpen(false)}
           recipientEmail={recipientEmail}
-          termsAndConditions={proposal.terms_and_conditions}
           hasSigningDocuments={hasSigningDocuments}
           signingDocumentCount={signingDocumentCount}
           onSubmit={submitSignature}

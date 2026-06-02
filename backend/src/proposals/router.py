@@ -1201,9 +1201,6 @@ async def get_public_proposal(
     response = ProposalPublicResponse.model_validate(proposal)
     _scope_public_payment_fields(response)
     response.branding = _branding_from_dict(branding_data)
-    response.terms_and_conditions = await service.get_effective_terms_and_conditions(
-        proposal,
-    )
     response.designated_signer_email = (
         proposal.designated_signer_email
         or (proposal.contact.email if proposal.contact else None)
@@ -1286,7 +1283,6 @@ async def accept_proposal_public(
             signer_name=accept_data.signer_name,
             signer_email=accept_data.signer_email,
             signature_image=signature_bytes,
-            agreed_to_terms=accept_data.agreed_to_terms,
             signer_ip=signer_ip,
             signer_user_agent=signer_user_agent,
             signer_timezone=accept_data.signer_timezone,
@@ -1327,9 +1323,6 @@ async def accept_proposal_public(
     response = ProposalPublicResponse.model_validate(proposal)
     _scope_public_payment_fields(response)
     response.branding = _branding_from_dict(branding_data)
-    response.terms_and_conditions = await service.get_effective_terms_and_conditions(
-        proposal,
-    )
     response.designated_signer_email = (
         proposal.designated_signer_email
         or (proposal.contact.email if proposal.contact else None)

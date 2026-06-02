@@ -285,8 +285,10 @@ class Proposal(Base, AuditableMixin):
     # of leaving the operator wondering why no signed PDF ever materialized.
     # Cleared on the next successful stamp.
     signed_pdf_error: Mapped[str | None] = mapped_column(Text)
-    # Per-proposal override of the T&C body rendered inside the signing
-    # modal. NULL falls back to ``tenant_settings.default_terms_and_conditions``.
+    # RETIRED 2026-05-31: the redundant sign-ceremony T&C-agreement was removed
+    # (the binding terms live in the proposal document). Write-frozen — kept
+    # only as historical data for proposals authored before the removal; no
+    # longer surfaced or editable via the API.
     terms_and_conditions: Mapped[str | None] = mapped_column(Text)
 
     # Legacy Stripe artifacts. Accept-time auto-spawn was removed 2026-05-14;

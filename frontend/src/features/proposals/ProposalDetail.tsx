@@ -1085,7 +1085,6 @@ function ProposalDetailPage() {
             valid_until: proposal.valid_until ?? null,
             contact_id: proposal.contact?.id ?? null,
             company_id: proposal.company?.id ?? null,
-            terms_and_conditions: proposal.terms_and_conditions ?? null,
           }}
           proposalId={proposal.id}
           onSubmit={handleEditSubmit}

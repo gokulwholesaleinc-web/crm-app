@@ -16,7 +16,6 @@ export interface ProposalFormDraftFields {
   timelineField: string;
   terms: string;
   validUntil: string;
-  termsAndConditions: string;
 }
 
 export interface ProposalFormDraftValue {
@@ -66,7 +65,6 @@ function sanitizeFormData(raw: unknown): ProposalFormDraftFields | null {
     timelineField: cleanString(raw.timelineField),
     terms: cleanString(raw.terms),
     validUntil: cleanString(raw.validUntil),
-    termsAndConditions: cleanString(raw.termsAndConditions),
   };
 }
 
@@ -143,7 +141,6 @@ export function isProposalFormDraftEmpty(value: ProposalFormDraftValue): boolean
     value.formData.timelineField,
     value.formData.terms,
     value.formData.validUntil,
-    value.formData.termsAndConditions,
   ];
   return (
     textValues.every((entry) => String(entry ?? '').trim() === '') &&
