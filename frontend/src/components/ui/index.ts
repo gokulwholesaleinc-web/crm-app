@@ -10,6 +10,10 @@ export type { InputProps } from './Input';
 export { Select } from './Select';
 export type { SelectProps, SelectOption } from './Select';
 
+// Switch
+export { Switch } from './Switch';
+export type { SwitchProps, SwitchSize } from './Switch';
+
 // Modal
 export { Modal, ModalFooter } from './Modal';
 export type { ModalProps, ModalFooterProps, ModalSize } from './Modal';
