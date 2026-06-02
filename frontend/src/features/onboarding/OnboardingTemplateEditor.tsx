@@ -326,6 +326,37 @@ export function OnboardingTemplateEditor({
     setSelectedKey((curr) => (curr === key ? null : curr));
   };
 
+  // Select a field for editing by its stable ``_key``: also sync the active type
+  // chip to its kind (so the highlighted chip always matches the edited field)
+  // and follow the view to its page. Shared by the canvas boxes, the type chips,
+  // and the same-kind stepper in the panel.
+  const selectFieldByKey = (key: string) => {
+    const f = fields.find((x) => x._key === key);
+    if (!f) return;
+    setSelectedKey(key);
+    setActiveKind(f.kind);
+    if (f.page - 1 !== pageIdx) setPageIdx(f.page - 1);
+  };
+
+  // Clicking a type chip arms the draw tool AND jumps the editor to a field of
+  // that type, so you don't have to hunt for its box. Repeated clicks cycle
+  // through every field of that type (the count badge shows how many; the panel
+  // shows a "n / total" stepper). A type with no fields just arms the draw tool
+  // and clears the panel to the draw prompt.
+  const selectKind = (kind: OnboardingFieldKind) => {
+    setActiveKind(kind);
+    const ofKind = fields.filter((f) => f.kind === kind);
+    if (ofKind.length === 0) {
+      setSelectedKey(null);
+      return;
+    }
+    // currentIdx === -1 (selection isn't of this kind) → start at the first;
+    // otherwise advance to the next, wrapping around.
+    const currentIdx = ofKind.findIndex((f) => f._key === selectedKey);
+    const next = ofKind[(currentIdx + 1) % ofKind.length];
+    if (next) selectFieldByKey(next._key);
+  };
+
   // --- Save / cancel ----------------------------------------------
 
   const invalidCount = useMemo(
@@ -414,7 +445,7 @@ export function OnboardingTemplateEditor({
                 kind={kind}
                 activeKind={activeKind}
                 count={fields.filter((f) => f.kind === kind).length}
-                onClick={setActiveKind}
+                onClick={selectKind}
               />
             ))}
           </div>
@@ -488,7 +519,7 @@ export function OnboardingTemplateEditor({
                               onClick={(event) => {
                                 event.preventDefault();
                                 event.stopPropagation();
-                                setSelectedKey(field._key);
+                                selectFieldByKey(field._key);
                               }}
                               className="pointer-events-auto absolute inset-0"
                               aria-label={`Select ${meta.label.toLowerCase()} field ${field.label || field.id}`}
@@ -531,6 +562,7 @@ export function OnboardingTemplateEditor({
             allFields={fields}
             onChange={updateField}
             onRemove={removeField}
+            onSelectKey={selectFieldByKey}
           />
         </div>
 
@@ -602,32 +634,76 @@ function KindToggle({ kind, activeKind, count, onClick }: KindToggleProps) {
 interface FieldEditorPanelProps {
   field: EditorField | null;
   allFields: EditorField[];
-  /** Both address the field by its stable internal ``_key``. */
+  /** All address the field by its stable internal ``_key``. */
   onChange: (key: string, patch: Partial<OnboardingFieldDefinition>) => void;
   onRemove: (key: string) => void;
+  /** Jump the editor to another field (used by the same-kind stepper). */
+  onSelectKey: (key: string) => void;
 }
 
-function FieldEditorPanel({ field, allFields, onChange, onRemove }: FieldEditorPanelProps) {
+function FieldEditorPanel({ field, allFields, onChange, onRemove, onSelectKey }: FieldEditorPanelProps) {
   if (!field) {
     return (
       <div className="rounded-lg border border-dashed border-gray-300 dark:border-gray-600 p-4 text-sm text-gray-500 dark:text-gray-400">
-        Select a field on the page to edit its label, description, and options.
+        Select a field on the page — or click a type above — to edit its label,
+        description, and options.
       </div>
     );
   }
 
   const errors = fieldErrors(field, allFields);
 
+  // Same-kind siblings, so a doc with e.g. 2 signatures can step between them
+  // right here in the panel (◀ 1 / 2 ▶) — in addition to clicking their boxes
+  // or re-clicking the type chip to cycle.
+  const siblings = allFields.filter((f) => f.kind === field.kind);
+  const siblingIdx = siblings.findIndex((f) => f._key === field._key);
+  const hasSiblings = siblings.length > 1;
+  const kindLabel = KIND_META[field.kind].label.toLowerCase();
+  const stepTo = (offset: number) => {
+    const target = siblings[(siblingIdx + offset + siblings.length) % siblings.length];
+    if (target) onSelectKey(target._key);
+  };
+
   return (
     <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 space-y-3">
       <div className="flex items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-          {KIND_META[field.kind].label} field
-        </h3>
+        <div className="flex min-w-0 items-center gap-2">
+          <h3 className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">
+            {KIND_META[field.kind].label} field
+          </h3>
+          {hasSiblings && (
+            <span className="inline-flex items-center gap-0.5 rounded-md border border-gray-200 dark:border-gray-600">
+              <button
+                type="button"
+                onClick={() => stepTo(-1)}
+                className="inline-flex h-6 w-6 items-center justify-center rounded-l-md text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                aria-label={`Previous ${kindLabel} field`}
+              >
+                <ArrowLeftIcon className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+              <span
+                className="px-1 text-xs text-gray-500 dark:text-gray-400"
+                style={{ fontVariantNumeric: 'tabular-nums' }}
+                aria-label={`${kindLabel} field ${siblingIdx + 1} of ${siblings.length}`}
+              >
+                {siblingIdx + 1}/{siblings.length}
+              </span>
+              <button
+                type="button"
+                onClick={() => stepTo(1)}
+                className="inline-flex h-6 w-6 items-center justify-center rounded-r-md text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                aria-label={`Next ${kindLabel} field`}
+              >
+                <ArrowRightIcon className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+            </span>
+          )}
+        </div>
         <button
           type="button"
           onClick={() => onRemove(field._key)}
-          className="text-xs font-medium text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 rounded"
+          className="shrink-0 text-xs font-medium text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 rounded"
         >
           Remove
         </button>
