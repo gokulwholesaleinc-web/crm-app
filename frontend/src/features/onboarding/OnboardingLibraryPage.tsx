@@ -315,7 +315,7 @@ function OnboardingLibraryPage() {
             aria-selected={view === key}
             onClick={() => setView(key)}
             className={clsx(
-              'rounded-md px-3.5 py-1.5 text-sm font-medium transition-colors',
+              'rounded-md px-3.5 py-1.5 text-sm font-medium transition-colors motion-reduce:transition-none',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500',
               view === key
                 ? 'bg-primary-600 text-white shadow-sm'

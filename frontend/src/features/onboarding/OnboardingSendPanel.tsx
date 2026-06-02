@@ -313,7 +313,7 @@ export function OnboardingSendPanel({ templates }: OnboardingSendPanelProps) {
                       disabled={disabled}
                       onClick={() => toggleTemplate(t.id)}
                       className={clsx(
-                        'flex w-full items-center gap-2.5 rounded-lg border px-3 py-2 text-left text-sm transition-colors',
+                        'flex w-full items-center gap-2.5 rounded-lg border px-3 py-2 text-left text-sm transition-colors motion-reduce:transition-none',
                         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500',
                         disabled
                           ? 'cursor-not-allowed border-gray-200 opacity-60 dark:border-gray-700'
@@ -325,7 +325,7 @@ export function OnboardingSendPanel({ templates }: OnboardingSendPanelProps) {
                       <span
                         aria-hidden="true"
                         className={clsx(
-                          'flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border transition-colors',
+                          'flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border transition-colors motion-reduce:transition-none',
                           selected
                             ? 'border-primary-600 bg-primary-600 text-white'
                             : 'border-gray-300 bg-white dark:border-gray-500 dark:bg-gray-800',
