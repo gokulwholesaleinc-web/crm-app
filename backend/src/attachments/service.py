@@ -101,6 +101,15 @@ def sniff_magic_bytes(content: bytes, ext: str) -> bool:
     for forbidden in _FORBIDDEN_PREFIXES:
         if lowered.startswith(forbidden):
             return False
+    # Reject an embedded active-content payload ANYWHERE in the leading window,
+    # not just at the very start — a GIF/JPEG polyglot (valid magic header
+    # followed by ``<script>``/``<svg>``) would otherwise pass the prefix-only
+    # check and the positive signature check. Real binary image data does not
+    # contain these literal ASCII tag sequences in the first 2 KB.
+    window = content[:2048].lower()
+    for tag in (b"<script", b"<svg", b"<iframe", b"<html", b"<?php", b"<!doctype"):
+        if tag in window:
+            return False
     signatures = _MAGIC_SIGNATURES.get(ext.lower())
     if signatures is None:
         return False

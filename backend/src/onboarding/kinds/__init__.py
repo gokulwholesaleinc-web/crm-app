@@ -68,8 +68,8 @@ class DocumentType(Protocol):
         self,
         field: dict,
         values: dict,
-        uploads: list | None,
-        secrets: dict | None,
+        uploads: list | None = None,
+        secrets: dict | None = None,
     ) -> bool:
         """Completion gate; kind-aware (counts uploads / list non-emptiness /
         conditional Other write-in). Dissolves P0-1/P0-8."""

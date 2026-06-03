@@ -301,6 +301,18 @@ async def upload_document_file(
     service._assert_public_writable(packet)
     documents = await service.load_documents(packet.id)
     doc = find_document_or_404(documents, doc_id)
+    # Reject oversized uploads by the declared part size BEFORE buffering the
+    # body into a bytes object — otherwise a 500 MB multipart is fully read into
+    # memory before the per-field/aggregate caps in store_document_upload run
+    # (bounded-memory DoS). The finer per-field maxMB + per-packet aggregate
+    # caps still apply after this hard-ceiling gate.
+    from src.attachments.service import ONBOARDING_MAX_BYTES
+
+    if file.size is not None and file.size > ONBOARDING_MAX_BYTES:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail="File is too large.",
+        )
     content = await file.read()
     with packet_errors_mapped():
         result = await store_document_upload(

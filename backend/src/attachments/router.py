@@ -26,30 +26,42 @@ logger = logging.getLogger(__name__)
 SENSITIVE_ONBOARDING_CATEGORY = "onboarding_sensitive"
 
 
+async def _may_read_sensitive(
+    db: DBSession, entity_type: str, entity_id: int, data_scope: DataScope
+) -> bool:
+    """True iff the caller may read a sensitive onboarding attachment on this
+    entity: an admin/manager (``can_see_all``) OR the OWNER of the parent
+    contact. Sensitive onboarding uploads only ever live on ``contacts``."""
+    if data_scope.can_see_all():
+        return True
+    if entity_type != "contacts":
+        return True
+    from src.contacts.models import Contact
+
+    contact_owner = (
+        await db.execute(
+            select(Contact.owner_id).where(Contact.id == entity_id)
+        )
+    ).scalar_one_or_none()
+    return contact_owner is not None and contact_owner == data_scope.user_id
+
+
 async def _assert_sensitive_read_allowed(
     db: DBSession, attachment: Attachment, data_scope: DataScope
 ) -> None:
     """Owner-or-admin gate for a sensitive onboarding attachment (§D.4).
 
     The generic ``require_entity_access`` already ran (contact access). For a
-    ``onboarding_sensitive`` attachment that is NOT enough: a shared-list or
-    manager-bypass reader must still be refused unless they are an admin/manager
-    (``can_see_all``) OR the OWNER of the parent contact. Non-sensitive
-    attachments skip this entirely.
+    ``onboarding_sensitive`` attachment that is NOT enough — a shared-list or
+    manager-bypass reader must still be refused unless owner/admin. Applied to
+    READ (download) AND DELETE (a low-priv reader must not destroy a submitted
+    gov-ID). Non-sensitive attachments skip this entirely.
     """
     if attachment.category != SENSITIVE_ONBOARDING_CATEGORY:
         return
-    if data_scope.can_see_all():
-        return  # admin / manager
-    # entity_id is the contact id; only its owner may read the sensitive file.
-    from src.contacts.models import Contact
-
-    contact_owner = (
-        await db.execute(
-            select(Contact.owner_id).where(Contact.id == attachment.entity_id)
-        )
-    ).scalar_one_or_none()
-    if contact_owner is None or contact_owner != data_scope.user_id:
+    if not await _may_read_sensitive(
+        db, attachment.entity_type, attachment.entity_id, data_scope
+    ):
         raise HTTPException(
             status_code=HTTPStatus.FORBIDDEN,
             detail="Only the contact owner or an admin may access this file.",
@@ -197,6 +209,11 @@ async def list_attachments(
 
     service = AttachmentService(db)
     items, total = await service.list_attachments(entity_type, entity_id, category=category)
+    # Hide sensitive onboarding uploads (gov-ID) from non-owner/admin readers —
+    # even their metadata (filename / category) is PII (sec).
+    if not await _may_read_sensitive(db, entity_type, entity_id, data_scope):
+        items = [a for a in items if a.category != SENSITIVE_ONBOARDING_CATEGORY]
+        total = len(items)
     return AttachmentListResponse(
         items=[AttachmentResponse.model_validate(a) for a in items],
         total=total,
@@ -219,5 +236,9 @@ async def delete_attachment(
     await require_entity_access(
         db, attachment.entity_type, attachment.entity_id, current_user, data_scope,
     )
+    # A sensitive onboarding upload (gov-ID) may only be DELETED by the contact
+    # owner or an admin — a shared-list reader must not destroy submitted PII /
+    # the attachment the onboarding packet references (sec).
+    await _assert_sensitive_read_allowed(db, attachment, data_scope)
 
     await service.delete_attachment(attachment)

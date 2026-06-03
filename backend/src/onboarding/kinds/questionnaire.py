@@ -336,13 +336,16 @@ class QuestionnaireDocumentType:
                 raise PacketValidationError(
                     f"Field '{fid}' selections must be a list"
                 )
-            self._coerce_multi_list(fid, inner, allow_other, option_values)
-            if OTHER_TOKEN not in inner:
+            # Use the coerced (validated + de-duplicated) list — the previous
+            # code discarded this and stored the raw ``inner`` verbatim, so a
+            # payload with duplicate selections was persisted with the dupes.
+            coerced = self._coerce_multi_list(fid, inner, allow_other, option_values)
+            if OTHER_TOKEN not in coerced:
                 raise PacketValidationError(
                     f"Field '{fid}': an Other write-in requires the Other option "
                     "to be selected"
                 )
-            normalized_inner = list(inner)
+            normalized_inner = coerced
         return {"value": normalized_inner, "other": other}
 
     def _coerce_multi_list(
