@@ -28,7 +28,8 @@ from src.onboarding.disclosure import (
     ONBOARDING_ESIGN_DISCLOSURE_VERSION,
     onboarding_esign_disclosure,
 )
-from src.onboarding.limits import MAX_FIELD_COUNT, MAX_TEXT_VALUE_BYTES
+from src.onboarding.kinds import KIND_HANDLERS, get_handler
+from src.onboarding.limits import MAX_FIELD_COUNT
 from src.onboarding.models import (
     OnboardingPacket,
     OnboardingPacketDocument,
@@ -51,9 +52,10 @@ DOWNLOAD_TOKEN_TTL = timedelta(days=7)
 # completion_failed ages to abandoned after this retention window (§7).
 COMPLETION_FAILED_RETENTION = timedelta(days=7)
 
-# Abuse caps (§6): MAX_TEXT_VALUE_BYTES / MAX_FIELD_COUNT live in the leaf
-# ``limits`` module (imported at the top) so the kind handlers reuse them
-# without importing this heavy module; still referenced here as before.
+# Abuse caps (§6) live in the leaf ``limits`` module so the kind handlers reuse
+# them without importing this heavy module. The per-VALUE byte cap
+# (MAX_TEXT_VALUE_BYTES) now lives in each handler's validate_value; this module
+# keeps only the kind-agnostic per-BODY field-count cap (MAX_FIELD_COUNT).
 
 
 logger = logging.getLogger(__name__)
@@ -183,21 +185,38 @@ class PacketService:
 
         prefill = await self._resolve_prefill_values(contact_id, company_id)
         for order, template in enumerate(templates):
-            requires_esign = (
-                requires_esign_override
-                if requires_esign_override is not None
-                else template.requires_esign
-            )
+            handler = get_handler(template.kind)
+            # ``requires_esign`` (and ``requires_esign_override``) is an
+            # esign-doc concept: a questionnaire/upload doc derives it OFF, so
+            # the packet-wide override can never force the signature ceremony
+            # onto a kind with no signature field (dissolves the packet-wide
+            # requires_esign_override P1).
+            if handler.kind == "esign_pdf":
+                requires_esign = (
+                    requires_esign_override
+                    if requires_esign_override is not None
+                    else template.requires_esign
+                )
+            else:
+                requires_esign = False
             field_defs = list(template.field_definitions or [])
-            self._assert_esign_signature_consistency(
-                template.id, requires_esign, field_defs
+            if handler.kind == "esign_pdf":
+                self._assert_esign_signature_consistency(
+                    template.id, requires_esign, field_defs
+                )
+            # Only esign copies the template PDF into the packet doc; a
+            # questionnaire/upload doc carries a NULL pdf_path (P0-3/P0-5).
+            pdf_path = (
+                await self._copy_template_pdf(template, packet.id)
+                if handler.needs_pdf_copy
+                else None
             )
-            pdf_path = await self._copy_template_pdf(template, packet.id)
             doc = OnboardingPacketDocument(
                 packet_id=packet.id,
                 display_order=order,
                 source_template_id=template.id,
                 original_filename=f"{template.name}.pdf",
+                kind=template.kind,
                 pdf_path=pdf_path,
                 field_definitions=field_defs,
                 field_values=self._seed_prefill(field_defs, prefill),
@@ -230,7 +249,13 @@ class PacketService:
                 raise PacketValidationError(
                     f"Template {tid} is retired and cannot be sent"
                 )
-            if not template.pdf_path:
+            if template.kind not in KIND_HANDLERS:
+                raise PacketValidationError(
+                    f"Template {tid} has an unknown kind '{template.kind}'"
+                )
+            # Only PDF-copy kinds (esign) require an uploaded PDF; a
+            # questionnaire/upload template with no PDF is selectable (P0-5).
+            if KIND_HANDLERS[template.kind].needs_pdf_copy and not template.pdf_path:
                 raise PacketValidationError(
                     f"Template {tid} has no PDF uploaded yet"
                 )
@@ -467,9 +492,13 @@ class PacketService:
         COMMITTED would lose-update silently.
         """
         self._assert_public_writable(packet)
-        self._validate_field_values(doc, field_values)
+        validated, _secrets = self._validate_field_values(doc, field_values)
+        # P3 will upsert _secrets (sensitive ciphertexts) into
+        # onboarding_secret_values in THIS same txn before the version bump; v1
+        # seeds no sensitive TEXT field, so the list is empty for every esign
+        # doc and ``validated`` equals the input (byte-identical merge).
         merged = dict(doc.field_values or {})
-        merged.update(field_values)
+        merged.update(validated)
         # Advance active/opened → in_progress atomically, BEFORE the document
         # write. Two reasons: (1) lock order — Phase A's completion claim locks
         # the packet THEN its documents, so taking the packet write first here
@@ -522,26 +551,43 @@ class PacketService:
         return row[0]
 
     @staticmethod
-    def _validate_field_values(doc: OnboardingPacketDocument, values: dict) -> None:
+    def _validate_field_values(
+        doc: OnboardingPacketDocument, values: dict
+    ) -> tuple[dict, list[tuple[str, bytes]]]:
+        """Validate + coerce a PATCH body through the doc's kind handler.
+
+        Returns ``(validated, secrets)``: ``validated`` is the per-field
+        plaintext to merge into ``field_values`` (a sensitive field yields
+        ``None`` here so its plaintext never enters the JSONB); ``secrets`` is
+        the ``(field_id, ciphertext)`` list to upsert into the secret table
+        (P3 — dropped in v1 until that table ships).
+
+        For ``esign_pdf`` the handler returns ``(value, None)`` per field, so
+        ``validated`` equals ``values`` and ``secrets`` is empty — byte-identical
+        to the pre-v3 string-only check (Record<string,string>: a non-string is
+        a 422; ``None`` clears a field). The kind-agnostic caps (object shape,
+        field count) stay here; the per-value type/format/length check is the
+        handler's job (P0-1/P0-9 — no kind-specific indexing in the core).
+        """
         if not isinstance(values, dict):
             raise PacketValidationError("field_values must be an object")
         if len(values) > MAX_FIELD_COUNT:
             raise PacketValidationError("Too many fields in one update")
-        known_ids = {
-            f.get("id") for f in (doc.field_definitions or []) if f.get("id")
+        handler = get_handler(doc.kind)
+        defs_by_id = {
+            f.get("id"): f for f in (doc.field_definitions or []) if f.get("id")
         }
+        validated: dict = {}
+        secrets: list[tuple[str, bytes]] = []
         for fid, val in values.items():
-            if fid not in known_ids:
+            field = defs_by_id.get(fid)
+            if field is None:
                 raise PacketValidationError(f"Unknown field '{fid}'")
-            # Field values are strings only (the wire contract is
-            # Record<string, string>). A stored bool/int/float would round-trip
-            # to the public page and crash its ``.trim()`` / controlled-input
-            # render, and mis-stamps as ``str(value)``. Reject non-strings (None
-            # is allowed to clear a field).
-            if val is not None and not isinstance(val, str):
-                raise PacketValidationError(f"Field '{fid}' has an invalid value")
-            if isinstance(val, str) and len(val.encode("utf-8")) > MAX_TEXT_VALUE_BYTES:
-                raise PacketValidationError(f"Field '{fid}' value is too long")
+            plaintext, ciphertext = handler.validate_value(field, val)
+            if ciphertext is not None:
+                secrets.append((fid, ciphertext))
+            validated[fid] = plaintext
+        return validated, secrets
 
     async def record_consent(
         self,

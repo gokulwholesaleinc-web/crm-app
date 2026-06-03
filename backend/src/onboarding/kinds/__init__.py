@@ -23,6 +23,8 @@ real contract guard.
 
 from __future__ import annotations
 
+import importlib
+import pkgutil
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
@@ -146,9 +148,19 @@ def get_handler(kind: str) -> DocumentType:
         ) from exc
 
 
-# --- register concrete handlers at import (runs the self-test on each) ------
-# Imports at the BOTTOM so the Protocol + registry are fully defined first and
-# the handler module never imports a half-initialized package.
-from src.onboarding.kinds.esign_pdf import EsignPdfDocumentType  # noqa: E402
+# --- auto-discover + register every handler module in this package ----------
+# Each handler module exposes a module-level ``HANDLER`` instance and imports
+# NOTHING from this package (leaf-only) — so discovery is cycle-free and a NEW
+# KIND IS ADDED BY DROPPING IN A FILE, with no edit to this registry index (two
+# parallel handler branches therefore never collide here). ``register`` runs the
+# presence self-test on each discovered handler, so a malformed kind still fails
+# loudly at import.
+def _autoregister() -> None:
+    for module_info in pkgutil.iter_modules(__path__):
+        module = importlib.import_module(f"{__name__}.{module_info.name}")
+        handler = getattr(module, "HANDLER", None)
+        if handler is not None:
+            register(handler)
 
-register(EsignPdfDocumentType())
+
+_autoregister()

@@ -28,6 +28,7 @@ from src.onboarding.packet_schemas import (
     SignatureSet,
     VerifyRequest,
     VerifyResponse,
+    ViewedResult,
 )
 from src.onboarding.packet_service import _now as _utc_now
 from src.onboarding.public_helpers import (
@@ -157,6 +158,13 @@ async def get_public_document_pdf(
         )
     documents = await service.load_documents(packet.id)
     doc = find_document_or_404(documents, doc_id)
+    if doc.pdf_path is None:
+        # A questionnaire/upload doc has no PDF stream (v3); the frontend marks
+        # it viewed via POST /viewed instead. Never call /pdf on a non-PDF kind.
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND,
+            detail="This document has no PDF to view.",
+        )
     content = await read_pdf_or_http(doc.pdf_path)
 
     # Record the view AFTER bytes are confirmed; first view → opened.
@@ -180,6 +188,45 @@ async def get_public_document_pdf(
             "Content-Disposition": f'inline; filename="{doc.original_filename}"',
         },
     )
+
+
+@router.post("/{token}/documents/{doc_id}/viewed", response_model=ViewedResult)
+@limiter.limit("60/minute")
+async def mark_public_document_viewed(
+    token: str, doc_id: int, request: Request, db: DB
+):
+    """Record a read-before-sign view for a NON-PDF document (session-gated).
+
+    The kind-agnostic counterpart of the ``/pdf`` view side effect (P0-4):
+    questionnaire and upload_request docs have no PDF stream, so the frontend
+    POSTs this on first render of each such doc. It writes the SAME idempotent
+    ledger row + the same first-open→``opened`` transition the ``/pdf`` route
+    does, so ``_assert_all_viewed`` (unchanged) is satisfied for every kind
+    rather than 422-ing forever on a doc with no PDF. esign docs keep recording
+    via ``/pdf`` (the legally meaningful record-before-sign); this endpoint is
+    kind-agnostic + idempotent, so a redundant call on any doc is harmless.
+    """
+    packet, service = await load_packet_for_public(db, token)
+    require_session(request, packet)
+    if packet.status in ("completing", "completed"):
+        raise HTTPException(
+            status_code=HTTPStatus.CONFLICT, detail="Packet is being finalized."
+        )
+    documents = await service.load_documents(packet.id)
+    doc = find_document_or_404(documents, doc_id)
+    is_first = await record_packet_document_view(
+        db,
+        packet_document_id=doc.id,
+        token=token,
+        ip_address=get_client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+    )
+    if is_first:
+        packet.first_opened_at = packet.first_opened_at or _utc_now()
+        if packet.status == "active":
+            packet.status = "opened"
+    await db.flush()
+    return ViewedResult(viewed=True, opened=is_first)
 
 
 @router.patch("/{token}/documents/{doc_id}", response_model=PatchResult)

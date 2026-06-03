@@ -24,7 +24,6 @@ raise "a transaction is already begun").
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
 
@@ -38,6 +37,7 @@ from src.onboarding.completion_notices import (
     notify_after_commit,
     resend_completion_notices,  # noqa: F401  (re-exported for router + tests)
 )
+from src.onboarding.kinds import get_handler
 from src.onboarding.models import OnboardingPacket, OnboardingPacketDocument
 from src.onboarding.packet_errors import (
     PacketGoneError,
@@ -52,7 +52,6 @@ from src.onboarding.packet_service import (
     _ensure_aware,
     scrub_packet,
 )
-from src.onboarding.stamper import stamp_document
 from src.onboarding.view_ledger import get_unviewed_packet_document_ids
 
 logger = logging.getLogger(__name__)
@@ -170,7 +169,7 @@ async def _phase_a_claim(
         _validate_documents_for_completion(docs)
         _assert_consent_recorded(docs)
         _assert_signature_present(p, docs)
-        await _validate_documents_stampable(docs, p.signer_signature_image)
+        await _validate_documents_stampable(db, docs, p, p.signer_signature_image)
     except PacketValidationError:
         await db.rollback()
         raise
@@ -230,47 +229,58 @@ def _validate_documents_for_completion(docs: list[OnboardingPacketDocument]) -> 
     if not docs:
         raise PacketValidationError("Packet has no documents to complete.")
     for doc in docs:
+        handler = get_handler(doc.kind)
         values = doc.field_values or {}
         for field in doc.field_definitions or []:
-            if field.get("kind") == "signature":
-                continue  # signature presence checked at packet level below
-            if field.get("required"):
-                fid = field.get("id")
-                val = values.get(fid)
-                if val is None or (isinstance(val, str) and not val.strip()):
-                    raise PacketValidationError(
-                        f"Required field '{field.get('label', fid)}' is empty."
-                    )
+            # Per-field required-check delegated to the kind handler (P0-1/P0-8):
+            # esign = non-empty string; questionnaire = non-empty str/list +
+            # conditional Other write-in; upload = upload-row count. ``uploads``
+            # is None here in v1 — P3 makes this load the per-doc uploads (and
+            # go async) so upload_request's count check has its input; esign and
+            # questionnaire ignore it. Signature presence stays a packet-level
+            # check (``_assert_signature_present``), which the handler returns
+            # True for so it doesn't double-raise here.
+            if not handler.required_satisfied(field, values, None, None):
+                raise PacketValidationError(
+                    f"Required field "
+                    f"'{field.get('label', field.get('id'))}' is empty."
+                )
 
 
 async def _validate_documents_stampable(
-    docs: list[OnboardingPacketDocument], signature_png: bytes | None
+    db: AsyncSession,
+    docs: list[OnboardingPacketDocument],
+    packet: OnboardingPacket,
+    signature_png: bytes | None,
 ) -> None:
-    """Dry-run the stamp of every document so content errors surface in Phase A.
+    """Dry-run each document's artifact so content errors surface in Phase A.
 
-    A bad date, a value that overflows its box, or an undecodable signature PNG
-    raise ``ValueError`` (bad date/overflow) or ``OSError`` (a corrupt PNG that
-    passed the magic-byte gate but PIL can't decode) in the stamper. Without
-    this, that only happens in Phase B — AFTER the packet has flipped to
-    ``completing`` — so the signer gets a dead-end ``completion_failed`` instead
-    of a fixable 422. Running the same ``stamp_document`` path here (output
-    discarded) catches those as a clean ``PacketValidationError`` (→ 422, status
-    unchanged).
+    Kind-aware via ``produce_artifact(dry_run=True)``: the esign stamper, the
+    questionnaire Platypus summary, and the upload manifest each run their real
+    producibility path with the output discarded. A bad date / box overflow /
+    undecodable signature PNG / Platypus overflow raises ``ValueError`` or
+    ``OSError`` → a clean ``PacketValidationError`` (→ 422, status unchanged).
+    Without this, that error would only hit Phase B — AFTER the packet flips to
+    ``completing`` — stranding the signer in a dead-end ``completion_failed``.
 
     Only CONTENT errors fail here; a storage read failure is infra (not the
-    signer's fault) and is already normalized to ``RuntimeError`` by
-    ``read_bytes`` (caught below + skipped), so any ``OSError`` reaching the
-    stamp call is a decode failure of the signer's own PNG, not storage.
+    signer's fault) and is normalized to ``RuntimeError`` by ``read_bytes`` (or
+    ``FileNotFoundError`` for a missing copy), so those are skipped — any
+    ``OSError`` reaching the producer is a decode failure of the signer's own
+    input, not storage.
     """
     for doc in docs:
+        handler = get_handler(doc.kind)
         try:
-            source = await storage.read_bytes(doc.pdf_path)
-        except (FileNotFoundError, RuntimeError):
-            continue
-        try:
-            await asyncio.to_thread(
-                stamp_document, source, _fields_with_values(doc), signature_png
+            await handler.produce_artifact(
+                db,
+                doc=doc,
+                packet=packet,
+                signature_png=signature_png,
+                dry_run=True,
             )
+        except (FileNotFoundError, RuntimeError):
+            continue  # infra (storage read / missing copy) — not a content 422
         except (ValueError, OSError) as exc:
             raise PacketValidationError(str(exc)) from exc
 
@@ -338,6 +348,8 @@ async def _assert_all_viewed(
 async def _phase_b_stamp(db: AsyncSession, *, packet_id: int) -> None:
     service = PacketService(db)
     packet = await service.get_packet(packet_id)
+    if packet is None:
+        return  # packet vanished between phases; Phase C will report failed
     docs = await service.load_documents(packet_id)
     for doc in docs:
         if doc.attachment_id is not None:
@@ -355,7 +367,22 @@ async def _phase_b_stamp(db: AsyncSession, *, packet_id: int) -> None:
         # A via _validate_documents_stampable, so a failure here is genuinely
         # infra/concurrency, not a client 422.
         try:
-            stamped = await _stamp_one(doc, packet.signer_signature_image)
+            handler = get_handler(doc.kind)
+            stamped = await handler.produce_artifact(
+                db,
+                doc=doc,
+                packet=packet,
+                signature_png=packet.signer_signature_image,
+                dry_run=False,
+            )
+            if stamped is None:
+                # None of the v3 kinds return None (esign stamps, questionnaire
+                # renders a summary, upload renders a manifest). A future
+                # no-artifact kind would need its own done-fence; fail closed
+                # rather than silently leave the doc unattached.
+                raise RuntimeError(
+                    f"Document {doc.id} kind {doc.kind!r} produced no artifact"
+                )
             att = await AttachmentService(db).create_from_bytes(
                 content=stamped,
                 original_filename=doc.original_filename,
@@ -407,33 +434,6 @@ async def _acquire_lease(db: AsyncSession, *, doc_id: int) -> bool:
         .returning(OnboardingPacketDocument.id)
     )
     return result.first() is not None
-
-
-async def _stamp_one(
-    doc: OnboardingPacketDocument, signature_png: bytes | None
-) -> bytes:
-    try:
-        source = await storage.read_bytes(doc.pdf_path)
-    except FileNotFoundError as exc:
-        raise RuntimeError(f"Document PDF missing: {doc.id}") from exc
-    fields = _fields_with_values(doc)
-    return await asyncio.to_thread(stamp_document, source, fields, signature_png)
-
-
-def _fields_with_values(doc: OnboardingPacketDocument) -> list[dict]:
-    """Inject the saved field_values into each field-definition's ``value``.
-
-    The stamper reads ``field["value"]`` for non-signature kinds; signature
-    fields draw the packet's PNG (passed separately).
-    """
-    values = doc.field_values or {}
-    out: list[dict] = []
-    for field in doc.field_definitions or []:
-        merged = dict(field)
-        if field.get("kind") != "signature":
-            merged["value"] = values.get(field.get("id"))
-        out.append(merged)
-    return out
 
 
 async def _mark_failed(db: AsyncSession, packet_id: int, error: str) -> None:

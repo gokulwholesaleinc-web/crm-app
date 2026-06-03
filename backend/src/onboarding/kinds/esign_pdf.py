@@ -207,3 +207,9 @@ class EsignPdfDocumentType:
         at the PACKET level by ``scrub_packet``. No uploads/secrets for esign.
         """
         doc.field_values = {}
+
+
+# Discovered + registered by the kinds package auto-loader (it reads this
+# module-level ``HANDLER``). Deliberately NO import from ``src.onboarding.kinds``
+# here so handler modules stay leaf and discovery is cycle-free.
+HANDLER = EsignPdfDocumentType()

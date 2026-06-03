@@ -198,6 +198,17 @@ class PatchResult(BaseModel):
     field_values_version: int
 
 
+class ViewedResult(BaseModel):
+    """Result of the kind-agnostic ``POST /viewed`` mark (P0-4).
+
+    ``opened`` is True iff this call was the FIRST view under this access token
+    (the active→opened transition fired); idempotent repeat calls return False.
+    """
+
+    viewed: bool = True
+    opened: bool = False
+
+
 class SignatureSet(BaseModel):
     signature_png_base64: str
     base_signature_version: int

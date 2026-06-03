@@ -12,7 +12,6 @@ never be silently downgraded to a 400 by ``value_error_as_400`` (§G #2).
 from __future__ import annotations
 
 import io
-import math
 import uuid
 
 from pypdf import PdfReader
@@ -21,8 +20,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth.models import User
 from src.onboarding import storage
+from src.onboarding.kinds import get_handler
 from src.onboarding.models import OnboardingTemplate
-from src.onboarding.prefill import ALLOWED_PREFILL as _ALLOWED_PREFILL
 
 
 class FieldDefinitionError(Exception):
@@ -156,9 +155,17 @@ class OnboardingTemplateService:
         for key, value in fields.items():
             setattr(template, key, value)
         if field_definitions is not None:
-            self._validate_field_definitions(
-                template, await self._read_pdf_bytes(template), field_definitions
+            # Dispatch author-time validation on the template's kind: esign reads
+            # the stored PDF (coords/bounds); questionnaire/upload branch BEFORE
+            # any PDF read (P0-9). Both kinds reuse the shared ALLOWED_PREFILL
+            # inside the handler so email/PII can never be made prefillable.
+            handler = get_handler(template.kind)
+            pdf_bytes = (
+                await self._read_pdf_bytes(template)
+                if handler.needs_pdf_copy
+                else None
             )
+            handler.validate_definitions(field_definitions, pdf_bytes=pdf_bytes)
             template.field_definitions = list(field_definitions)
 
         # #10: reconcile esign ⇄ signature-field consistency against the
@@ -316,60 +323,6 @@ class OnboardingTemplateService:
                     "unrotated PDF."
                 )
 
-    @staticmethod
-    def _validate_field_definitions(
-        template: OnboardingTemplate,
-        pdf_bytes: bytes,
-        field_definitions: list[dict],
-    ) -> None:
-        """Geometry / bounds / uniqueness / prefill checks → 422.
-
-        Pydantic already enforced kind, slug shape, and prefill literal; this
-        adds the PDF-dependent checks (page in range, box in-bounds) plus
-        within-doc id uniqueness. Mirrors the
-        ``service._strict_coords_for_stamper`` idiom but surfaces 422.
-        """
-        reader = PdfReader(io.BytesIO(pdf_bytes))
-        page_count = len(reader.pages)
-        seen_ids: set[str] = set()
-
-        for index, field in enumerate(field_definitions):
-            label = f"field '{field.get('id', index)}'"
-
-            field_id = field.get("id")
-            if field_id in seen_ids:
-                raise FieldDefinitionError(f"Duplicate field id '{field_id}'")
-            seen_ids.add(field_id)
-
-            if field.get("prefill") not in (None, *_ALLOWED_PREFILL):
-                raise FieldDefinitionError(
-                    f"{label}: unsupported prefill '{field.get('prefill')}'"
-                )
-
-            page = field.get("page")
-            if not isinstance(page, int) or page < 1 or page > page_count:
-                raise FieldDefinitionError(
-                    f"{label}: page {page} out of range (1..{page_count})"
-                )
-
-            try:
-                x = float(field["x"])
-                y = float(field["y"])
-                w = float(field["w"])
-                h = float(field["h"])
-            except (KeyError, TypeError, ValueError) as exc:
-                raise FieldDefinitionError(f"{label}: malformed coordinates") from exc
-
-            if not all(math.isfinite(v) for v in (x, y, w, h)):
-                raise FieldDefinitionError(f"{label}: non-finite coordinates")
-            if w <= 0 or h <= 0:
-                raise FieldDefinitionError(f"{label}: width and height must be positive")
-
-            media_box = reader.pages[page - 1].mediabox
-            page_w = float(media_box.width)
-            page_h = float(media_box.height)
-            if x < 0 or y < 0 or x + w > page_w or y + h > page_h:
-                raise FieldDefinitionError(
-                    f"{label}: box is outside the page bounds "
-                    f"({page_w:.0f}x{page_h:.0f} pt)"
-                )
+    # NOTE: the esign coords/bounds/uniqueness/prefill validation extracted to
+    # ``onboarding.kinds.esign_pdf.validate_esign_definitions`` (v3 §B); this
+    # method now dispatches through ``get_handler(template.kind)`` in ``update``.
