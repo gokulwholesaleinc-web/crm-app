@@ -20,8 +20,11 @@ fast and only validates the answer content render.
 from __future__ import annotations
 
 import io
+import ipaddress
 import logging
+import socket
 from typing import TYPE_CHECKING
+from urllib.parse import urlsplit
 from xml.sax.saxutils import escape
 
 from reportlab.lib.colors import Color, HexColor
@@ -92,18 +95,63 @@ async def brand_header_flowables(
     return flow
 
 
+def _is_public_host(host: str) -> bool:
+    """True iff EVERY DNS-resolved address for ``host`` is a routable public IP.
+
+    SSRF guard: ``logo_url`` is admin-set but still server-side-fetched, so a
+    loopback / link-local (cloud metadata 169.254.169.254) / RFC1918 / reserved
+    target must be refused. Fail closed on any resolution error.
+    """
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except OSError:
+        return False
+    if not infos:
+        return False
+    for info in infos:
+        try:
+            ip = ipaddress.ip_address(info[4][0])
+        except ValueError:
+            return False
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_reserved
+            or ip.is_multicast
+            or ip.is_unspecified
+        ):
+            return False
+    return True
+
+
+def _is_fetchable_logo_url(url: str) -> bool:
+    parts = urlsplit(url)
+    if parts.scheme not in ("http", "https") or not parts.hostname:
+        return False
+    return _is_public_host(parts.hostname)
+
+
 async def _fetch_logo(url: str | None) -> bytes | None:
-    """Fetch the logo bytes server-side. ANY failure → ``None`` (text fallback)."""
+    """Fetch the logo bytes server-side. ANY failure → ``None`` (text fallback).
+
+    Hardened against SSRF: only http(s) to a host whose every resolved address
+    is public, and redirects are NOT followed (a 3xx is not 200 → rejected) so a
+    redirect can't bounce the fetch to an internal address.
+    """
     if not url:
+        return None
+    if not _is_fetchable_logo_url(url):
+        logger.warning("onboarding brand header: refusing non-public logo URL")
         return None
     try:
         import httpx
 
         async with httpx.AsyncClient(
-            timeout=_LOGO_FETCH_TIMEOUT, follow_redirects=True
+            timeout=_LOGO_FETCH_TIMEOUT, follow_redirects=False
         ) as client:
             resp = await client.get(url)
-        if resp.status_code != 200:
+        if resp.status_code != 200:  # a 3xx redirect is not 200 → refused
             return None
         data = resp.content
         if not data or len(data) > _LOGO_MAX_BYTES:
