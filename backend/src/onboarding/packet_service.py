@@ -407,14 +407,22 @@ class PacketService:
         return packets
 
     async def _sweep_packet(self, packet: OnboardingPacket) -> None:
-        """Interim list-time sweep: flip+scrub expired, age completion_failed."""
+        """Interim list-time sweep: flip+scrub expired, age completion_failed.
+
+        SCRUB FIRST, flip the terminal status LAST (SF1). The status is the only
+        thing that makes a packet ineligible for a future sweep, so if
+        ``scrub_packet`` raises mid-way the packet must stay in its current
+        (still-sweepable) status — the caller logs the error and the NEXT
+        ``list_packets`` retries the scrub. Flipping status before the scrub
+        completed would strand a half-scrubbed packet in a terminal state that
+        no later sweep revisits, leaking the PII the scrub was meant to destroy.
+        """
         now = _now()
         if packet.status in WRITABLE_STATUSES + ("completion_failed",):
             if (
                 packet.token_expires_at is not None
                 and _ensure_aware(packet.token_expires_at) <= now
             ):
-                packet.status = "expired"
                 await scrub_packet(
                     self.db,
                     packet,
@@ -422,18 +430,19 @@ class PacketService:
                     purge=True,
                 )
                 packet.token_hash = self._dead_token_hash(packet.id)
+                packet.status = "expired"  # terminal: LAST, only after scrub
                 return
         if packet.status == "completion_failed":
             failed_at = _ensure_aware(packet.completing_since or packet.updated_at)
             if failed_at and failed_at <= now - COMPLETION_FAILED_RETENTION:
-                packet.status = "abandoned"
-                packet.abandoned_at = now
                 await scrub_packet(
                     self.db,
                     packet,
                     await self.load_documents(packet.id),
                     purge=True,
                 )
+                packet.abandoned_at = now
+                packet.status = "abandoned"  # terminal: LAST, only after scrub
 
     @staticmethod
     def _dead_token_hash(packet_id: int) -> str:

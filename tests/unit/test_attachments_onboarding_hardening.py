@@ -317,3 +317,67 @@ async def test_list_shows_sensitive_rows_to_admin(
     assert resp.status_code == 200, resp.text
     ids = {item["id"] for item in resp.json()["items"]}
     assert sensitive.id in ids
+
+
+# --------------------------------------------------------------------------
+# PF3 — presigned object-storage URL forces an ATTACHMENT download
+#
+# The download route 307-redirects to an R2 presigned URL whenever object
+# storage is configured; the nosniff+attachment headers only existed on the
+# disk-fallback ``FileResponse`` branch (hence the rest of this file's
+# "false confidence"). These exercise the presign builder directly: boto3's
+# ``generate_presigned_url`` is a PURELY LOCAL signing operation (no network),
+# so providing fake R2 credentials is enough to assert the override params are
+# baked into the signed query string. No mocks.
+# --------------------------------------------------------------------------
+
+
+from urllib.parse import parse_qs, urlparse  # noqa: E402
+
+from src.attachments import object_storage  # noqa: E402
+
+
+@pytest.fixture
+def fake_r2_env(monkeypatch):
+    """Provision fake (but well-formed) R2 credentials so the presign signs
+    locally without ever reaching the network."""
+    monkeypatch.setenv("R2_ACCOUNT_ID", "acct-test")
+    monkeypatch.setenv("R2_ACCESS_KEY_ID", "AKIAFAKEFAKEFAKE")
+    monkeypatch.setenv("R2_SECRET_ACCESS_KEY", "fake-secret-key-value-for-signing")
+    monkeypatch.setenv("R2_BUCKET_NAME", "crm-app-test")
+
+
+async def test_presigned_download_url_forces_attachment_disposition(fake_r2_env):
+    """A presigned GET carries ``response-content-disposition`` (attachment +
+    original filename) and ``response-content-type`` (octet-stream)."""
+    url = await object_storage.get_download_url(
+        "uploads/contacts/1/abc.pdf", filename="Government ID.pdf"
+    )
+    query = parse_qs(urlparse(url).query)
+    assert "response-content-disposition" in query
+    disposition = query["response-content-disposition"][0]
+    assert disposition.startswith("attachment")
+    assert "Government ID.pdf" in disposition
+    assert query["response-content-type"][0] == "application/octet-stream"
+
+
+async def test_presigned_download_url_sanitizes_filename(fake_r2_env):
+    """CR/LF + double-quotes are stripped from the disposition filename so the
+    signed header can't be injection-split or have its quoted-string closed."""
+    url = await object_storage.get_download_url(
+        "uploads/contacts/1/abc.pdf",
+        filename='evil"\r\nSet-Cookie: x=1.pdf',
+    )
+    disposition = parse_qs(urlparse(url).query)["response-content-disposition"][0]
+    assert "\r" not in disposition and "\n" not in disposition
+    # The embedded quote + CR/LF are stripped, leaving a well-formed quoted-string.
+    assert disposition == 'attachment; filename="evilSet-Cookie: x=1.pdf"'
+
+
+async def test_presigned_download_url_omits_override_without_filename(fake_r2_env):
+    """Back-compat: callers that pass no filename (contracts signed-PDF link) get
+    a plain presign with no response-content-* override."""
+    url = await object_storage.get_download_url("uploads/contacts/1/abc.pdf")
+    query = parse_qs(urlparse(url).query)
+    assert "response-content-disposition" not in query
+    assert "response-content-type" not in query

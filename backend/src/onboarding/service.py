@@ -16,6 +16,7 @@ import uuid
 
 from pypdf import PdfReader
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth.models import User
@@ -29,6 +30,12 @@ class FieldDefinitionError(Exception):
 
     Intentionally NOT a ``ValueError`` so a stray ``value_error_as_400``
     can't silently turn the mandated 422 into a 400.
+    """
+
+
+class DuplicateTemplateNameError(Exception):
+    """Template ``name`` collides with ``uq_onboarding_templates_name`` → HTTP
+    422 (S1). NOT a ``ValueError`` so it can't be downgraded to a 400.
     """
 
 
@@ -87,7 +94,16 @@ class OnboardingTemplateService:
             field_definitions=[],
         )
         self.db.add(template)
-        await self.db.flush()
+        try:
+            await self.db.flush()
+        except IntegrityError as exc:
+            # uq_onboarding_templates_name collision (S1). Roll back the failed
+            # flush so the session is usable, then surface a clean 422 instead
+            # of a raw 500 (the router maps DuplicateTemplateNameError → 422).
+            await self.db.rollback()
+            raise DuplicateTemplateNameError(
+                "A template with this name already exists."
+            ) from exc
         await self.db.refresh(template)
         return template
 

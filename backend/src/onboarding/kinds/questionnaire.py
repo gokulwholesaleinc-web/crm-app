@@ -116,6 +116,15 @@ def validate_questionnaire_definitions(defs: list[dict]) -> None:
                 f"{label}: unsupported questionnaire kind '{kind}'"
             )
 
+        # ``sensitive`` encrypts a free-text answer (it is coerced to str before
+        # ``crypto.encrypt_field``); a choice field's answer is an option value /
+        # list, so a sensitive choice could never be filled — reject it at author
+        # time rather than ship an uncompletable form.
+        if field.get("sensitive") and kind not in TEXT_KINDS:
+            raise FieldDefinitionError(
+                f"{label}: sensitive is only valid on text fields"
+            )
+
         # Prefill PII rule (§D.5): reuse the SHARED allow-list — never a local
         # copy — so ``contact.email`` (or any future PII source) stays rejected.
         prefill = field.get("prefill")

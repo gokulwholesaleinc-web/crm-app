@@ -58,7 +58,10 @@ async def create_template(
 ):
     """Create the template metadata row (PDF + fields come later)."""
     service = OnboardingTemplateService(db)
-    template = await service.create(current_user=current_user, **data.model_dump())
+    # DuplicateTemplateNameError → 422 (S1): a same-name collision is a clean
+    # client error, never a raw 500 from the unique-constraint violation.
+    with field_definition_error_as_422():
+        template = await service.create(current_user=current_user, **data.model_dump())
     return TemplateResponse.from_template(template)
 
 

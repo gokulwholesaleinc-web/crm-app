@@ -328,5 +328,12 @@ class AttachmentService:
     async def get_download_url(self, attachment: Attachment) -> str | None:
         if attachment.file_path.startswith("obj://"):
             object_key = attachment.file_path[6:]
-            return await get_download_url(object_key)
+            # Force an ATTACHMENT download with the original filename and a
+            # generic octet-stream type so a renamed active-content file (or
+            # PII) can't be sniffed + rendered inline on the presigned-URL
+            # branch — matching the nosniff+attachment headers the local-disk
+            # FileResponse branch already sets (PF3).
+            return await get_download_url(
+                object_key, filename=attachment.original_filename
+            )
         return None

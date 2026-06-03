@@ -35,6 +35,7 @@ from src.attachments.service import (
     sniff_magic_bytes,
 )
 from src.onboarding.models import (
+    OnboardingPacket,
     OnboardingPacketDocument,
     OnboardingPacketUpload,
 )
@@ -44,8 +45,6 @@ from src.onboarding.tokens import hash_token
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
-
-    from src.onboarding.models import OnboardingPacket
 
 # Sum of all uploaded bytes across one packet's documents. A single Form-3 of
 # designer assets is the worst case (~500 MB); a generous ceiling that still
@@ -178,7 +177,17 @@ async def store_document_upload(
             f"At most {max_files} file(s) may be uploaded for this field."
         )
 
-    # Per-packet aggregate cap.
+    # Per-packet aggregate cap. Lock the packet row FOR UPDATE first so the
+    # aggregate read + the insert below are serialized against concurrent
+    # uploads on the SAME packet — otherwise two parallel requests could each
+    # read the pre-insert total, both pass the cap, and both insert (a
+    # SELECT-then-insert TOCTOU). The lock is held to txn commit; on SQLite
+    # (tests) ``with_for_update`` is a silent no-op (single-threaded anyway). U1
+    await db.execute(
+        select(OnboardingPacket.id)
+        .where(OnboardingPacket.id == packet.id)
+        .with_for_update()
+    )
     already = await _packet_uploaded_bytes(db, packet.id)
     if already + len(content) > MAX_PACKET_UPLOAD_BYTES:
         raise PacketValidationError(

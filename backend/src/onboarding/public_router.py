@@ -301,17 +301,19 @@ async def upload_document_file(
     service._assert_public_writable(packet)
     documents = await service.load_documents(packet.id)
     doc = find_document_or_404(documents, doc_id)
-    # Reject oversized uploads by the declared part size BEFORE buffering the
-    # body into a bytes object — otherwise a 500 MB multipart is fully read into
-    # memory before the per-field/aggregate caps in store_document_upload run
-    # (bounded-memory DoS). The finer per-field maxMB + per-packet aggregate
-    # caps still apply after this hard-ceiling gate.
     from src.attachments.service import ONBOARDING_MAX_BYTES
 
-    # An unknown size (no Content-Length / chunked) could stream an unbounded
-    # body past the declared-size gate, so REQUIRE a declared size (411) and
-    # reject over the hard ceiling (413) — both BEFORE file.read() buffers the
-    # body. Mirrors the attachments upload_file size pre-check.
+    # Size gate on the spooled part. NB (DoS1): declaring ``file`` as ``File(...)``
+    # means Starlette has ALREADY parsed the multipart body — spooling it to a
+    # SpooledTemporaryFile (memory up to its threshold, then disk) — by the time
+    # this handler runs, so ``file.size`` is the post-spool size. This gate
+    # therefore does NOT prevent that initial spool; what it prevents is the
+    # SECOND, fully-in-memory copy that ``await file.read()`` would materialize
+    # as a single ``bytes`` for an oversized/unbounded body. We REQUIRE a
+    # declared size (411 — a chunked/no-Content-Length part has ``size is None``)
+    # and reject over the hard ceiling (413), both BEFORE ``file.read()``. The
+    # finer per-field maxMB + per-packet aggregate caps still apply afterward.
+    # (The plain attachments upload route has no equivalent pre-check.)
     if file.size is None:
         raise HTTPException(
             status_code=411, detail="A file size (Content-Length) is required."

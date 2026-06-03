@@ -49,6 +49,7 @@ vi.mock('../../components/SignatureCanvas', () => ({
 }));
 
 import PublicOnboardingView from './PublicOnboardingView';
+import { ONBOARDING_UPLOAD_ACCEPT } from './uploadConstants';
 import type { OnboardingPublicDocument } from '../../types';
 
 const TOKEN = 'tok-abc';
@@ -388,5 +389,143 @@ describe('PublicOnboardingView — questionnaire renderer', () => {
     await waitFor(() => expect(submit).toBeEnabled());
     // The "complete the required fields" blocker must NOT mention the sensitive field.
     expect(screen.queryByText(/Hosting Password/i, { selector: 'li' })).toBeNull();
+  });
+});
+
+// =====================================================================
+// Final-gate fixes — PF1 (focus theft), PF2 (focus-first-error + a11y),
+// PF4 (accept), PF5 (aria-required), PF6 (submit stays enabled).
+// =====================================================================
+
+describe('PublicOnboardingView — final-gate accessibility + autosave fixes', () => {
+  beforeAll(() => {
+    // jsdom doesn't implement scrollIntoView; the focus-first-error flow calls
+    // it. Stub it so the real component code runs unchanged.
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  it('PF1: keeps inputs enabled + focused during autosave (no focus theft)', async () => {
+    const user = await unlockGate(questionnaireDoc());
+
+    // Make the autosave PATCH hang so ``savingDoc`` stays true deterministically.
+    let release: () => void = () => {};
+    api.patch.mockImplementation(
+      () =>
+        new Promise((res) => {
+          release = () => res({ data: { field_values_version: 1 } });
+        }),
+    );
+
+    const input = screen.getByLabelText(/Client Name/i);
+    await user.type(input, 'Jane');
+
+    // Debounced autosave (1200ms) fires → savingDoc=true → passive "Saving…".
+    await screen.findByText(/saving…/i, {}, { timeout: 3000 });
+
+    // The bug: a disabled fieldset would blur the input to <body>. Fixed: the
+    // input stays enabled AND keeps focus while the save is in flight.
+    expect(input).toBeEnabled();
+    expect(document.activeElement).toBe(input);
+
+    release();
+  });
+
+  it('PF2/PF6: submit stays enabled; click focuses first missing field + aria-invalid', async () => {
+    const user = await unlockGate(questionnaireDoc()); // client_name + channels required
+
+    const submit = await screen.findByRole('button', { name: /submit documents/i });
+    // PF6: enabled even though the form is incomplete.
+    expect(submit).toBeEnabled();
+
+    await user.click(submit);
+
+    // PF2: the first unsatisfied required field is focused + marked invalid.
+    const nameInput = screen.getByLabelText(/Client Name/i);
+    expect(nameInput).toHaveAttribute('aria-invalid', 'true');
+    expect(document.activeElement).toBe(nameInput);
+
+    // Inline per-field error is rendered and wired via aria-errormessage. (Both
+    // required fields are flagged after submit, so scope to THIS field's error.)
+    const errId = nameInput.getAttribute('aria-errormessage');
+    expect(errId).toBeTruthy();
+    const err = document.getElementById(errId as string);
+    expect(err).toHaveTextContent(/this field is required/i);
+
+    // Validate-first: no /complete request was made.
+    expect(
+      api.post.mock.calls.some((c) => String(c[0]).endsWith('/complete')),
+    ).toBe(false);
+
+    // The error clears live once the field is filled.
+    await user.type(nameInput, 'Jane');
+    await waitFor(() =>
+      expect(nameInput).not.toHaveAttribute('aria-invalid', 'true'),
+    );
+  });
+
+  it('PF4: the file input carries the shared accept allow-list', async () => {
+    const doc = questionnaireDoc({
+      kind: 'upload_request',
+      original_filename: 'Brand Assets',
+      field_definitions: [
+        {
+          id: 'logos',
+          kind: 'file_upload',
+          label: 'Upload logos',
+          required: true,
+          maxFiles: 3,
+          maxMB: 10,
+        },
+      ],
+    } as Partial<OnboardingPublicDocument>);
+    await unlockGate(doc);
+
+    const fileInput = screen.getByLabelText(/Upload logos/i);
+    expect(fileInput).toHaveAttribute('accept', ONBOARDING_UPLOAD_ACCEPT);
+    const accept = fileInput.getAttribute('accept') ?? '';
+    expect(accept).toContain('.pdf');
+    expect(accept).toContain('application/pdf');
+    expect(accept).not.toContain('.svg');
+  });
+
+  it('PF5: required choice / dropdown / file controls are aria-required', async () => {
+    const doc = questionnaireDoc({
+      kind: 'upload_request',
+      original_filename: 'Mixed',
+      field_definitions: [
+        {
+          id: 'pick',
+          kind: 'single_choice',
+          label: 'Pick one',
+          required: true,
+          options: [{ value: 'a', label: 'A' }],
+        },
+        {
+          id: 'drop',
+          kind: 'single_choice',
+          label: 'Drop one',
+          required: true,
+          display: 'dropdown',
+          options: [{ value: 'x', label: 'X' }],
+        },
+        {
+          id: 'up',
+          kind: 'file_upload',
+          label: 'Upload file',
+          required: true,
+          maxFiles: 1,
+          maxMB: 5,
+        },
+      ],
+    } as Partial<OnboardingPublicDocument>);
+    await unlockGate(doc);
+
+    // Radio group <fieldset> (the visual * is aria-hidden, so SR users rely on this).
+    const radioGroup = screen.getByRole('group', { name: /Pick one/i });
+    expect(radioGroup).toHaveAttribute('aria-required', 'true');
+    // Dropdown <select>.
+    expect(screen.getByLabelText(/Drop one/i)).toHaveAttribute('aria-required', 'true');
+    // File <input>.
+    expect(screen.getByLabelText(/Upload file/i)).toHaveAttribute('aria-required', 'true');
   });
 });

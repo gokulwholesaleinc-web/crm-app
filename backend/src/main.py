@@ -116,12 +116,34 @@ async def _init_database():
         logger.exception("Database initialization failed; startup continues")
 
 
+def _warn_if_sensitive_fields_unconfigured() -> None:
+    """Loud boot signal (D1): a sensitive-capable build booted with no
+    ``ONBOARDING_FIELD_KEY``.
+
+    E-sign and questionnaire onboarding documents still work; only a
+    ``sensitive`` field (F4 passwords / gov-ID secrets) fails closed at submit
+    (a 422, see ``onboarding/crypto.py``). Logging CRITICAL at boot turns that
+    otherwise-confusing "422 at the client's first password submit" into a
+    visible startup signal. Deliberately does NOT crash — the rest of the app
+    is unaffected, so the deploy gate (set the key first) stays an ops concern.
+    """
+    from src.onboarding import crypto
+
+    if not crypto.is_configured():
+        logger.critical(
+            "ONBOARDING_FIELD_KEY is not set: onboarding sensitive fields "
+            "(passwords / gov-ID) will fail closed at submit. Set it on the "
+            "backend service to enable sensitive-field collection."
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup/shutdown events."""
     from src.core.scheduler import start_scheduler, stop_scheduler
 
     print("Starting up CRM application...")
+    _warn_if_sensitive_fields_unconfigured()
     if not settings.DEBUG:
         if settings.SEED_ON_STARTUP:
             raise RuntimeError(

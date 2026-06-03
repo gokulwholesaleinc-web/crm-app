@@ -41,6 +41,7 @@ import type {
   OnboardingDocumentKind,
 } from '../../types';
 import { OTHER_OPTION_TOKEN } from '../../types';
+import { ONBOARDING_UPLOAD_ACCEPT } from './uploadConstants';
 
 GlobalWorkerOptions.workerSrc = pdfWorker;
 
@@ -674,6 +675,96 @@ function PublicOnboardingView() {
     }
   }, [token, recordingConsent, packet?.esign_disclosure_version, requestHeaders, fetchPacket]);
 
+  // --- Derived gating ----------------------------------------------------
+  // A signature is required when any doc is e-sign OR carries a signature field
+  // — matching the backend completion gate (which demands a signature whenever
+  // a signature field exists). The two are kept consistent at packet creation,
+  // but aligning the predicates keeps the pad from ever hiding on a doc the
+  // server will then refuse to complete without a signature.
+  const requiresSignature = useMemo(
+    () =>
+      docs.some(
+        (d) =>
+          d.requires_esign ||
+          d.field_definitions.some((f) => f.kind === 'signature'),
+      ),
+    [docs],
+  );
+
+  const allDocsViewed = docs.length > 0 && docs.every((d) => viewedDocIds.has(d.id));
+
+  // Structured list of every unsatisfied required field across all documents —
+  // the focus-first-error flow (PF2) navigates to the first entry's document and
+  // focuses its input, and the aggregate summary derives its strings from this.
+  const missingRequiredFields = useMemo(() => {
+    const out: Array<{
+      docId: number;
+      docIndex: number;
+      field: OnboardingQuestionnaireField | OnboardingFieldDefinition;
+      isFormField: boolean;
+      label: string;
+      docFilename: string;
+    }> = [];
+    docs.forEach((doc, di) => {
+      const values = draftValues[doc.id] ?? doc.field_values;
+      const formDoc = isFormDoc(doc);
+      for (const f of doc.field_definitions) {
+        if (f.kind === 'signature') continue; // covered by the drawn signature
+        if (!f.required) continue;
+        const satisfied = formDoc
+          ? questionnaireFieldSatisfied(
+              f as OnboardingQuestionnaireField,
+              values[f.id],
+            )
+          : // esign/text field → non-empty string (the legacy check)
+            typeof values[f.id] === 'string' &&
+            (values[f.id] as string).trim().length > 0;
+        if (!satisfied) {
+          out.push({
+            docId: doc.id,
+            docIndex: di,
+            field: f,
+            isFormField: formDoc,
+            label: f.label,
+            docFilename: doc.original_filename,
+          });
+        }
+      }
+    });
+    return out;
+  }, [docs, draftValues]);
+
+  const missingRequired = useMemo(
+    () => missingRequiredFields.map((m) => `${m.docFilename}: ${m.label}`),
+    [missingRequiredFields],
+  );
+
+  // Submit was attempted at least once → surface per-field aria-invalid + inline
+  // errors (PF2). They clear live as the user fills each field.
+  const [submitAttempted, setSubmitAttempted] = useState(false);
+
+  // Pending focus target captured by handleSubmit; an effect focuses it once the
+  // owning document is the one on screen (a cross-document jump re-renders first).
+  const pendingFocusRef = useRef<{ docId: number; domId: string } | null>(null);
+  useEffect(() => {
+    const target = pendingFocusRef.current;
+    if (!target || currentDocId !== target.docId) return;
+    const el = document.getElementById(target.domId);
+    if (el) {
+      pendingFocusRef.current = null;
+      (el as HTMLElement).focus();
+      el.scrollIntoView({ block: 'center' });
+    }
+  }, [currentDocId]);
+
+  // Everything the server's completion gate also checks. Drives the inline
+  // notices; the Submit button itself only blocks on ``submitting`` (PF6) so it
+  // stays clickable and the click runs the validate-first flow below.
+  const submitReady =
+    allDocsViewed &&
+    missingRequiredFields.length === 0 &&
+    (!requiresSignature || (consentRecorded && signatureSaved));
+
   // --- Submit (POST /complete) + completion poll -------------------------
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => {
@@ -682,6 +773,39 @@ function PublicOnboardingView() {
 
   const handleSubmit = useCallback(async () => {
     if (!token || submitting) return;
+    // Validate-first (PF2/PF6): the Submit button is no longer hard-disabled, so
+    // a click on an incomplete form must surface WHERE the problem is rather than
+    // silently no-op. Flip on the per-field error display, then if a required
+    // field is unsatisfied jump to its document and focus its input. Bail before
+    // any network call until the same gates the server enforces are met.
+    if (!submitReady) {
+      setSubmitAttempted(true);
+      const first = missingRequiredFields[0];
+      if (first?.isFormField) {
+        const domId =
+          first.field.kind === 'file_upload'
+            ? `onb-file-${first.docId}-${first.field.id}`
+            : `onb-${first.docId}-${first.field.id}`;
+        pendingFocusRef.current = { docId: first.docId, domId };
+        if (first.docIndex !== docIndex) {
+          setDocIndex(first.docIndex);
+        } else {
+          // Already on the right document — focus now (the effect only fires on
+          // a docIndex change).
+          const el = document.getElementById(domId);
+          if (el) {
+            pendingFocusRef.current = null;
+            el.focus();
+            el.scrollIntoView({ block: 'center' });
+          }
+        }
+      } else if (first) {
+        // An esign field (no onb- id on the canvas overlay) — at least navigate
+        // to its document so the user sees it; the summary lists the field.
+        if (first.docIndex !== docIndex) setDocIndex(first.docIndex);
+      }
+      return;
+    }
     // Save the open document first so its latest values are persisted before
     // the server validates completion.
     if (currentDoc && !(await saveDocument(currentDoc))) return;
@@ -721,7 +845,17 @@ function PublicOnboardingView() {
     } finally {
       setSubmitting(false);
     }
-  }, [token, submitting, currentDoc, saveDocument, requestHeaders, fetchPacket]);
+  }, [
+    token,
+    submitting,
+    submitReady,
+    missingRequiredFields,
+    docIndex,
+    currentDoc,
+    saveDocument,
+    requestHeaders,
+    fetchPacket,
+  ]);
 
   // When a background ``completing`` poll lands on ``completed``, stop polling
   // and show the success screen with downloads.
@@ -742,54 +876,6 @@ function PublicOnboardingView() {
       }
     }
   }, [packet?.status, sessionToken, completed, fetchPacket]);
-
-  // --- Derived gating ----------------------------------------------------
-  // A signature is required when any doc is e-sign OR carries a signature field
-  // — matching the backend completion gate (which demands a signature whenever
-  // a signature field exists). The two are kept consistent at packet creation,
-  // but aligning the predicates keeps the pad from ever hiding on a doc the
-  // server will then refuse to complete without a signature.
-  const requiresSignature = useMemo(
-    () =>
-      docs.some(
-        (d) =>
-          d.requires_esign ||
-          d.field_definitions.some((f) => f.kind === 'signature'),
-      ),
-    [docs],
-  );
-
-  const allDocsViewed = docs.length > 0 && docs.every((d) => viewedDocIds.has(d.id));
-
-  const missingRequired = useMemo(() => {
-    const missing: string[] = [];
-    for (const doc of docs) {
-      const values = draftValues[doc.id] ?? doc.field_values;
-      const formDoc = isFormDoc(doc);
-      for (const f of doc.field_definitions) {
-        if (f.kind === 'signature') continue; // covered by the drawn signature
-        if (!f.required) continue;
-        const satisfied = formDoc
-          ? questionnaireFieldSatisfied(
-              f as OnboardingQuestionnaireField,
-              values[f.id],
-            )
-          : // esign/text field → non-empty string (the legacy check)
-            typeof values[f.id] === 'string' &&
-            (values[f.id] as string).trim().length > 0;
-        if (!satisfied) {
-          missing.push(`${doc.original_filename}: ${f.label}`);
-        }
-      }
-    }
-    return missing;
-  }, [docs, draftValues]);
-
-  const canSubmit =
-    allDocsViewed &&
-    missingRequired.length === 0 &&
-    (!requiresSignature || (consentRecorded && signatureSaved)) &&
-    !submitting;
 
   const goPrevDoc = async () => {
     if (currentDoc) await saveDocument(currentDoc);
@@ -938,7 +1024,7 @@ function PublicOnboardingView() {
             esignDisclosure={packet.esign_disclosure}
             allDocsViewed={allDocsViewed}
             missingRequired={missingRequired}
-            canSubmit={canSubmit}
+            submitAttempted={submitAttempted}
             submitting={submitting}
             submitError={submitError}
             onSubmit={handleSubmit}
@@ -1069,7 +1155,7 @@ interface FillFlowProps {
   esignDisclosure?: string | null;
   allDocsViewed: boolean;
   missingRequired: string[];
-  canSubmit: boolean;
+  submitAttempted: boolean;
   submitting: boolean;
   submitError: string | null;
   onSubmit: () => void;
@@ -1106,7 +1192,7 @@ function FillFlow({
   esignDisclosure,
   allDocsViewed,
   missingRequired,
-  canSubmit,
+  submitAttempted,
   submitting,
   submitError,
   onSubmit,
@@ -1149,7 +1235,14 @@ function FillFlow({
           doc={currentDoc}
           values={draftValues[currentDoc.id] ?? currentDoc.field_values}
           onFieldChange={(fieldId, value) => setFieldValue(currentDoc.id, fieldId, value)}
-          disabled={!isWritable || savingDoc}
+          // PF1: gate ONLY on read-only state — NEVER on savingDoc. The 1200ms
+          // debounced autosave flips savingDoc, and disabling the focused input
+          // mid-keystroke yanks the caret to <body> every autosave cycle. Saving
+          // is non-blocking; the version-fence 409 reconciles any drift. The
+          // passive "Saving…" indicator below replaces the disabled surface.
+          disabled={!isWritable}
+          savingDoc={savingDoc}
+          submitAttempted={submitAttempted}
           accent={accent}
           requestHeaders={requestHeaders}
         />
@@ -1325,10 +1418,14 @@ function FillFlow({
               {submitError}
             </p>
           )}
+          {/* PF6: stay enabled until the request starts (gate only on
+              ``submitting``). A click on an incomplete form runs the
+              validate-first + focus-first-error flow in ``onSubmit`` instead of
+              presenting a dead, un-actionable disabled button. */}
           <button
             type="button"
             onClick={onSubmit}
-            disabled={!canSubmit}
+            disabled={submitting}
             className="inline-flex w-full items-center justify-center gap-2 rounded px-5 py-3 text-sm font-semibold text-white shadow-sm hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50 transition-opacity"
             style={{ backgroundColor: accent, outlineColor: accent }}
           >
@@ -1350,7 +1447,12 @@ interface QuestionnaireFillerProps {
   doc: OnboardingPublicDocument;
   values: Record<string, OnboardingAnswerValue>;
   onFieldChange: (fieldId: string, value: OnboardingAnswerValue) => void;
+  /** Read-only gate only (PF1) — NOT autosave. */
   disabled: boolean;
+  /** Drives the passive "Saving…" indicator; never disables the inputs. */
+  savingDoc: boolean;
+  /** Once true, unsatisfied required fields show aria-invalid + inline error. */
+  submitAttempted: boolean;
   accent: string;
   requestHeaders: () => Record<string, string> | undefined;
 }
@@ -1389,6 +1491,8 @@ function QuestionnaireFiller({
   values,
   onFieldChange,
   disabled,
+  savingDoc,
+  submitAttempted,
   accent,
   requestHeaders,
 }: QuestionnaireFillerProps) {
@@ -1397,9 +1501,22 @@ function QuestionnaireFiller({
 
   return (
     <div className="mt-6">
-      <p className="text-sm font-medium text-gray-900 truncate" title={doc.original_filename}>
-        {doc.original_filename}
-      </p>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-medium text-gray-900 truncate" title={doc.original_filename}>
+          {doc.original_filename}
+        </p>
+        {/* PF1: passive autosave indicator — never a disabled surface. */}
+        {savingDoc && (
+          <span
+            role="status"
+            aria-live="polite"
+            className="inline-flex flex-shrink-0 items-center gap-1 text-xs text-gray-500"
+          >
+            <ArrowPathIcon className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+            Saving…
+          </span>
+        )}
+      </div>
 
       <div className="mt-4 space-y-8">
         {sections.map((section, si) => (
@@ -1423,6 +1540,7 @@ function QuestionnaireFiller({
                   value={values[field.id]}
                   onChange={(v) => onFieldChange(field.id, v)}
                   disabled={disabled}
+                  submitAttempted={submitAttempted}
                   accent={accent}
                   requestHeaders={requestHeaders}
                 />
@@ -1446,6 +1564,7 @@ interface QuestionnaireFieldProps {
   value: OnboardingAnswerValue | undefined;
   onChange: (value: OnboardingAnswerValue) => void;
   disabled: boolean;
+  submitAttempted: boolean;
   accent: string;
   requestHeaders: () => Record<string, string> | undefined;
 }
@@ -1457,6 +1576,7 @@ function QuestionnaireField({
   value,
   onChange,
   disabled,
+  submitAttempted,
   accent,
   requestHeaders,
 }: QuestionnaireFieldProps) {
@@ -1464,6 +1584,14 @@ function QuestionnaireField({
   const helpId = field.help ? `${fieldDomId}-help` : undefined;
   const labelText = field.label || field.id;
   const required = !!field.required;
+
+  // PF2: a required field becomes "invalid" once Submit was attempted while it
+  // is still unsatisfied; the flag clears live as the user fills it.
+  const invalid = submitAttempted && !questionnaireFieldSatisfied(field, value);
+  const errorId = invalid ? `${fieldDomId}-error` : undefined;
+  // Merge help + error into aria-describedby; aria-errormessage points at the
+  // error alone (only valid while aria-invalid is set).
+  const describedBy = [helpId, errorId].filter(Boolean).join(' ') || undefined;
 
   const labelNode = (
     <span className="block text-sm font-medium text-gray-800">
@@ -1476,6 +1604,11 @@ function QuestionnaireField({
   const help = field.help ? (
     <p id={helpId} className="mt-0.5 text-xs text-gray-500 text-pretty">
       {field.help}
+    </p>
+  ) : null;
+  const errorNode = invalid ? (
+    <p id={errorId} role="alert" className="mt-1 text-xs font-medium text-red-700">
+      This field is required.
     </p>
   ) : null;
 
@@ -1493,6 +1626,9 @@ function QuestionnaireField({
         labelNode={labelNode}
         help={help}
         helpId={helpId}
+        invalid={invalid}
+        errorId={errorId}
+        errorNode={errorNode}
         requestHeaders={requestHeaders}
       />
     );
@@ -1511,6 +1647,9 @@ function QuestionnaireField({
         labelNode={labelNode}
         help={help}
         helpId={helpId}
+        invalid={invalid}
+        errorId={errorId}
+        errorNode={errorNode}
       />
     );
   }
@@ -1526,9 +1665,12 @@ function QuestionnaireField({
     value: text,
     disabled,
     required,
+    'aria-required': required,
+    'aria-invalid': invalid || undefined,
+    'aria-errormessage': errorId,
     maxLength: field.maxLength ?? undefined,
     onChange: onTextChange,
-    'aria-describedby': helpId,
+    'aria-describedby': describedBy,
     className:
       'mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:bg-gray-100',
     style: { outlineColor: accent } as React.CSSProperties,
@@ -1562,6 +1704,7 @@ function QuestionnaireField({
       ) : (
         <input {...commonInput} type="text" inputMode="text" />
       )}
+      {errorNode}
     </div>
   );
 }
@@ -1580,6 +1723,9 @@ interface ChoiceFieldProps {
   labelNode: React.ReactNode;
   help: React.ReactNode;
   helpId?: string;
+  invalid?: boolean;
+  errorId?: string;
+  errorNode?: React.ReactNode;
 }
 
 function ChoiceField({
@@ -1592,6 +1738,9 @@ function ChoiceField({
   labelNode,
   help,
   helpId,
+  invalid,
+  errorId,
+  errorNode,
 }: ChoiceFieldProps) {
   const isMulti = field.kind === 'multi_choice';
   const selected = selectedValues(value);
@@ -1599,6 +1748,7 @@ function ChoiceField({
   const allowOther = !!field.allow_other;
   const options = field.options ?? [];
   const otherSelected = selected.includes(OTHER_OPTION_TOKEN);
+  const describedBy = [helpId, errorId].filter(Boolean).join(' ') || undefined;
 
   const emitSingle = (optValue: string) => {
     if (optValue === OTHER_OPTION_TOKEN) {
@@ -1641,7 +1791,10 @@ function ChoiceField({
           value={current}
           disabled={disabled}
           required={!!field.required}
-          aria-describedby={helpId}
+          aria-required={!!field.required}
+          aria-invalid={invalid || undefined}
+          aria-errormessage={errorId}
+          aria-describedby={describedBy}
           onChange={(e) => emitSingle(e.target.value)}
           className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:bg-gray-100"
           style={{ outlineColor: accent }}
@@ -1661,13 +1814,26 @@ function ChoiceField({
             accent={accent}
           />
         )}
+        {errorNode}
       </div>
     );
   }
 
-  // Radio (single) / checkbox (multi) group.
+  // Radio (single) / checkbox (multi) group. ``id`` + ``tabIndex={-1}`` make the
+  // group focusable so the focus-first-error flow (PF2) can land on it via the
+  // shared ``onb-${docId}-${fieldId}`` id; ``aria-required`` announces the
+  // requirement to SR users (the visual * is aria-hidden — PF5).
   return (
-    <fieldset aria-describedby={helpId}>
+    <fieldset
+      id={fieldDomId}
+      tabIndex={-1}
+      aria-required={!!field.required}
+      aria-invalid={invalid || undefined}
+      aria-errormessage={errorId}
+      aria-describedby={describedBy}
+      className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 rounded"
+      style={{ outlineColor: accent }}
+    >
       <legend className="text-sm font-medium text-gray-800">{labelNode}</legend>
       {help}
       <div className="mt-2 space-y-1.5">
@@ -1728,6 +1894,7 @@ function ChoiceField({
           accent={accent}
         />
       )}
+      {errorNode}
     </fieldset>
   );
 }
@@ -1778,6 +1945,9 @@ interface FileUploadFieldProps {
   labelNode: React.ReactNode;
   help: React.ReactNode;
   helpId?: string;
+  invalid?: boolean;
+  errorId?: string;
+  errorNode?: React.ReactNode;
   requestHeaders: () => Record<string, string> | undefined;
 }
 
@@ -1799,6 +1969,9 @@ function FileUploadField({
   labelNode,
   help,
   helpId,
+  invalid,
+  errorId,
+  errorNode,
   requestHeaders,
 }: FileUploadFieldProps) {
   const inputId = `onb-file-${docId}-${field.id}`;
@@ -1907,9 +2080,15 @@ function FileUploadField({
         id={inputId}
         type="file"
         name={field.id}
+        // PF4: native picker hint mirroring the backend allow-list (the server
+        // sniff + allow-list stays the authoritative backstop).
+        accept={ONBOARDING_UPLOAD_ACCEPT}
         multiple={maxFiles > 1}
         disabled={disabled || uploading || atLimit}
-        aria-describedby={[helpId, limitsId].filter(Boolean).join(' ') || undefined}
+        aria-required={!!field.required}
+        aria-invalid={invalid || undefined}
+        aria-errormessage={errorId}
+        aria-describedby={[helpId, limitsId, errorId].filter(Boolean).join(' ') || undefined}
         onChange={(e) => void handleSelect(e.target.files)}
         className="mt-2 block w-full text-sm text-gray-700 file:mr-3 file:rounded file:border-0 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white disabled:opacity-50"
         style={{ ['--tw-file-bg' as string]: accent } as React.CSSProperties}
@@ -1947,6 +2126,7 @@ function FileUploadField({
           ))}
         </ul>
       )}
+      {errorNode}
     </div>
   );
 }

@@ -19,6 +19,8 @@ PDF), and the esign path asserts the 400 refusal.
 No mocks. Real templates, real packets, real ledger rows.
 """
 
+import uuid
+
 import pytest
 from sqlalchemy import update
 from src.onboarding import storage, tokens
@@ -58,8 +60,10 @@ def _upload_field(fid: str = "gov_id") -> dict:
 
 async def _make_upload_template(db, fields=None) -> OnboardingTemplate:
     """An upload_request template — records_view_via_stream=False, no PDF copy."""
+    # Unique name per call — a multi-doc packet builds several of these, and
+    # uq_onboarding_templates_name (S1) forbids same-name rows.
     template = OnboardingTemplate(
-        name="Upload Form",
+        name=f"Upload Form {uuid.uuid4().hex[:8]}",
         field_definitions=fields or [_upload_field()],
         requires_esign=False,
         is_active=True,

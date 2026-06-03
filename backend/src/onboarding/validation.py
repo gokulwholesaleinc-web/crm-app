@@ -25,6 +25,7 @@ from src.onboarding.packet_errors import (
     PacketValidationError,
 )
 from src.onboarding.service import (
+    DuplicateTemplateNameError,
     FieldDefinitionError,
     RetiredTemplateError,
     StaleTemplateError,
@@ -36,11 +37,15 @@ logger = logging.getLogger(__name__)
 
 @contextmanager
 def field_definition_error_as_422():
-    """FieldDefinitionError → 422 (geometry/bounds/esign); Stale/Retired → 409."""
+    """FieldDefinitionError → 422 (geometry/bounds/esign); Stale/Retired → 409.
+
+    Also maps ``DuplicateTemplateNameError`` → 422 — a template-save concern
+    (the unique-name backstop, S1) that belongs on the same template write path.
+    """
     try:
         yield
-    except FieldDefinitionError as exc:
-        logger.warning("Onboarding field_definitions validation 422: %s", exc)
+    except (FieldDefinitionError, DuplicateTemplateNameError) as exc:
+        logger.warning("Onboarding template-save validation 422: %s", exc)
         raise HTTPException(
             status_code=HTTPStatus.UNPROCESSABLE_ENTITY, detail=str(exc)
         ) from exc

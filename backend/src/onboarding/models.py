@@ -106,6 +106,11 @@ class OnboardingTemplate(Base, AuditableMixin):
             "kind IN ('esign_pdf', 'questionnaire', 'upload_request')",
             name="ck_onboarding_templates_kind",
         ),
+        # The seed UPSERTs by ``name`` and the editor disambiguates templates by
+        # it — a DB-level unique backstops the application-only name keying so an
+        # admin-created same-name row can't be silently clobbered or double-sent
+        # (migration 054; create_all keeps SQLite tests in lock-step). S1.
+        UniqueConstraint("name", name="uq_onboarding_templates_name"),
     )
 
 

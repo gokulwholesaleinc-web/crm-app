@@ -337,6 +337,21 @@ def test_definitions_allow_other_on_text_raises():
         validate_questionnaire_definitions([_text("n", allow_other=True)])
 
 
+@pytest.mark.parametrize("kind", ["single_choice", "multi_choice"])
+def test_definitions_sensitive_on_choice_kind_raises(kind):
+    """Q1: ``sensitive`` is only valid on a text field — a sensitive choice could
+    never be filled (encryption coerces to str), so reject it at author time."""
+    field = _choice("secret_choice", kind, options=("a", "b"), sensitive=True)
+    with pytest.raises(FieldDefinitionError, match="sensitive is only valid on text"):
+        validate_questionnaire_definitions([field])
+
+
+@pytest.mark.parametrize("kind", ["short_text", "paragraph", "email", "url", "date"])
+def test_definitions_sensitive_on_text_kinds_pass(kind):
+    """A sensitive flag IS accepted on every text kind (F4 passwords are text)."""
+    validate_questionnaire_definitions([_text("secret", kind=kind, sensitive=True)])
+
+
 def test_definitions_reserved_other_token_as_option_raises():
     bad = _choice("c", "single_choice", options=("a",))
     bad["options"].append({"value": OTHER_TOKEN, "label": "Other"})

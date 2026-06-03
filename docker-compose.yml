@@ -33,6 +33,9 @@ services:
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
       STRIPE_API_VERSION: ${STRIPE_API_VERSION:-2026-04-22.dahlia}
       FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost:3000}
+      # Onboarding sensitive-field encryption (F4 passwords / gov-ID). Optional
+      # locally; set it in .env to exercise sensitive collection/decrypt.
+      ONBOARDING_FIELD_KEY: ${ONBOARDING_FIELD_KEY:-}
       DEBUG: ${DEBUG:-false}
       SEED_ON_STARTUP: ${SEED_ON_STARTUP:-true}
     ports:

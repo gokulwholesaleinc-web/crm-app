@@ -90,6 +90,46 @@ async def test_seed_is_idempotent(db_session):
     assert first_ids == second_ids
 
 
+async def test_seed_adopts_preexisting_same_name_row_no_duplicate(db_session):
+    """S1: an admin-planted row sharing a seed name is ADOPTED, never duplicated.
+
+    With ``uq_onboarding_templates_name`` enforced (create_all on the SQLite test
+    DB) the seed's name-keyed UPSERT can't double-insert. Planting a same-name
+    row first and then seeding leaves EXACTLY ONE row under that name (the
+    planted row, refreshed in place to the seed spec) — no clobber-into-duplicate.
+    """
+    planted = OnboardingTemplate(
+        name="Client Strategy Insights",  # collides with a seed template
+        description="Admin's own version",
+        service_tag="custom",
+        kind="questionnaire",
+        field_definitions=[
+            {"id": "planted", "kind": "short_text", "label": "Planted",
+             "required": False, "order": 1}
+        ],
+        requires_esign=False,
+        is_active=True,
+    )
+    db_session.add(planted)
+    await db_session.flush()
+    planted_id = planted.id
+
+    await seed_onboarding_templates(db_session)
+
+    rows = (
+        await db_session.execute(
+            select(OnboardingTemplate).where(
+                OnboardingTemplate.name == "Client Strategy Insights"
+            )
+        )
+    ).scalars().all()
+    # Exactly one row under that name (the planted one, adopted) — no duplicate.
+    assert len(rows) == 1
+    assert rows[0].id == planted_id
+    # Total stays at the canonical 8 (adoption, not a 9th insert).
+    assert await _count(db_session) == 8
+
+
 async def test_seed_heals_edited_field_definitions(db_session):
     """A re-seed refreshes field_definitions in place after an out-of-band edit."""
     [tmpl] = [

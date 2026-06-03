@@ -97,3 +97,36 @@ def test_generate_key_is_usable(monkeypatch):
     monkeypatch.setenv(ENV_VAR, generated)
     ciphertext, _ = crypto.encrypt_field("ok")
     assert crypto.decrypt_field(ciphertext) == "ok"
+
+
+# --- D1: startup guard wires is_configured() into a loud boot signal --------
+
+
+def test_startup_guard_logs_critical_when_key_unset(monkeypatch, caplog):
+    """D1: a sensitive-capable build booted with no key logs CRITICAL (does NOT
+    crash) — the loud boot signal that replaces a confusing first-submit 422."""
+    import logging
+
+    from src.main import _warn_if_sensitive_fields_unconfigured
+
+    monkeypatch.delenv(ENV_VAR, raising=False)
+    with caplog.at_level(logging.CRITICAL):
+        _warn_if_sensitive_fields_unconfigured()  # returns normally (no raise)
+
+    assert any(
+        rec.levelno == logging.CRITICAL and ENV_VAR in rec.getMessage()
+        for rec in caplog.records
+    )
+
+
+def test_startup_guard_silent_when_key_set(monkeypatch, caplog):
+    """With the key set, the guard logs nothing at CRITICAL."""
+    import logging
+
+    from src.main import _warn_if_sensitive_fields_unconfigured
+
+    monkeypatch.setenv(ENV_VAR, _key())
+    with caplog.at_level(logging.CRITICAL):
+        _warn_if_sensitive_fields_unconfigured()
+
+    assert not any(rec.levelno == logging.CRITICAL for rec in caplog.records)
