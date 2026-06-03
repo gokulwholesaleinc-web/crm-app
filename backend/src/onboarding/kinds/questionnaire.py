@@ -626,6 +626,25 @@ class QuestionnaireDocumentType:
         """
         if purge:
             doc.field_values = {}
+            return
+        # Defense-in-depth on the RETAIN path: a sensitive value must never
+        # persist in field_values (it is structurally absent today — encrypted
+        # into the secret table — but drop any sensitive-field key here so a
+        # future write-path bug can't leave a plaintext secret in the retained
+        # JSONB). No-op when no sensitive field carries a value.
+        sensitive_ids = {
+            f.get("id")
+            for f in (getattr(doc, "field_definitions", None) or [])
+            if f.get("sensitive")
+        }
+        if sensitive_ids and doc.field_values:
+            kept = {
+                k: v
+                for k, v in doc.field_values.items()
+                if k not in sensitive_ids
+            }
+            if len(kept) != len(doc.field_values):
+                doc.field_values = kept
 
 
 # Discovered + registered by the kinds package auto-loader (it reads this

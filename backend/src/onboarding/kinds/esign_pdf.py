@@ -191,11 +191,17 @@ class EsignPdfDocumentType:
         from src.onboarding.stamper import stamp_document
 
         # An esign doc ALWAYS has a per-packet PDF copy (needs_pdf_copy=True);
-        # a NULL here is a real defect, not a questionnaire/upload doc routed
-        # wrongly. Guard so it surfaces as a clean failure (pdf_path is nullable
-        # in the schema now that non-esign kinds carry no copy).
+        # a NULL here is a PERMANENT data defect. Raise PacketValidationError —
+        # NOT a bare RuntimeError, which the Phase-A dry-run swallows (its
+        # ``except (FileNotFoundError, RuntimeError): continue`` is for transient
+        # storage reads). The bare-RuntimeError path let Phase A claim + flip to
+        # ``completing``, then Phase B re-raised → a dead-end ``completion_failed``
+        # that could never succeed on retry. PacketValidationError propagates to
+        # Phase A's validation try-block → a clean 422, status unchanged.
         if doc.pdf_path is None:
-            raise RuntimeError(f"esign_pdf document {doc.id} has no PDF copy")
+            raise PacketValidationError(
+                f"Document {doc.id} is misconfigured (no PDF); contact support."
+            )
         source = await storage.read_bytes(doc.pdf_path)
         fields = _fields_with_values(doc)
         return await asyncio.to_thread(stamp_document, source, fields, signature_png)

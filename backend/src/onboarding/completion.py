@@ -389,8 +389,14 @@ async def _assert_all_viewed(
 async def _phase_b_stamp(db: AsyncSession, *, packet_id: int) -> None:
     service = PacketService(db)
     packet = await service.get_packet(packet_id)
-    if packet is None:
-        return  # packet vanished between phases; Phase C will report failed
+    # Fail closed if the packet vanished OR left the ``completing`` state under
+    # this worker: a concurrent list-sweep can flip a stale packet to
+    # ``abandoned`` and PURGE it (deleting the upload files + secret rows)
+    # between Phase A's claim-commit and this reload. Without this guard Phase B
+    # would then stamp a manifest/summary from emptied field_values / deleted
+    # uploads and attach a silently-wrong (empty) artifact on a dead packet.
+    if packet is None or packet.status != "completing":
+        return
     docs = await service.load_documents(packet_id)
     for doc in docs:
         if doc.attachment_id is not None:
