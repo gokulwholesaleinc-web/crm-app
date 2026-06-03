@@ -604,19 +604,25 @@ class QuestionnaireDocumentType:
         return escape(str(text))
 
     async def scrub(
-        self, db: AsyncSession, *, doc: OnboardingPacketDocument
+        self,
+        db: AsyncSession,
+        *,
+        doc: OnboardingPacketDocument,
+        purge: bool = False,
     ) -> None:
-        """RETAIN the non-sensitive answers (§C.5) — do NOT null ``field_values``.
+        """RETAIN the non-sensitive answers on COMPLETION (§C.5); null on PURGE.
 
-        Forms 2/4/5/6 are structured intake Lorenzo will query later, so unlike
-        ``esign_pdf`` (which nulls answers) a questionnaire keeps them in the
-        existing column at completion/expiry. Sensitive values are never in
-        ``field_values`` to begin with (their ciphertext lives in the secret
-        table, scrubbed there by P3), so retaining ``field_values`` leaks no
-        secret. The drawn signature (none for a questionnaire) is nulled at the
-        packet level by ``scrub_packet``.
+        Forms 2/4/5/6 are structured intake Lorenzo queries later, so on a
+        successful completion (``purge=False``) a questionnaire keeps its answers
+        in the existing column (unlike ``esign_pdf`` which nulls them). On a
+        non-delivery terminal (``purge=True`` — revoke/expire/abandon/purge_pii)
+        those answers ARE PII to destroy, so null them. Sensitive values are
+        never in ``field_values`` (their ciphertext lives in the secret table,
+        deleted by ``scrub_packet`` on purge), so retaining leaks no secret. The
+        drawn signature (none for a questionnaire) is nulled at the packet level.
         """
-        return None
+        if purge:
+            doc.field_values = {}
 
 
 # Discovered + registered by the kinds package auto-loader (it reads this

@@ -201,10 +201,16 @@ class EsignPdfDocumentType:
         return await asyncio.to_thread(stamp_document, source, fields, signature_png)
 
     async def scrub(
-        self, db: AsyncSession, *, doc: OnboardingPacketDocument
+        self,
+        db: AsyncSession,
+        *,
+        doc: OnboardingPacketDocument,
+        purge: bool = False,
     ) -> None:
-        """Null the recipient answers (PII scrub). The drawn signature is nulled
-        at the PACKET level by ``scrub_packet``. No uploads/secrets for esign.
+        """Null the recipient answers — they are stamped into the filled PDF, so
+        scrubbing the JSONB copy is safe on BOTH completion and purge (``purge``
+        makes no difference for esign: no uploads, no secrets). The drawn
+        signature is nulled at the PACKET level by ``scrub_packet``.
         """
         doc.field_values = {}
 

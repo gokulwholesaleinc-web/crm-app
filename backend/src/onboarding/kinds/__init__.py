@@ -90,10 +90,23 @@ class DocumentType(Protocol):
         ...
 
     async def scrub(
-        self, db: AsyncSession, *, doc: OnboardingPacketDocument
+        self,
+        db: AsyncSession,
+        *,
+        doc: OnboardingPacketDocument,
+        purge: bool = False,
     ) -> None:
-        """Null answers + delete uploads (via ``AttachmentService.delete_attachment``)
-        + delete secret rows. Dissolves P0-6."""
+        """Scrub PII for a terminal transition.
+
+        ``purge=False`` (COMPLETION): RETAIN the delivered collected data — upload
+        files, secret ciphertext, and questionnaire answers are the deliverable
+        Lorenzo accesses (F1-CONFIRMED keep gov-ID indefinitely); only data
+        captured elsewhere (esign answers → the stamped PDF) is nulled.
+        ``purge=True`` (revoke / expire / abandon / purge_pii): DESTROY the
+        collected PII — delete uploads (via ``AttachmentService.delete_attachment``)
+        + null answers (secret rows are deleted kind-agnostically by
+        ``scrub_packet``). Dissolves P0-6 WITHOUT destroying the deliverable on a
+        successful completion."""
         ...
 
 

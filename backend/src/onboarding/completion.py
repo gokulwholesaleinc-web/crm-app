@@ -516,9 +516,13 @@ async def _phase_c_finalize(db: AsyncSession, *, packet_id: int) -> str | None:
     packet.completed_at = _now()
     packet.download_token_hash = tokens.hash_token(raw_download)
     packet.download_token_expires_at = _now() + DOWNLOAD_TOKEN_TTL
-    # Scrub PII only AFTER the filled PDFs are confirmed attached (§12). Now
-    # db-aware + async: deletes upload Attachments + secret rows per kind (§D.3).
-    await scrub_packet(db, packet, docs)
+    # Scrub PII only AFTER the filled PDFs are confirmed attached (§12).
+    # purge=False RETAINS the delivered collected data — upload files (gov-ID /
+    # brand assets), secret ciphertext (F4 passwords), and questionnaire answers
+    # are the deliverable Lorenzo accesses; only the signature + esign answers
+    # (already in the stamped PDF) are scrubbed. The full PII purge is reserved
+    # for non-delivery terminals (revoke / expire / abandon / purge_pii).
+    await scrub_packet(db, packet, docs, purge=False)
     await db.commit()
     return raw_download
 

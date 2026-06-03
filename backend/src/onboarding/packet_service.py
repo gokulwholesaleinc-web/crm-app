@@ -98,17 +98,23 @@ async def scrub_packet(
     db: AsyncSession,
     packet: OnboardingPacket,
     documents: list[OnboardingPacketDocument],
+    *,
+    purge: bool,
 ) -> None:
-    """Null the drawn signature + per-doc PII; delete uploads + secrets (§D.3).
+    """Null the drawn signature + per-doc PII (§D.3), retention-aware.
 
-    DB-aware + per-kind (P0-6): nulls the packet's drawn signature, then for
-    EACH doc dispatches to ``get_handler(doc.kind).scrub`` — esign nulls
-    ``field_values``; upload_request deletes its Attachments (via the canonical
-    ``AttachmentService.delete_attachment``) + fence rows then nulls the refs;
-    questionnaire retains non-sensitive answers (§C.5). Finally deletes that
-    doc's ``onboarding_secret_values`` rows KIND-AGNOSTICALLY (any doc may carry
-    a sensitive text field — gov-ID file vs F4 password), so an encrypted secret
-    never survives a terminal transition.
+    DB-aware + per-kind (P0-6): always nulls the packet's drawn signature (it is
+    captured in the stamped esign PDF / is PII on a non-delivery terminal), then
+    dispatches per doc to ``get_handler(doc.kind).scrub(..., purge=purge)``.
+
+    ``purge=False`` (COMPLETION): RETAIN the delivered collected data — upload
+    files (gov-ID / brand assets), secret ciphertext (F4 passwords), and
+    questionnaire answers are the deliverable Lorenzo accesses; esign answers are
+    nulled (they live in the stamped PDF). ``purge=True`` (revoke / expire /
+    abandon / purge_pii): DESTROY the collected PII — handlers delete uploads +
+    null answers, and the secret rows are deleted here kind-agnostically (any doc
+    may carry a sensitive text field). Completing a packet must NOT delete the
+    very files/secrets the form collected (F1-CONFIRMED keep gov-ID indefinitely).
     """
     from sqlalchemy import delete as sa_delete
 
@@ -116,12 +122,13 @@ async def scrub_packet(
 
     packet.signer_signature_image = None
     for doc in documents:
-        await get_handler(doc.kind).scrub(db, doc=doc)
-        await db.execute(
-            sa_delete(OnboardingSecretValue).where(
-                OnboardingSecretValue.packet_document_id == doc.id
+        await get_handler(doc.kind).scrub(db, doc=doc, purge=purge)
+        if purge:
+            await db.execute(
+                sa_delete(OnboardingSecretValue).where(
+                    OnboardingSecretValue.packet_document_id == doc.id
+                )
             )
-        )
 
 
 class PacketService:
@@ -409,7 +416,10 @@ class PacketService:
             ):
                 packet.status = "expired"
                 await scrub_packet(
-                    self.db, packet, await self.load_documents(packet.id)
+                    self.db,
+                    packet,
+                    await self.load_documents(packet.id),
+                    purge=True,
                 )
                 packet.token_hash = self._dead_token_hash(packet.id)
                 return
@@ -419,7 +429,10 @@ class PacketService:
                 packet.status = "abandoned"
                 packet.abandoned_at = now
                 await scrub_packet(
-                    self.db, packet, await self.load_documents(packet.id)
+                    self.db,
+                    packet,
+                    await self.load_documents(packet.id),
+                    purge=True,
                 )
 
     @staticmethod
@@ -444,7 +457,7 @@ class PacketService:
         packet.token_hash = self._dead_token_hash(packet.id)
         packet.download_token_hash = None
         packet.download_token_expires_at = None
-        await scrub_packet(self.db, packet, documents)
+        await scrub_packet(self.db, packet, documents, purge=True)
         tokens.reset_throttle(old_hash)
         await self.db.flush()
         return packet
@@ -485,7 +498,7 @@ class PacketService:
     async def purge_pii(self, packet: OnboardingPacket) -> OnboardingPacket:
         """Staff manual scrub — null values + signature, status unchanged."""
         documents = await self.load_documents(packet.id)
-        await scrub_packet(self.db, packet, documents)
+        await scrub_packet(self.db, packet, documents, purge=True)
         await self.db.flush()
         return packet
 

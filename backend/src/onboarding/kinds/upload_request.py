@@ -282,17 +282,29 @@ class UploadRequestDocumentType:
         return buf.getvalue()
 
     async def scrub(
-        self, db: AsyncSession, *, doc: OnboardingPacketDocument
+        self,
+        db: AsyncSession,
+        *,
+        doc: OnboardingPacketDocument,
+        purge: bool = False,
     ) -> None:
-        """Delete every uploaded file (Attachment + storage) then its row, and
-        null the answer refs (P0-6).
+        """KEEP the uploaded files on COMPLETION; delete them only on PURGE.
 
-        Uses the canonical ``AttachmentService.delete_attachment`` (removes both
-        the storage object and the Attachment row across the disk/R2 branch —
-        NEVER hand-rolls ``storage.delete``). The upload row is then deleted, and
-        ``field_values`` is nulled (the id list no longer references anything).
-        Secret-row deletion is handled kind-agnostically by ``scrub_packet``.
+        On a successful completion (``purge=False``) the uploaded files ARE the
+        deliverable — gov-ID, brand assets — that Lorenzo accesses from the
+        contact's Attachments (F1-CONFIRMED: keep gov-ID indefinitely, no v1
+        purge sweep). Deleting them here would destroy the very thing the form
+        collected, so completion is a NO-OP. On a non-delivery terminal
+        (``purge=True`` — revoke/expire/abandon/purge_pii) the files are orphaned
+        PII: delete every upload Attachment via the canonical
+        ``AttachmentService.delete_attachment`` (removes the storage object AND
+        the row across the disk/R2 branch — never hand-rolls ``storage.delete``),
+        delete its fence row, and null the answer refs. Secret-row deletion is
+        handled kind-agnostically by ``scrub_packet`` (also purge-only).
         """
+        if not purge:
+            return  # completion: the uploaded files are the deliverable — keep them
+
         # Lazy imports — the attachments service + models reach the app graph.
         from sqlalchemy import select
 
