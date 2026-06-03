@@ -1,20 +1,28 @@
-"""No-mock tests for POST /public/{token}/documents/{doc_id}/viewed (P1, P0-4).
+"""No-mock tests for POST /public/{token}/documents/{doc_id}/viewed (P1, P0-4; F1).
 
-The kind-agnostic counterpart of the ``/pdf`` view side effect: a document that
-has no PDF stream can still satisfy the read-before-sign gate by POSTing
-``/viewed``. These drive the real ASGI route with a bare access token + the same
-verify→``X-Onboarding-Session`` bearer session the ``/pdf`` tests use, asserting
-the SAME idempotent ledger write + active→opened transition, plus the 409 status
-guard and — the load-bearing P0-4 assertion — that the completion view-gate
-(``get_unviewed_packet_document_ids``) is satisfiable for docs marked ONLY via
-``/viewed`` (never streamed as PDFs).
+The kind-agnostic counterpart of the ``/pdf`` view side effect: a NON-STREAM
+document (questionnaire / upload_request) has no PDF stream and satisfies the
+read-before-sign gate by POSTing ``/viewed``. These drive the real ASGI route
+with a bare access token + the same verify→``X-Onboarding-Session`` bearer
+session the ``/pdf`` tests use, asserting the idempotent ledger write +
+active→opened transition, the 409 status guard, and — the load-bearing P0-4
+assertion — that the completion view-gate (``get_unviewed_packet_document_ids``)
+is satisfiable for docs marked ONLY via ``/viewed``.
 
-No mocks. Real templates, real PDFs, real packets, real ledger rows.
+F1 (read-before-sign bypass): an ``esign_pdf`` doc records its view ONLY via
+``/pdf``, so ``/viewed`` MUST REFUSE it (400) — otherwise a client could mark a
+signing doc viewed without ever loading the PDF, satisfying ``_assert_all_viewed``
+and bypassing the signing gate. The positive-path tests therefore use an
+``upload_request`` doc (records_view_via_stream=False, needs_pdf_copy=False → no
+PDF), and the esign path asserts the 400 refusal.
+
+No mocks. Real templates, real packets, real ledger rows.
 """
 
 import pytest
 from sqlalchemy import update
 from src.onboarding import storage, tokens
+from src.onboarding.models import OnboardingTemplate
 from src.onboarding.packet_service import PacketService
 from src.onboarding.view_ledger import get_unviewed_packet_document_ids
 
@@ -37,10 +45,51 @@ def _isolate_throttle():
     tokens._clear_all_throttle()
 
 
-async def _make_packet(db, contact_id, *, field_definitions=None):
-    """Create a real single-doc packet; return (service, packet, raw_token)."""
+def _upload_field(fid: str = "gov_id") -> dict:
+    return {
+        "id": fid,
+        "kind": "file_upload",
+        "label": fid.replace("_", " ").title(),
+        "required": False,
+        "maxFiles": 2,
+        "maxMB": 5,
+    }
+
+
+async def _make_upload_template(db, fields=None) -> OnboardingTemplate:
+    """An upload_request template — records_view_via_stream=False, no PDF copy."""
+    template = OnboardingTemplate(
+        name="Upload Form",
+        field_definitions=fields or [_upload_field()],
+        requires_esign=False,
+        is_active=True,
+        kind="upload_request",
+        pdf_path=None,
+    )
+    db.add(template)
+    await db.flush()
+    await db.refresh(template)
+    return template
+
+
+async def _make_packet(db, contact_id):
+    """Create a real single UPLOAD-doc packet (no-stream kind, F1-eligible)."""
+    template = await _make_upload_template(db)
+    service = PacketService(db)
+    packet, raw = await service.create_packet(
+        created_by_id=None,
+        contact_id=contact_id,
+        recipient_email=RECIPIENT,
+        template_ids=[template.id],
+    )
+    await db.commit()
+    return service, packet, raw
+
+
+async def _make_esign_packet(db, contact_id):
+    """Create a real single ESIGN-doc packet (records via /pdf → F1 refuses /viewed)."""
     template = await make_template(
-        db, field_definitions=field_definitions or [text_field("full_name")]
+        db, field_definitions=[text_field("full_name")]
     )
     service = PacketService(db)
     packet, raw = await service.create_packet(
@@ -54,11 +103,8 @@ async def _make_packet(db, contact_id, *, field_definitions=None):
 
 
 async def _make_multi_doc_packet(db, contact_id):
-    """Create a real packet with THREE docs; return (service, packet, raw_token)."""
-    templates = [
-        await make_template(db, field_definitions=[text_field(f"f{i}")])
-        for i in range(3)
-    ]
+    """Create a real packet with THREE upload docs; return (service, packet, raw)."""
+    templates = [await _make_upload_template(db) for _ in range(3)]
     service = PacketService(db)
     packet, raw = await service.create_packet(
         created_by_id=None,
@@ -226,19 +272,20 @@ async def test_viewed_alone_satisfies_completion_gate(
 
 
 # --------------------------------------------------------------------------
-# No-PDF /pdf guard (P0-5): a doc with pdf_path=None 404s on /pdf, while
-# /viewed still works — the FE uses /viewed for such docs. We can't create a
-# no-PDF doc in P1 (no questionnaire handler), so we null the copy directly to
-# exercise the new get_public_document_pdf guard in isolation.
+# No-PDF /pdf guard (P0-5): an esign doc whose PDF copy is missing 404s on
+# /pdf (the get_public_document_pdf no-stream guard), rather than 503-ing on a
+# storage miss. Exercised on an ESIGN doc (records_view_via_stream=True) by
+# nulling its copied pdf_path — the scenario the guard actually protects.
 # --------------------------------------------------------------------------
 
 
-async def test_pdf_404_when_doc_has_no_pdf(client, db_session, test_contact):
-    """get_public_document_pdf 404s a doc with no PDF (the new no-stream guard)."""
-    service, packet, raw = await _make_packet(db_session, test_contact.id)
+async def test_pdf_404_when_esign_doc_has_no_pdf(client, db_session, test_contact):
+    """get_public_document_pdf 404s an esign doc whose pdf_path is None."""
+    service, packet, raw = await _make_esign_packet(db_session, test_contact.id)
     try:
         headers = await _session_headers(client, raw)
         doc = (await service.load_documents(packet.id))[0]
+        assert doc.kind == "esign_pdf"
         # Free the storage object, then null the doc's pdf_path so the route's
         # no-PDF branch (not a storage 503) is what fires.
         if doc.pdf_path:
@@ -257,13 +304,56 @@ async def test_pdf_404_when_doc_has_no_pdf(client, db_session, test_contact):
             f"/api/onboarding/public/{raw}/documents/{doc.id}/pdf", headers=headers
         )
         assert resp.status_code == 404, resp.text
+    finally:
+        await cleanup_packet_storage(db_session, service, packet.id)
 
-        # The same doc is still markable via /viewed (the kind-agnostic path).
+
+async def test_viewed_succeeds_on_no_pdf_upload_doc(client, db_session, test_contact):
+    """A no-PDF upload_request doc is markable via /viewed (the FE path for it)."""
+    service, packet, raw = await _make_packet(db_session, test_contact.id)
+    try:
+        headers = await _session_headers(client, raw)
+        doc = (await service.load_documents(packet.id))[0]
+        # An upload_request doc natively carries pdf_path=None (no PDF copy).
+        assert doc.pdf_path is None
         viewed = await client.post(
             f"/api/onboarding/public/{raw}/documents/{doc.id}/viewed",
             headers=headers,
         )
         assert viewed.status_code == 200, viewed.text
         assert viewed.json()["opened"] is True
+    finally:
+        await cleanup_packet_storage(db_session, service, packet.id)
+
+
+# --------------------------------------------------------------------------
+# F1 (read-before-sign bypass): /viewed REFUSES an esign doc (records via /pdf)
+# --------------------------------------------------------------------------
+
+
+async def test_viewed_refuses_esign_doc_400(client, db_session, test_contact):
+    """POST /viewed on an esign_pdf doc → 400 (it records via /pdf only, F1).
+
+    Without this, a client could mark a signing doc viewed without ever loading
+    the PDF, satisfying ``_assert_all_viewed`` and bypassing the read-before-sign
+    gate. The esign view must come from the /pdf byte stream.
+    """
+    service, packet, raw = await _make_esign_packet(db_session, test_contact.id)
+    try:
+        headers = await _session_headers(client, raw)
+        doc = (await service.load_documents(packet.id))[0]
+        assert doc.kind == "esign_pdf"
+        resp = await client.post(
+            f"/api/onboarding/public/{raw}/documents/{doc.id}/viewed",
+            headers=headers,
+        )
+        assert resp.status_code == 400, resp.text
+
+        # The refusal wrote NO ledger row — the esign doc is still unviewed, so
+        # the read-before-sign gate is NOT bypassed.
+        unviewed = await get_unviewed_packet_document_ids(
+            db_session, packet_id=packet.id, token=raw
+        )
+        assert doc.id in unviewed
     finally:
         await cleanup_packet_storage(db_session, service, packet.id)

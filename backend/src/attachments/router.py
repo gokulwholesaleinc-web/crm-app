@@ -5,7 +5,9 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, RedirectResponse
+from sqlalchemy import select
 
+from src.attachments.models import Attachment
 from src.attachments.schemas import AttachmentListResponse, AttachmentResponse
 from src.attachments.service import AttachmentService
 from src.core.constants import HTTPStatus
@@ -15,6 +17,43 @@ from src.core.router_utils import CurrentUser, DBSession, raise_bad_request, rai
 
 router = APIRouter(prefix="/api/attachments", tags=["attachments"])
 logger = logging.getLogger(__name__)
+
+# Attachments holding sensitive onboarding uploads (gov-ID etc.) are NOT served
+# under the broad contact-access rule — only the contact's OWNER or an admin may
+# read them (§D.4 decision #3). Hardened-download headers (defense against
+# content-sniffing / inline render of a renamed payload) are applied to EVERY
+# attachment download regardless of category.
+SENSITIVE_ONBOARDING_CATEGORY = "onboarding_sensitive"
+
+
+async def _assert_sensitive_read_allowed(
+    db: DBSession, attachment: Attachment, data_scope: DataScope
+) -> None:
+    """Owner-or-admin gate for a sensitive onboarding attachment (§D.4).
+
+    The generic ``require_entity_access`` already ran (contact access). For a
+    ``onboarding_sensitive`` attachment that is NOT enough: a shared-list or
+    manager-bypass reader must still be refused unless they are an admin/manager
+    (``can_see_all``) OR the OWNER of the parent contact. Non-sensitive
+    attachments skip this entirely.
+    """
+    if attachment.category != SENSITIVE_ONBOARDING_CATEGORY:
+        return
+    if data_scope.can_see_all():
+        return  # admin / manager
+    # entity_id is the contact id; only its owner may read the sensitive file.
+    from src.contacts.models import Contact
+
+    contact_owner = (
+        await db.execute(
+            select(Contact.owner_id).where(Contact.id == attachment.entity_id)
+        )
+    ).scalar_one_or_none()
+    if contact_owner is None or contact_owner != data_scope.user_id:
+        raise HTTPException(
+            status_code=HTTPStatus.FORBIDDEN,
+            detail="Only the contact owner or an admin may access this file.",
+        )
 
 
 @router.post("/upload", response_model=AttachmentResponse, status_code=HTTPStatus.CREATED)
@@ -92,6 +131,9 @@ async def download_attachment(
     await require_entity_access(
         db, attachment.entity_type, attachment.entity_id, current_user, data_scope,
     )
+    # Sensitive onboarding uploads (gov-ID) are owner-or-admin only — a narrow
+    # ELEVATION on top of the contact-access check above (§D.4).
+    await _assert_sensitive_read_allowed(db, attachment, data_scope)
 
     try:
         download_url = await service.get_download_url(attachment)
@@ -128,10 +170,16 @@ async def download_attachment(
     if not file_path or not file_path.exists():
         raise_not_found("File", attachment_id)
 
+    # nosniff + attachment disposition: never let a renamed active-content file
+    # (e.g. an HTML/SVG payload) be content-sniffed and rendered inline by the
+    # browser. ``FileResponse(filename=...)`` already sets ``Content-Disposition:
+    # attachment; filename=...`` — pass it via ``headers`` so the explicit
+    # ``attachment`` token + nosniff are both present (§D.4).
     return FileResponse(
         path=str(file_path),
         filename=attachment.original_filename,
         media_type=attachment.mime_type,
+        headers={"X-Content-Type-Options": "nosniff"},
     )
 
 

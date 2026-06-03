@@ -21,6 +21,8 @@ from sqlalchemy import (
     Index,
     Integer,
     LargeBinary,
+    PrimaryKeyConstraint,
+    SmallInteger,
     String,
     Text,
     UniqueConstraint,
@@ -311,6 +313,47 @@ class OnboardingPacketUpload(Base):
     __table_args__ = (
         Index(
             "ix_onboarding_packet_uploads_document", "packet_document_id"
+        ),
+    )
+
+
+class OnboardingSecretValue(Base):
+    """Encrypted ciphertext for one ``sensitive: true`` text answer (v3, F4).
+
+    The §F decision-1 reversal: F4 passwords COLLECT + ENCRYPT AT REST, so this
+    table SHIPS in v1 and carries rows (migration 053). A sensitive text field's
+    plaintext NEVER enters ``field_values`` JSONB nor any generated PDF — only
+    the Fernet ``ciphertext`` (keyed by ``ONBOARDING_FIELD_KEY``, see
+    ``crypto.py``) lands here. The composite ``(packet_document_id, field_id)``
+    PK is the upsert target ``patch_document`` writes in the SAME txn as the
+    version bump; ``scrub_packet`` deletes these rows on every terminal
+    transition (kind-agnostic) and the FK CASCADE drops them on a doc teardown.
+
+    Plain ``Base`` (not ``AuditableMixin``) — it carries its own ``created_at``
+    and is never user-edited, mirroring the upload/view-ledger rows.
+    """
+
+    __tablename__ = "onboarding_secret_values"
+
+    packet_document_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("onboarding_packet_documents.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    field_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    ciphertext: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    key_version: Mapped[int] = mapped_column(
+        SmallInteger, nullable=False, default=1, server_default="1"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        PrimaryKeyConstraint(
+            "packet_document_id",
+            "field_id",
+            name="pk_onboarding_secret_values",
         ),
     )
 

@@ -109,6 +109,21 @@ class PurgeResult(BaseModel):
     purged: bool
 
 
+class SecretValue(BaseModel):
+    """One decrypted sensitive answer (owner/admin-only staff read, §F #1)."""
+
+    field_id: str
+    label: str | None = None
+    value: str
+
+
+class SecretValuesResponse(BaseModel):
+    """Decrypted sensitive answers for one packet document (owner/admin only)."""
+
+    document_id: int
+    values: list[SecretValue] = Field(default_factory=list)
+
+
 # --------------------------------------------------------------------------
 # Public request/response
 # --------------------------------------------------------------------------
@@ -148,6 +163,9 @@ class PublicBranding(BaseModel):
 
 class PublicDocument(BaseModel):
     id: int
+    # v3 kind discriminator — the fill page branches on this (esign_pdf → pdf.js
+    # canvas; questionnaire/upload_request → the form renderer).
+    kind: str
     original_filename: str
     field_definitions: list[dict]
     field_values: dict
@@ -207,6 +225,31 @@ class ViewedResult(BaseModel):
 
     viewed: bool = True
     opened: bool = False
+
+
+class FileUploadResult(BaseModel):
+    """Result of a fill-time file upload (``POST /documents/{id}/files``, P0-6).
+
+    ``field_uploads`` is the full id list now stored in
+    ``field_values[field_id]`` so the FE can re-render the field's file list
+    without a refetch. No token / storage-path / sensitive ciphertext is
+    exposed.
+    """
+
+    upload_id: int
+    field_id: str
+    original_filename: str
+    byte_size: int
+    mime_type: str
+    field_uploads: list[int] = Field(default_factory=list)
+
+
+class FileDeleteResult(BaseModel):
+    """Result of deleting one uploaded file (``DELETE .../files/{upload_id}``)."""
+
+    deleted: bool = True
+    field_id: str
+    field_uploads: list[int] = Field(default_factory=list)
 
 
 class SignatureSet(BaseModel):

@@ -94,11 +94,34 @@ def _mask_email(email: str | None) -> str:
     return f"{head}***@{domain}"
 
 
-def scrub_packet(packet: OnboardingPacket, documents: list[OnboardingPacketDocument]) -> None:
-    """Null recipient field values + the drawn signature (PII scrub, §12)."""
+async def scrub_packet(
+    db: AsyncSession,
+    packet: OnboardingPacket,
+    documents: list[OnboardingPacketDocument],
+) -> None:
+    """Null the drawn signature + per-doc PII; delete uploads + secrets (§D.3).
+
+    DB-aware + per-kind (P0-6): nulls the packet's drawn signature, then for
+    EACH doc dispatches to ``get_handler(doc.kind).scrub`` — esign nulls
+    ``field_values``; upload_request deletes its Attachments (via the canonical
+    ``AttachmentService.delete_attachment``) + fence rows then nulls the refs;
+    questionnaire retains non-sensitive answers (§C.5). Finally deletes that
+    doc's ``onboarding_secret_values`` rows KIND-AGNOSTICALLY (any doc may carry
+    a sensitive text field — gov-ID file vs F4 password), so an encrypted secret
+    never survives a terminal transition.
+    """
+    from sqlalchemy import delete as sa_delete
+
+    from src.onboarding.models import OnboardingSecretValue
+
     packet.signer_signature_image = None
     for doc in documents:
-        doc.field_values = {}
+        await get_handler(doc.kind).scrub(db, doc=doc)
+        await db.execute(
+            sa_delete(OnboardingSecretValue).where(
+                OnboardingSecretValue.packet_document_id == doc.id
+            )
+        )
 
 
 class PacketService:
@@ -385,7 +408,9 @@ class PacketService:
                 and _ensure_aware(packet.token_expires_at) <= now
             ):
                 packet.status = "expired"
-                scrub_packet(packet, await self.load_documents(packet.id))
+                await scrub_packet(
+                    self.db, packet, await self.load_documents(packet.id)
+                )
                 packet.token_hash = self._dead_token_hash(packet.id)
                 return
         if packet.status == "completion_failed":
@@ -393,7 +418,9 @@ class PacketService:
             if failed_at and failed_at <= now - COMPLETION_FAILED_RETENTION:
                 packet.status = "abandoned"
                 packet.abandoned_at = now
-                scrub_packet(packet, await self.load_documents(packet.id))
+                await scrub_packet(
+                    self.db, packet, await self.load_documents(packet.id)
+                )
 
     @staticmethod
     def _dead_token_hash(packet_id: int) -> str:
@@ -417,7 +444,7 @@ class PacketService:
         packet.token_hash = self._dead_token_hash(packet.id)
         packet.download_token_hash = None
         packet.download_token_expires_at = None
-        scrub_packet(packet, documents)
+        await scrub_packet(self.db, packet, documents)
         tokens.reset_throttle(old_hash)
         await self.db.flush()
         return packet
@@ -458,7 +485,7 @@ class PacketService:
     async def purge_pii(self, packet: OnboardingPacket) -> OnboardingPacket:
         """Staff manual scrub — null values + signature, status unchanged."""
         documents = await self.load_documents(packet.id)
-        scrub_packet(packet, documents)
+        await scrub_packet(self.db, packet, documents)
         await self.db.flush()
         return packet
 
@@ -492,11 +519,14 @@ class PacketService:
         COMMITTED would lose-update silently.
         """
         self._assert_public_writable(packet)
-        validated, _secrets = self._validate_field_values(doc, field_values)
-        # P3 will upsert _secrets (sensitive ciphertexts) into
-        # onboarding_secret_values in THIS same txn before the version bump; v1
-        # seeds no sensitive TEXT field, so the list is empty for every esign
-        # doc and ``validated`` equals the input (byte-identical merge).
+        validated, secrets = self._validate_field_values(doc, field_values)
+        # Upsert each sensitive ciphertext into onboarding_secret_values in THIS
+        # same txn, BEFORE the version-fence UPDATE, so the secret and the answer
+        # version advance atomically (F4 passwords; §F #1). The plaintext is NOT
+        # in ``validated`` (the handler returned None for a sensitive field), so
+        # it never enters ``field_values`` JSONB. esign docs seed no sensitive
+        # text field → ``secrets`` is empty and this is a no-op.
+        await self._upsert_secret_values(doc.id, secrets)
         merged = dict(doc.field_values or {})
         merged.update(validated)
         # Advance active/opened → in_progress atomically, BEFORE the document
@@ -588,6 +618,41 @@ class PacketService:
                 secrets.append((fid, ciphertext))
             validated[fid] = plaintext
         return validated, secrets
+
+    async def _upsert_secret_values(
+        self, doc_id: int, secrets: list[tuple[str, bytes]]
+    ) -> None:
+        """Persist each ``(field_id, ciphertext)`` into onboarding_secret_values.
+
+        Delete-then-insert per field (portable across Postgres + the SQLite test
+        DB; the composite ``(packet_document_id, field_id)`` PK makes this a
+        clean upsert). ``key_version`` records the primary key generation the
+        crypto module encrypted with, so a future rotation can find stale tokens.
+        Runs in the caller's transaction — committed atomically with the
+        version-fence bump in ``patch_document``.
+        """
+        if not secrets:
+            return
+        from sqlalchemy import delete as sa_delete
+
+        from src.onboarding import crypto
+        from src.onboarding.models import OnboardingSecretValue
+
+        for field_id, ciphertext in secrets:
+            await self.db.execute(
+                sa_delete(OnboardingSecretValue)
+                .where(OnboardingSecretValue.packet_document_id == doc_id)
+                .where(OnboardingSecretValue.field_id == field_id)
+            )
+            self.db.add(
+                OnboardingSecretValue(
+                    packet_document_id=doc_id,
+                    field_id=field_id,
+                    ciphertext=ciphertext,
+                    key_version=crypto.PRIMARY_KEY_VERSION,
+                )
+            )
+        await self.db.flush()
 
     async def record_consent(
         self,

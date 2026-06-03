@@ -40,6 +40,75 @@ PER_ENTITY_ALLOWED_EXTENSIONS: dict[str, set[str]] = {
     "contracts": {"pdf", "png", "jpg", "jpeg", "webp", "gif"},
 }
 
+# Onboarding CLIENT uploads (gov-ID, designer assets) land as ``contacts``
+# Attachments but must NOT widen — and must NOT narrow — the generic contacts
+# attachment route (CRM staff still attach .txt/.csv/.xlsx notes to a contact).
+# So this is a DEDICATED allow-list the onboarding ``/files`` path enforces
+# itself, NOT a ``PER_ENTITY_ALLOWED_EXTENSIONS['contacts']`` entry (which would
+# regress every other contacts attachment). The confirmed v1 set (§F decision
+# #4): pdf/png/jpg/jpeg/webp/gif/docx only — NO svg/html/ai/eps (stored-XSS +
+# sniffing surface). ``sniff_magic_bytes`` backstops the extension on that path.
+ONBOARDING_UPLOAD_EXTENSIONS: frozenset[str] = frozenset(
+    {"pdf", "png", "jpg", "jpeg", "webp", "gif", "docx"}
+)
+
+# Magic-byte signatures for the onboarding-upload allow-list. The KEY is the
+# declared extension; a match means the leading bytes are consistent with that
+# type. ``docx`` (and any future zip-container office format) is a ZIP — the
+# generic ``PK\x03\x04`` header is accepted for it. This is a CONTENT sniff that
+# backstops the extension allow-list; it deliberately REJECTS SVG/HTML (which
+# have no binary magic) so a ``<svg onload=...>`` renamed to ``.png`` is caught.
+_MAGIC_SIGNATURES: dict[str, tuple[bytes, ...]] = {
+    "pdf": (b"%PDF",),
+    "png": (b"\x89PNG\r\n\x1a\n",),
+    "jpg": (b"\xff\xd8\xff",),
+    "jpeg": (b"\xff\xd8\xff",),
+    "gif": (b"GIF87a", b"GIF89a"),
+    # RIFF....WEBP — the 4-byte "WEBP" tag sits at offset 8; checked specially.
+    "webp": (b"RIFF",),
+    # docx/xlsx/pptx are ZIP containers.
+    "docx": (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08"),
+}
+
+# Leading byte sequences that are NEVER acceptable regardless of extension —
+# active-content payloads that a polyglot/renamed file could smuggle in. SVG and
+# HTML are the stored-XSS vectors the plan calls out explicitly (§D.4).
+_FORBIDDEN_PREFIXES: tuple[bytes, ...] = (
+    b"<?xml",
+    b"<svg",
+    b"<!doctype",
+    b"<html",
+    b"<script",
+    b"\x4d\x5a",  # MZ — Windows PE executable
+    b"\x7fELF",   # ELF executable
+)
+
+
+def sniff_magic_bytes(content: bytes, ext: str) -> bool:
+    """True iff ``content``'s leading bytes are consistent with ``ext``.
+
+    Defense-in-depth backing the extension allow-list (§D.4): a file renamed
+    ``payload.svg`` → ``logo.png`` is caught because its bytes don't start with
+    the PNG signature, and an active-content prefix (SVG/HTML/executable) is
+    rejected outright even if it somehow matched a signature. Empty content is
+    rejected (an empty file has no valid magic). The check is intentionally
+    lenient on the legitimate types and strict on the dangerous ones.
+    """
+    if not content:
+        return False
+    head = content[:32]
+    lowered = head.lstrip().lower()
+    for forbidden in _FORBIDDEN_PREFIXES:
+        if lowered.startswith(forbidden):
+            return False
+    signatures = _MAGIC_SIGNATURES.get(ext.lower())
+    if signatures is None:
+        return False
+    if ext.lower() == "webp":
+        # RIFF container with the WEBP form-type tag at offset 8.
+        return head[:4] == b"RIFF" and head[8:12] == b"WEBP"
+    return any(head.startswith(sig) for sig in signatures)
+
 UPLOAD_DIR = Path(__file__).parent.parent.parent / "uploads"
 
 

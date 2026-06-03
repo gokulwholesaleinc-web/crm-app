@@ -74,7 +74,7 @@ async def load_packet_for_public(
     ):
         documents = await service.load_documents(packet.id)
         packet.status = "expired"
-        scrub_packet(packet, documents)
+        await scrub_packet(db, packet, documents)
         await db.commit()
         raise HTTPException(
             status_code=HTTPStatus.GONE,

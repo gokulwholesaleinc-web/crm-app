@@ -166,7 +166,7 @@ async def _phase_a_claim(
     # truncation). Roll back the FOR UPDATE txn before surfacing a 422 so the
     # row locks aren't held longer than the sibling guards above.
     try:
-        _validate_documents_for_completion(docs)
+        await _validate_documents_for_completion(db, docs)
         _assert_consent_recorded(docs)
         _assert_signature_present(p, docs)
         await _validate_documents_stampable(db, docs, p, p.signer_signature_image)
@@ -221,26 +221,67 @@ async def _phase_a_claim(
     await db.commit()  # release the FOR UPDATE lock; PATCH/signature now 409
 
 
-def _validate_documents_for_completion(docs: list[OnboardingPacketDocument]) -> None:
+async def _validate_documents_for_completion(
+    db: AsyncSession, docs: list[OnboardingPacketDocument]
+) -> None:
     """Every required field has a non-empty value; signature docs need a sig.
 
+    Loads, per doc, the ``onboarding_packet_uploads`` rows + the set of
+    ``field_id``s that have a stored ``onboarding_secret_values`` ciphertext, and
+    passes them to the kind handler's ``required_satisfied`` (P0-1/P0-8) — so
+    ``upload_request`` counts real files and a sensitive text field counts a
+    stored secret rather than a (deliberately absent) ``field_values`` entry.
     Raises ``PacketValidationError`` (→ 422) — never truncates.
+
+    Runs inside Phase A's FOR-UPDATE txn (before the claim); the reads here are
+    on child tables of the already-locked documents, so they add no new lock.
     """
+    from src.onboarding.models import (
+        OnboardingPacketUpload,
+        OnboardingSecretValue,
+    )
+
     if not docs:
         raise PacketValidationError("Packet has no documents to complete.")
     for doc in docs:
         handler = get_handler(doc.kind)
         values = doc.field_values or {}
+        uploads = list(
+            (
+                await db.execute(
+                    select(OnboardingPacketUpload).where(
+                        OnboardingPacketUpload.packet_document_id == doc.id
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        # A ``dict`` (field_id → True) matches the handler Protocol's
+        # ``secrets: dict | None`` and lets a kind handler test membership for a
+        # sensitive field with a present stored ciphertext.
+        secret_field_ids = {
+            row: True
+            for row in (
+                await db.execute(
+                    select(OnboardingSecretValue.field_id).where(
+                        OnboardingSecretValue.packet_document_id == doc.id
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        }
         for field in doc.field_definitions or []:
             # Per-field required-check delegated to the kind handler (P0-1/P0-8):
             # esign = non-empty string; questionnaire = non-empty str/list +
-            # conditional Other write-in; upload = upload-row count. ``uploads``
-            # is None here in v1 — P3 makes this load the per-doc uploads (and
-            # go async) so upload_request's count check has its input; esign and
-            # questionnaire ignore it. Signature presence stays a packet-level
-            # check (``_assert_signature_present``), which the handler returns
-            # True for so it doesn't double-raise here.
-            if not handler.required_satisfied(field, values, None, None):
+            # conditional Other write-in (+ a stored secret for a sensitive
+            # field); upload = real upload-row count. Signature presence stays a
+            # packet-level check (``_assert_signature_present``), which the
+            # handler returns True for so it doesn't double-raise here.
+            if not handler.required_satisfied(
+                field, values, uploads, secret_field_ids
+            ):
                 raise PacketValidationError(
                     f"Required field "
                     f"'{field.get('label', field.get('id'))}' is empty."
@@ -475,8 +516,9 @@ async def _phase_c_finalize(db: AsyncSession, *, packet_id: int) -> str | None:
     packet.completed_at = _now()
     packet.download_token_hash = tokens.hash_token(raw_download)
     packet.download_token_expires_at = _now() + DOWNLOAD_TOKEN_TTL
-    # Scrub PII only AFTER the filled PDFs are confirmed attached (§12).
-    scrub_packet(packet, docs)
+    # Scrub PII only AFTER the filled PDFs are confirmed attached (§12). Now
+    # db-aware + async: deletes upload Attachments + secret rows per kind (§D.3).
+    await scrub_packet(db, packet, docs)
     await db.commit()
     return raw_download
 

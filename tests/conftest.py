@@ -33,6 +33,14 @@ def pytest_itemcollected(item):
 # Add backend src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 
+# Provide a default ONBOARDING_FIELD_KEY so the sensitive-field crypto path
+# (questionnaire passwords + the secret table) works in any environment. An
+# explicit env value (CI/prod) still wins via setdefault; the crypto
+# fail-closed tests override it with monkeypatch.delenv.
+from cryptography.fernet import Fernet  # noqa: E402
+
+os.environ.setdefault("ONBOARDING_FIELD_KEY", Fernet.generate_key().decode())
+
 from src.account import models as account_models
 from src.account.models import UserNotificationPrefs
 from src.activities import models as activity_models
