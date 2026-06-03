@@ -191,6 +191,51 @@ async def test_upload_accepts_real_pdf(client, db_session, test_contact):
 
 
 # --------------------------------------------------------------------------
+# F2 — hard-ceiling oversize reject (before buffering the body into memory)
+# --------------------------------------------------------------------------
+
+
+async def test_upload_over_hard_ceiling_rejected_400(
+    client, db_session, test_contact
+):
+    """A part above ONBOARDING_MAX_BYTES (25 MB) → 400 'File is too large',
+    rejected BEFORE store_document_upload runs (bounded-memory DoS guard).
+
+    The body genuinely carries >25 MB so Starlette measures ``file.size`` and the
+    route's hard-ceiling gate fires ahead of the finer per-field/aggregate caps.
+    """
+    from src.attachments.service import ONBOARDING_MAX_BYTES
+
+    service, packet, raw = await _make_upload_packet(
+        db_session, test_contact.id, [_upload_field(maxMB=5)]
+    )
+    headers = await _session(client, raw)
+    doc_id = await _doc_id(service, packet)
+    # Valid PNG magic so the rejection is the SIZE gate, not the magic sniff;
+    # one byte over the 25 MB hard ceiling.
+    oversized = _png(ONBOARDING_MAX_BYTES + 1)
+    assert len(oversized) == ONBOARDING_MAX_BYTES + 1
+    try:
+        resp = await client.post(
+            f"/api/onboarding/public/{raw}/documents/{doc_id}/files",
+            headers=headers,
+            data={"field_id": "gov_id"},
+            files={"file": ("huge.png", io.BytesIO(oversized), "image/png")},
+        )
+        assert resp.status_code == 400, resp.text
+        assert "too large" in resp.json()["detail"].lower()
+        # Nothing was stored — the gate fired before store_document_upload.
+        count = (
+            await db_session.execute(
+                select(func.count()).select_from(OnboardingPacketUpload)
+            )
+        ).scalar_one()
+        assert count == 0
+    finally:
+        await _cleanup(db_session)
+
+
+# --------------------------------------------------------------------------
 # Caps: maxFiles, maxMB, per-packet aggregate
 # --------------------------------------------------------------------------
 

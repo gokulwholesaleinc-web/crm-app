@@ -192,6 +192,25 @@ def test_multi_choice_list_passes_and_dedups():
     assert out == ["a", "b"]  # de-duplicated, order preserved
 
 
+def test_multi_choice_other_writein_dedups_inner_list():
+    """BUG 2: a multi_choice {value, other} write-in de-dupes its inner list.
+
+    The previous code validated the inner list (which de-dupes) but then stored
+    the RAW ``inner`` verbatim, so a payload with duplicate selections persisted
+    the dupes. The returned ``value`` list must be de-duplicated (order
+    preserved) and still carry ``__other__`` so the write-in renders.
+    """
+    field = _choice("c", "multi_choice", options=("a", "b", "c"), allow_other=True)
+    out, cipher = HANDLER.validate_value(
+        field, {"value": ["a", "a", OTHER_TOKEN], "other": "x"}
+    )
+    assert cipher is None
+    assert out["other"] == "x"
+    assert out["value"] == ["a", OTHER_TOKEN]  # de-duped, order preserved
+    # The dup is gone — exactly one "a".
+    assert out["value"].count("a") == 1
+
+
 def test_multi_choice_non_list_422():
     with pytest.raises(PacketValidationError):
         HANDLER.validate_value(_choice("c", "multi_choice"), "a")

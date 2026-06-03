@@ -146,7 +146,7 @@ async function unlockGate(doc: OnboardingPublicDocument) {
   const emailInput = await screen.findByLabelText(/email address/i);
   await user.type(emailInput, 'client@example.com');
   await user.click(screen.getByRole('button', { name: /continue/i }));
-  await screen.findByText('Client Strategy Insights');
+  await screen.findByText(doc.original_filename);
   return user;
 }
 
@@ -296,5 +296,97 @@ describe('PublicOnboardingView — questionnaire renderer', () => {
       },
       { timeout: 3000 },
     );
+  });
+
+  // BUG 1 — file_upload answers must NOT ride the version-fence PATCH; the
+  // /files endpoint is the sole server-side writer. Sending the reflected ids
+  // would 422 (the backend expects int upload-row ids) and block completion.
+  it('excludes file_upload fields from the PATCH body (uploads bypass the fence)', async () => {
+    const doc = questionnaireDoc({
+      kind: 'upload_request',
+      original_filename: 'Branding Documentation',
+      field_definitions: [
+        {
+          id: 'notes',
+          kind: 'short_text',
+          label: 'Notes',
+          required: false,
+          section_id: 's',
+          section_label: 'Assets',
+        },
+        {
+          id: 'logos',
+          kind: 'file_upload',
+          label: 'Upload logos',
+          required: true,
+          maxFiles: 3,
+          maxMB: 10,
+          section_id: 's',
+          section_label: 'Assets',
+        },
+      ],
+    } as Partial<OnboardingPublicDocument>);
+    const user = await unlockGate(doc);
+
+    // Upload a file → the /files POST reflects an upload id into the draft.
+    api.post.mockImplementation((url: string) => {
+      if (url.endsWith('/verify')) {
+        return Promise.resolve({ data: { success: true, session_token: 's-tok', expires_in: 600 } });
+      }
+      if (url.endsWith('/viewed')) return Promise.resolve({ data: { viewed: true, opened: true } });
+      if (url.endsWith('/files')) {
+        return Promise.resolve({
+          data: { upload_id: 42, field_id: 'logos', original_filename: 'logo.png' },
+        });
+      }
+      return Promise.resolve({ data: {} });
+    });
+    const fileInput = screen.getByLabelText(/Upload logos/i);
+    const file = new File([new Uint8Array([1, 2, 3])], 'logo.png', { type: 'image/png' });
+    await user.upload(fileInput, file);
+    await waitFor(() =>
+      expect(api.post.mock.calls.some((c) => String(c[0]).endsWith('/files'))).toBe(true),
+    );
+
+    // Now type the text field → the autosave PATCH must carry ``notes`` but NOT
+    // ``logos`` (the uploaded file field is stripped).
+    await user.type(screen.getByLabelText(/Notes/i), 'hi');
+    await waitFor(
+      () => {
+        const patch = api.patch.mock.calls.at(-1);
+        expect(patch).toBeTruthy();
+        const body = patch![1] as { field_values: Record<string, unknown> };
+        expect(body.field_values).toHaveProperty('notes', 'hi');
+        expect(body.field_values).not.toHaveProperty('logos');
+      },
+      { timeout: 3000 },
+    );
+  });
+
+  // BUG 3 — a sensitive required field stores None server-side, so a 409-refetch
+  // reseed must not permanently block Submit (the server holds the ciphertext).
+  it('a sensitive required field does not block submit after a reseed', async () => {
+    const doc = questionnaireDoc({
+      field_definitions: [
+        {
+          id: 'pw',
+          kind: 'short_text',
+          label: 'Hosting Password',
+          required: true,
+          sensitive: true,
+          section_id: 's',
+          section_label: 'Credentials',
+        },
+      ],
+    } as Partial<OnboardingPublicDocument>);
+    // Server reseeds field_values with NO pw value (sensitive → stored as None).
+    await unlockGate(doc);
+
+    // The single doc is viewed; with the sensitive field treated as satisfied,
+    // the Submit button is enabled (not blocked by the empty local value).
+    const submit = await screen.findByRole('button', { name: /submit documents/i });
+    await waitFor(() => expect(submit).toBeEnabled());
+    // The "complete the required fields" blocker must NOT mention the sensitive field.
+    expect(screen.queryByText(/Hosting Password/i, { selector: 'li' })).toBeNull();
   });
 });

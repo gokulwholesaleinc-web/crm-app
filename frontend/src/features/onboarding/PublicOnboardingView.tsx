@@ -169,8 +169,13 @@ function questionnaireFieldSatisfied(
   answer: OnboardingAnswerValue | undefined,
 ): boolean {
   if (!field.required) return true;
-  // Sensitive fields are validated server-side (their ciphertext is the proof);
-  // a non-empty local value is enough to clear the FE gate without inspecting it.
+  // Sensitive text fields store None in field_values (the plaintext is encrypted
+  // into the secret table server-side), so after a 409-refetch reseed the local
+  // value is undefined and the client can't re-derive whether it's "filled" — the
+  // server holds the ciphertext. Treat a sensitive required field as satisfied so
+  // a refetch never permanently blocks Submit. (The real required-check is the
+  // server's required_satisfied against the secrets table.)
+  if (field.sensitive) return true;
   if (field.kind === 'file_upload') {
     // Uploads are reflected back as a list of upload ids under the field id.
     return Array.isArray(answer) && answer.length > 0;
@@ -188,6 +193,35 @@ function questionnaireFieldSatisfied(
   }
   // text / paragraph / email / url / date → non-empty string
   return typeof answer === 'string' && answer.trim().length > 0;
+}
+
+/**
+ * The answers to PATCH for a doc, EXCLUDING file_upload fields. Per §C.2 uploads
+ * bypass the version-fence PATCH — the dedicated /files (POST/DELETE) endpoint is
+ * the sole writer of ``field_values[file_field]`` server-side, and the backend's
+ * upload_request.validate_value rejects the FE's reflected string ids (it expects
+ * the int upload-row ids it writes itself). Sending them 422s the whole save, so
+ * an upload_request packet with a file could never persist its text answers /
+ * complete. We keep the reflected ids in local draftValues (for the on-screen
+ * file list + the required-check) and simply never PATCH them.
+ */
+function patchableValues(
+  doc: OnboardingPublicDocument,
+  draft: Record<string, OnboardingAnswerValue> | undefined,
+): Record<string, OnboardingAnswerValue> {
+  if (!draft) return {};
+  if (!isFormDoc(doc)) return draft; // esign: every field is patchable
+  const fileFieldIds = new Set(
+    (doc.field_definitions as OnboardingQuestionnaireField[])
+      .filter((f) => f.kind === 'file_upload')
+      .map((f) => f.id),
+  );
+  if (fileFieldIds.size === 0) return draft;
+  const out: Record<string, OnboardingAnswerValue> = {};
+  for (const [fid, value] of Object.entries(draft)) {
+    if (!fileFieldIds.has(fid)) out[fid] = value;
+  }
+  return out;
 }
 
 function PublicOnboardingView() {
@@ -474,7 +508,9 @@ function PublicOnboardingView() {
         const res = await publicClient.patch<{ field_values_version: number }>(
           `/api/onboarding/public/${token}/documents/${doc.id}`,
           {
-            field_values: draftValues[doc.id] ?? {},
+            // file_upload answers are written by the /files endpoint, not here —
+            // see patchableValues (§C.2: uploads bypass the version-fence PATCH).
+            field_values: patchableValues(doc, draftValues[doc.id]),
             base_version: docVersions[doc.id] ?? doc.field_values_version,
           },
           { headers: requestHeaders() },
