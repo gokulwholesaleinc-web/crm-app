@@ -22,8 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.auth.models import User
 from src.onboarding import storage
 from src.onboarding.models import OnboardingTemplate
-
-_ALLOWED_PREFILL = {"contact.name", "company.name"}
+from src.onboarding.prefill import ALLOWED_PREFILL as _ALLOWED_PREFILL
 
 
 class FieldDefinitionError(Exception):

@@ -28,6 +28,7 @@ from src.onboarding.disclosure import (
     ONBOARDING_ESIGN_DISCLOSURE_VERSION,
     onboarding_esign_disclosure,
 )
+from src.onboarding.limits import MAX_FIELD_COUNT, MAX_TEXT_VALUE_BYTES
 from src.onboarding.models import (
     OnboardingPacket,
     OnboardingPacketDocument,
@@ -50,9 +51,9 @@ DOWNLOAD_TOKEN_TTL = timedelta(days=7)
 # completion_failed ages to abandoned after this retention window (§7).
 COMPLETION_FAILED_RETENTION = timedelta(days=7)
 
-# Abuse caps (§6).
-MAX_TEXT_VALUE_BYTES = 4 * 1024
-MAX_FIELD_COUNT = 200
+# Abuse caps (§6): MAX_TEXT_VALUE_BYTES / MAX_FIELD_COUNT live in the leaf
+# ``limits`` module (imported at the top) so the kind handlers reuse them
+# without importing this heavy module; still referenced here as before.
 
 
 logger = logging.getLogger(__name__)

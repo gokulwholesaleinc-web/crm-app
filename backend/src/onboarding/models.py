@@ -13,7 +13,9 @@ from datetime import datetime
 import sqlalchemy as sa
 from sqlalchemy import (
     JSON,
+    BigInteger,
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
@@ -86,6 +88,22 @@ class OnboardingTemplate(Base, AuditableMixin):
     )
     is_active: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default=sa.true(), nullable=False
+    )
+    # v3 polymorphic-document discriminator. Existing rows backfill to the
+    # e-sign kind (migration 052). The CHECK keeps prod + create_all (SQLite)
+    # in lock-step on the allowed set.
+    kind: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="esign_pdf",
+        server_default="esign_pdf",
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('esign_pdf', 'questionnaire', 'upload_request')",
+            name="ck_onboarding_templates_kind",
+        ),
     )
 
 
@@ -194,8 +212,17 @@ class OnboardingPacketDocument(Base, AuditableMixin):
         Integer, ForeignKey("onboarding_templates.id", ondelete="SET NULL")
     )
     original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
-    # Per-packet physical PDF copy ref (storage.write convention).
-    pdf_path: Mapped[str] = mapped_column(Text, nullable=False)
+    # v3 discriminator, frozen from the template at create time.
+    kind: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="esign_pdf",
+        server_default="esign_pdf",
+    )
+    # Per-packet physical PDF copy ref (storage.write convention). NULLABLE
+    # since v3: questionnaire/upload docs carry no template-PDF copy — the
+    # keystone relaxation behind P0-3/P0-5.
+    pdf_path: Mapped[str | None] = mapped_column(Text)
     field_definitions: Mapped[list[dict]] = mapped_column(
         _FieldDefinitions, nullable=False, default=list, server_default="[]"
     )
@@ -228,6 +255,62 @@ class OnboardingPacketDocument(Base, AuditableMixin):
             "packet_id",
             "display_order",
             "id",
+        ),
+        CheckConstraint(
+            "kind IN ('esign_pdf', 'questionnaire', 'upload_request')",
+            name="ck_onboarding_packet_documents_kind",
+        ),
+    )
+
+
+class OnboardingPacketUpload(Base):
+    """One client-uploaded file on a ``file_upload`` question (v3, P0-6 fence).
+
+    Written at FILL time (not completion): each file lands as its own
+    ``contacts`` Attachment immediately, so the parent document's 1:1
+    ``attachment_id`` fence stays reserved for the single summary/manifest
+    artifact and a Phase-B retry never duplicates uploaded files. The answer
+    JSONB (``field_values[field_id]``) references these rows by id; this table
+    OWNS deletion (scrub deletes the Attachment via
+    ``AttachmentService.delete_attachment`` then the row).
+
+    Plain ``Base`` (not ``AuditableMixin``) — it carries its own ``created_at``
+    and is never user-edited, mirroring the view-ledger row. ``token_hash``
+    isolates which access link uploaded the file (forwarded-link safety);
+    ``sensitive`` (gov-ID etc.) drives owner/admin read-auth and leaves the
+    seam for a future ``completed_at + Nd`` retention sweep.
+    """
+
+    __tablename__ = "onboarding_packet_uploads"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    packet_document_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("onboarding_packet_documents.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    field_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    attachment_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("attachments.id", ondelete="SET NULL")
+    )
+    original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    byte_size: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    content_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    sensitive: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=sa.false()
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    # The index is declared ONCE here (matches migration 052) — do NOT also
+    # set index=True on packet_document_id, or create_all would build a
+    # second, migration-less index and drift from prod.
+    __table_args__ = (
+        Index(
+            "ix_onboarding_packet_uploads_document", "packet_document_id"
         ),
     )
 
