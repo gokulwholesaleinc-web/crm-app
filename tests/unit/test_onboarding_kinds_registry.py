@@ -20,9 +20,10 @@ from src.onboarding.kinds import (
 # --- exactly the one handler is registered at import -----------------------
 
 
-def test_only_esign_pdf_registered_after_import():
-    """Importing the package registers exactly {'esign_pdf'} (P0 = esign only)."""
-    assert set(KIND_HANDLERS) == {"esign_pdf"}
+def test_production_kinds_registered_after_import():
+    """The three v3 production kinds auto-register on import — a new kind is
+    added by dropping a file with a module-level ``HANDLER`` into the package."""
+    assert {"esign_pdf", "questionnaire", "upload_request"} <= set(KIND_HANDLERS)
 
 
 def test_get_handler_returns_registered_handler():
@@ -182,8 +183,8 @@ def test_register_rejects_nonstr_kind():
 def test_register_accepts_full_handler_then_restore():
     """A handler that satisfies the whole contract registers cleanly.
 
-    Registered under a throwaway kind and removed afterward so the suite-wide
-    {'esign_pdf'} invariant other tests assert is not perturbed.
+    Registered under a throwaway kind and removed afterward so the production
+    registry other tests rely on is not perturbed.
     """
     good = _FullDummy()
     try:
@@ -192,7 +193,9 @@ def test_register_accepts_full_handler_then_restore():
         assert KIND_HANDLERS["dummy_full"] is good
     finally:
         KIND_HANDLERS.pop("dummy_full", None)
-    assert set(KIND_HANDLERS) == {"esign_pdf"}
+    # The throwaway kind is gone and the real registry is intact.
+    assert "dummy_full" not in KIND_HANDLERS
+    assert "esign_pdf" in KIND_HANDLERS
 
 
 # --- the kind-parametrized contract matrix (skeleton; phases extend it) ----

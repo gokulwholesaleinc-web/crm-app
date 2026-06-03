@@ -217,13 +217,106 @@ export interface OnboardingPublicBranding {
   terms_of_service_url: string | null;
 }
 
-/** A document the client steps through and fills on the public page. */
+// --- v3 questionnaire / upload_request field + answer shapes -------------
+
+/**
+ * The document kind discriminator (v3). ``esign_pdf`` keeps the pdf.js canvas
+ * fill UI; ``questionnaire``/``upload_request`` render a real form. Defaults to
+ * ``esign_pdf`` when the server payload predates the discriminator so the page
+ * never crashes mid-deploy.
+ */
+export type OnboardingDocumentKind =
+  | 'esign_pdf'
+  | 'questionnaire'
+  | 'upload_request';
+
+/** The questionnaire question kinds (no PDF coords). */
+export type OnboardingQuestionKind =
+  | 'short_text'
+  | 'paragraph'
+  | 'single_choice'
+  | 'multi_choice'
+  | 'date'
+  | 'email'
+  | 'url';
+
+/** One selectable option on a choice field. The stored answer is ``value``;
+ * ``label`` is presentation-only and freely re-editable (never orphans an
+ * answer). */
+export interface OnboardingFieldOption {
+  value: string;
+  label: string;
+}
+
+/**
+ * A questionnaire/upload field definition. Shares ``id``/``label``/``required``
+ * with the esign field but carries questionnaire metadata instead of PDF
+ * coordinates. ``field_definitions`` is a flat list; sections are represented by
+ * ``section_id`` + ``section_label`` on each field and grouped in first-seen
+ * order by the renderer.
+ */
+export interface OnboardingQuestionnaireField {
+  id: string;
+  kind: OnboardingQuestionKind | 'file_upload';
+  label: string;
+  help?: string | null;
+  required: boolean;
+  order?: number;
+  section_id?: string | null;
+  section_label?: string | null;
+  options?: OnboardingFieldOption[];
+  allow_other?: boolean;
+  /** ``"dropdown"`` renders a single_choice as a <select>. */
+  display?: string | null;
+  maxLength?: number | null;
+  prefill?: OnboardingFieldPrefill;
+  sensitive?: boolean;
+  /** file_upload only (upload_request kind). */
+  maxFiles?: number;
+  maxMB?: number;
+}
+
+/** The reserved "Other" option token (matches the backend ``OTHER_TOKEN``). */
+export const OTHER_OPTION_TOKEN = '__other__';
+
+/**
+ * A questionnaire answer. A plain string (text / single_choice value), a list
+ * of option values (multi_choice), or a ``{ value, other }`` write-in shape when
+ * the "Other" option is selected (``value`` is the token for single, or a list
+ * containing the token for multi).
+ */
+export type OnboardingAnswerValue =
+  | string
+  | string[]
+  | { value?: string | string[]; other?: string };
+
+/** An uploaded file reflected back from the P3 ``/files`` endpoint. */
+export interface OnboardingFieldUpload {
+  upload_id: number;
+  field_id: string;
+  original_filename: string;
+  byte_size: number;
+  mime_type: string;
+}
+
+/**
+ * A document the client steps through and fills on the public page. ``kind``
+ * discriminates the renderer; ``field_definitions`` is the esign coord list for
+ * ``esign_pdf`` and the questionnaire/upload field list otherwise.
+ */
 export interface OnboardingPublicDocument {
   id: number;
+  /** v3 discriminator; absent on pre-v3 payloads → treated as ``esign_pdf``. */
+  kind?: OnboardingDocumentKind;
   original_filename: string;
-  field_definitions: OnboardingFieldDefinition[];
-  /** Saved values keyed by field id. Reassigned whole on each PATCH (§4.3). */
-  field_values: Record<string, string>;
+  field_definitions: Array<
+    OnboardingFieldDefinition | OnboardingQuestionnaireField
+  >;
+  /**
+   * Saved values keyed by field id. Reassigned whole on each PATCH (§4.3).
+   * Widened in v3 to carry choice lists + the Other write-in shape (P0-1).
+   */
+  field_values: Record<string, OnboardingAnswerValue>;
   field_values_version: number;
   requires_esign: boolean;
 }

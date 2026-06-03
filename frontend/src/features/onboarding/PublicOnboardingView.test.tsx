@@ -1,0 +1,300 @@
+/**
+ * Behavioural tests for the v3 questionnaire renderer on the public fill page.
+ *
+ * The network boundary is the bare ``axios`` instance the page creates and the
+ * pdf.js / SignatureCanvas render pipeline — both mocked (the only externals).
+ * Everything else (the widened ``draftValues`` typing, the choice/Other write-in
+ * answer shape, the debounced autosave under version drift, the ``POST /viewed``
+ * on first render, the ``beforeunload`` guard, and the a11y fieldset/legend
+ * groups) is the component's own logic and is exercised for real.
+ */
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  beforeAll,
+  afterEach,
+} from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter, Routes, Route } from 'react-router-dom';
+
+// --- Mock the bare axios instance the page creates -------------------------
+// The page calls ``axios.create(...)`` and uses .get/.post/.patch/.delete on
+// that instance. ``vi.hoisted`` lets the (hoisted) ``vi.mock`` factory close over
+// the same controllable fake instance each test programs.
+const api = vi.hoisted(() => ({
+  get: vi.fn(),
+  post: vi.fn(),
+  patch: vi.fn(),
+  delete: vi.fn(),
+}));
+vi.mock('axios', () => ({
+  default: { create: vi.fn(() => api) },
+}));
+
+// pdf.js + its worker (never exercised on a questionnaire doc, but the module
+// is imported at the top of the page).
+vi.mock('pdfjs-dist', () => ({
+  GlobalWorkerOptions: {},
+  getDocument: vi.fn(() => ({ promise: Promise.resolve({ numPages: 1, getPage: vi.fn(), destroy: vi.fn() }), destroy: vi.fn() })),
+}));
+vi.mock('pdfjs-dist/build/pdf.worker.min.mjs?url', () => ({ default: 'worker.js' }));
+
+// SignatureCanvas reaches for a real <canvas>; not needed for questionnaire.
+vi.mock('../../components/SignatureCanvas', () => ({
+  SignatureCanvas: () => null,
+}));
+
+import PublicOnboardingView from './PublicOnboardingView';
+import type { OnboardingPublicDocument } from '../../types';
+
+const TOKEN = 'tok-abc';
+
+function questionnaireDoc(
+  overrides: Partial<OnboardingPublicDocument> = {},
+): OnboardingPublicDocument {
+  return {
+    id: 7,
+    kind: 'questionnaire',
+    original_filename: 'Client Strategy Insights',
+    field_values: {},
+    field_values_version: 0,
+    requires_esign: false,
+    field_definitions: [
+      {
+        id: 'client_name',
+        kind: 'short_text',
+        label: 'Client Name',
+        required: true,
+        section_id: 'basics',
+        section_label: 'Basics',
+      },
+      {
+        id: 'channels',
+        kind: 'multi_choice',
+        label: 'Channels used',
+        required: true,
+        allow_other: true,
+        section_id: 'marketing',
+        section_label: 'Marketing',
+        options: [
+          { value: 'seo', label: 'SEO' },
+          { value: 'ppc', label: 'Paid Ads' },
+        ],
+      },
+    ],
+    ...overrides,
+  } as OnboardingPublicDocument;
+}
+
+function preGatePayload() {
+  return {
+    status: 'active',
+    document_count: 1,
+    requires_email_verification: true,
+    status_message: null,
+    branding: null,
+  };
+}
+
+function postGatePayload(doc: OnboardingPublicDocument) {
+  return {
+    status: 'in_progress',
+    document_count: 1,
+    status_message: null,
+    branding: null,
+    documents: [doc],
+    signature_version: 0,
+    has_signature: false,
+    has_consented: false,
+    esign_disclosure: null,
+    esign_disclosure_version: null,
+  };
+}
+
+function renderPage() {
+  return render(
+    <MemoryRouter initialEntries={[`/onboarding/${TOKEN}`]}>
+      <Routes>
+        <Route path="/onboarding/:token" element={<PublicOnboardingView />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
+/** Drive the email gate so the post-gate questionnaire renders. The page calls
+ * GET (pre-gate) → POST /verify → GET (post-gate). */
+async function unlockGate(doc: OnboardingPublicDocument) {
+  const user = userEvent.setup();
+  api.get
+    .mockResolvedValueOnce({ data: preGatePayload() }) // initial pre-gate load
+    .mockResolvedValue({ data: postGatePayload(doc) }); // every subsequent load
+  api.post.mockImplementation((url: string) => {
+    if (url.endsWith('/verify')) {
+      return Promise.resolve({ data: { success: true, session_token: 's-tok', expires_in: 600 } });
+    }
+    if (url.endsWith('/viewed')) return Promise.resolve({ data: { viewed: true, opened: true } });
+    return Promise.resolve({ data: {} });
+  });
+  api.patch.mockResolvedValue({ data: { field_values_version: 1 } });
+
+  renderPage();
+  await waitFor(() => expect(api.get).toHaveBeenCalled());
+  const emailInput = await screen.findByLabelText(/email address/i);
+  await user.type(emailInput, 'client@example.com');
+  await user.click(screen.getByRole('button', { name: /continue/i }));
+  await screen.findByText('Client Strategy Insights');
+  return user;
+}
+
+beforeAll(() => {
+  // jsdom: stub the bits the page touches but jsdom lacks.
+  // matchMedia (prefers-reduced-motion / useForceLightMode).
+  window.matchMedia = window.matchMedia || ((q: string) => ({
+    matches: false, media: q, onchange: null,
+    addEventListener: vi.fn(), removeEventListener: vi.fn(),
+    addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: vi.fn(),
+  } as unknown as MediaQueryList));
+});
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.useRealTimers();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+describe('PublicOnboardingView — questionnaire renderer', () => {
+  it('renders a real form (not the pdf.js canvas) with a11y section groups', async () => {
+    await unlockGate(questionnaireDoc());
+
+    // Sections render as fieldset/legend groups (a11y-mandated).
+    expect(screen.getByText('Basics')).toBeInTheDocument();
+    expect(screen.getByText('Marketing')).toBeInTheDocument();
+
+    // The text field is a labelled input.
+    const nameInput = screen.getByLabelText(/Client Name/i);
+    expect(nameInput).toHaveAttribute('name', 'client_name');
+
+    // The multi_choice renders a checkbox group with real <label htmlFor>.
+    const seo = screen.getByLabelText('SEO');
+    expect(seo).toHaveAttribute('type', 'checkbox');
+    expect(screen.getByLabelText('Paid Ads')).toBeInTheDocument();
+    // allow_other adds an "Other" checkbox.
+    expect(screen.getByLabelText('Other')).toBeInTheDocument();
+
+    // pdf.js is never invoked for a questionnaire doc.
+    const pdfjs = await import('pdfjs-dist');
+    expect(pdfjs.getDocument).not.toHaveBeenCalled();
+  });
+
+  it('POSTs /viewed on first render of a questionnaire doc', async () => {
+    await unlockGate(questionnaireDoc());
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith(
+        `/api/onboarding/public/${TOKEN}/documents/7/viewed`,
+        {},
+        expect.anything(),
+      ),
+    );
+    // Idempotent guard: not POSTed twice for the same doc.
+    const viewedCalls = api.post.mock.calls.filter((c) => String(c[0]).endsWith('/viewed'));
+    expect(viewedCalls.length).toBe(1);
+  });
+
+  it('stores the multi-select Other write-in as the {value, other} shape', async () => {
+    const user = await unlockGate(questionnaireDoc());
+
+    await user.click(screen.getByLabelText('SEO'));
+    await user.click(screen.getByLabelText('Other'));
+    const otherInput = await screen.findByLabelText(/Other — please specify/i);
+    await user.type(otherInput, 'TikTok');
+
+    // The debounced autosave (1200ms) PATCHes the {value, other} shape.
+    await waitFor(
+      () => {
+        const patch = api.patch.mock.calls.at(-1);
+        expect(patch).toBeTruthy();
+        const body = patch![1] as { field_values: Record<string, unknown> };
+        expect(body.field_values.channels).toEqual({
+          value: ['seo', '__other__'],
+          other: 'TikTok',
+        });
+      },
+      { timeout: 3000 },
+    );
+  });
+
+  it('autosaves a typed answer and reconciles on a 409 version drift', async () => {
+    const user = await unlockGate(questionnaireDoc());
+
+    // First autosave 409s (version drifted) → the page refetches.
+    api.patch
+      .mockRejectedValueOnce({ response: { status: 409 } })
+      .mockResolvedValue({ data: { field_values_version: 2 } });
+    api.get.mockResolvedValue({
+      data: postGatePayload(questionnaireDoc({ field_values_version: 2 })),
+    });
+
+    await user.type(screen.getByLabelText(/Client Name/i), 'Jane');
+
+    await waitFor(
+      () => expect(api.patch).toHaveBeenCalled(),
+      { timeout: 3000 },
+    );
+    // The 409 path surfaces the "updated elsewhere" notice and refetches.
+    await waitFor(() =>
+      expect(screen.getByText(/updated elsewhere/i)).toBeInTheDocument(),
+    );
+  });
+
+  it('arms a beforeunload guard once an answer is dirty', async () => {
+    const addSpy = vi.spyOn(window, 'addEventListener');
+    const user = await unlockGate(questionnaireDoc());
+
+    // No beforeunload listener before any edit.
+    expect(addSpy.mock.calls.some((c) => c[0] === 'beforeunload')).toBe(false);
+
+    await user.type(screen.getByLabelText(/Client Name/i), 'J');
+    await waitFor(() =>
+      expect(addSpy.mock.calls.some((c) => c[0] === 'beforeunload')).toBe(true),
+    );
+    addSpy.mockRestore();
+  });
+
+  it('renders a single_choice dropdown when display="dropdown"', async () => {
+    const doc = questionnaireDoc({
+      field_definitions: [
+        {
+          id: 'size',
+          kind: 'single_choice',
+          label: 'Business Size',
+          required: true,
+          display: 'dropdown',
+          options: [
+            { value: '2-10', label: '2-10' },
+            { value: '11-50', label: '11-50' },
+          ],
+        },
+      ],
+    } as Partial<OnboardingPublicDocument>);
+    const user = await unlockGate(doc);
+
+    const select = screen.getByLabelText(/Business Size/i);
+    expect(select.tagName).toBe('SELECT');
+    await user.selectOptions(select, '11-50');
+    await waitFor(
+      () => {
+        const patch = api.patch.mock.calls.at(-1);
+        const body = patch![1] as { field_values: Record<string, unknown> };
+        expect(body.field_values.size).toBe('11-50');
+      },
+      { timeout: 3000 },
+    );
+  });
+});
