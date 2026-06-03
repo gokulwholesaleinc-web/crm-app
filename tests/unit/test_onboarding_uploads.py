@@ -195,10 +195,10 @@ async def test_upload_accepts_real_pdf(client, db_session, test_contact):
 # --------------------------------------------------------------------------
 
 
-async def test_upload_over_hard_ceiling_rejected_400(
+async def test_upload_over_hard_ceiling_rejected_413(
     client, db_session, test_contact
 ):
-    """A part above ONBOARDING_MAX_BYTES (25 MB) → 400 'File is too large',
+    """A part above ONBOARDING_MAX_BYTES (25 MB) → 413 'File is too large',
     rejected BEFORE store_document_upload runs (bounded-memory DoS guard).
 
     The body genuinely carries >25 MB so Starlette measures ``file.size`` and the
@@ -222,7 +222,7 @@ async def test_upload_over_hard_ceiling_rejected_400(
             data={"field_id": "gov_id"},
             files={"file": ("huge.png", io.BytesIO(oversized), "image/png")},
         )
-        assert resp.status_code == 400, resp.text
+        assert resp.status_code == 413, resp.text
         assert "too large" in resp.json()["detail"].lower()
         # Nothing was stored — the gate fired before store_document_upload.
         count = (

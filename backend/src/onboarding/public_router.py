@@ -308,11 +308,16 @@ async def upload_document_file(
     # caps still apply after this hard-ceiling gate.
     from src.attachments.service import ONBOARDING_MAX_BYTES
 
-    if file.size is not None and file.size > ONBOARDING_MAX_BYTES:
+    # An unknown size (no Content-Length / chunked) could stream an unbounded
+    # body past the declared-size gate, so REQUIRE a declared size (411) and
+    # reject over the hard ceiling (413) — both BEFORE file.read() buffers the
+    # body. Mirrors the attachments upload_file size pre-check.
+    if file.size is None:
         raise HTTPException(
-            status_code=HTTPStatus.BAD_REQUEST,
-            detail="File is too large.",
+            status_code=411, detail="A file size (Content-Length) is required."
         )
+    if file.size > ONBOARDING_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="File is too large.")
     content = await file.read()
     with packet_errors_mapped():
         result = await store_document_upload(
