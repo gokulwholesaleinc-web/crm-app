@@ -7,7 +7,7 @@ can't set ``Cache-Control``/``Referrer-Policy``).
 """
 
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import Response
 
 from src.core.client_ip import get_client_ip
@@ -15,11 +15,14 @@ from src.core.constants import HTTPStatus
 from src.core.rate_limit import limiter
 from src.core.router_utils import DBSession
 from src.onboarding import completion, tokens
+from src.onboarding.kinds import get_handler
 from src.onboarding.packet_schemas import (
     CompleteResponse,
     ConsentRequest,
     ConsentResult,
     DocumentPatch,
+    FileDeleteResult,
+    FileUploadResult,
     PatchResult,
     PublicDocument,
     PublicPacketPostResponse,
@@ -28,6 +31,7 @@ from src.onboarding.packet_schemas import (
     SignatureSet,
     VerifyRequest,
     VerifyResponse,
+    ViewedResult,
 )
 from src.onboarding.packet_service import _now as _utc_now
 from src.onboarding.public_helpers import (
@@ -41,6 +45,10 @@ from src.onboarding.public_helpers import (
     read_pdf_or_http,
     require_session,
     resolve_public_branding,
+)
+from src.onboarding.uploads import (
+    delete_document_upload,
+    store_document_upload,
 )
 from src.onboarding.validation import complete_errors_mapped, packet_errors_mapped
 from src.onboarding.view_ledger import record_packet_document_view
@@ -92,6 +100,7 @@ async def get_public_packet(token: str, request: Request, response: Response, db
         documents=[
             PublicDocument(
                 id=d.id,
+                kind=d.kind,
                 original_filename=d.original_filename,
                 field_definitions=d.field_definitions or [],
                 field_values=d.field_values or {},
@@ -157,6 +166,13 @@ async def get_public_document_pdf(
         )
     documents = await service.load_documents(packet.id)
     doc = find_document_or_404(documents, doc_id)
+    if doc.pdf_path is None:
+        # A questionnaire/upload doc has no PDF stream (v3); the frontend marks
+        # it viewed via POST /viewed instead. Never call /pdf on a non-PDF kind.
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND,
+            detail="This document has no PDF to view.",
+        )
     content = await read_pdf_or_http(doc.pdf_path)
 
     # Record the view AFTER bytes are confirmed; first view → opened.
@@ -182,6 +198,56 @@ async def get_public_document_pdf(
     )
 
 
+@router.post("/{token}/documents/{doc_id}/viewed", response_model=ViewedResult)
+@limiter.limit("60/minute")
+async def mark_public_document_viewed(
+    token: str, doc_id: int, request: Request, db: DB
+):
+    """Record a read-before-sign view for a NON-PDF document (session-gated).
+
+    The kind-agnostic counterpart of the ``/pdf`` view side effect (P0-4):
+    questionnaire and upload_request docs have no PDF stream, so the frontend
+    POSTs this on first render of each such doc. It writes the SAME idempotent
+    ledger row + the same first-open→``opened`` transition the ``/pdf`` route
+    does, so ``_assert_all_viewed`` (unchanged) is satisfied for every kind
+    rather than 422-ing forever on a doc with no PDF. esign docs keep recording
+    via ``/pdf`` (the legally meaningful record-before-sign). This endpoint
+    REFUSES any kind that records via the stream (F1): otherwise a client could
+    mark an esign signing-doc viewed without ever loading the PDF, satisfying
+    ``_assert_all_viewed`` and bypassing the read-before-sign gate.
+    """
+    packet, service = await load_packet_for_public(db, token)
+    require_session(request, packet)
+    if packet.status in ("completing", "completed"):
+        raise HTTPException(
+            status_code=HTTPStatus.CONFLICT, detail="Packet is being finalized."
+        )
+    documents = await service.load_documents(packet.id)
+    doc = find_document_or_404(documents, doc_id)
+    # F1: a kind that records its view via the byte stream (esign /pdf) must NOT
+    # be markable through this endpoint — the read-before-sign record only counts
+    # when the signer actually loaded the document. Only no-stream kinds
+    # (questionnaire/upload_request) use /viewed.
+    if get_handler(doc.kind).records_view_via_stream:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail="Open this document to view it before continuing.",
+        )
+    is_first = await record_packet_document_view(
+        db,
+        packet_document_id=doc.id,
+        token=token,
+        ip_address=get_client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+    )
+    if is_first:
+        packet.first_opened_at = packet.first_opened_at or _utc_now()
+        if packet.status == "active":
+            packet.status = "opened"
+    await db.flush()
+    return ViewedResult(viewed=True, opened=is_first)
+
+
 @router.patch("/{token}/documents/{doc_id}", response_model=PatchResult)
 @limiter.limit("60/minute")
 async def patch_public_document(
@@ -200,6 +266,104 @@ async def patch_public_document(
             packet, doc, field_values=data.field_values, base_version=data.base_version
         )
     return PatchResult(field_values_version=version)
+
+
+@router.post(
+    "/{token}/documents/{doc_id}/files",
+    response_model=FileUploadResult,
+    status_code=HTTPStatus.CREATED,
+)
+@limiter.limit("30/minute")
+async def upload_document_file(
+    token: str,
+    doc_id: int,
+    request: Request,
+    db: DB,
+    field_id: str = Form(...),
+    file: UploadFile = File(...),
+):
+    """Attach one file to a ``file_upload`` field at FILL time (session-gated).
+
+    Lands the file as its own ``contacts`` Attachment + an
+    ``onboarding_packet_uploads`` fence row, then appends the upload-row id to
+    ``field_values[field_id]`` (P0-6). BYPASSES the version-fence PATCH
+    (additive — no lost-update surface). Magic-byte sniff + allow-list +
+    per-field maxMB/maxFiles + per-packet aggregate cap are enforced in
+    ``store_document_upload`` (→ 422 on any breach). Rejected once the packet is
+    being finalized.
+    """
+    packet, service = await load_packet_for_public(db, token)
+    require_session(request, packet)
+    if packet.status in ("completing", "completed"):
+        raise HTTPException(
+            status_code=HTTPStatus.CONFLICT, detail="Packet is being finalized."
+        )
+    service._assert_public_writable(packet)
+    documents = await service.load_documents(packet.id)
+    doc = find_document_or_404(documents, doc_id)
+    from src.attachments.service import ONBOARDING_MAX_BYTES
+
+    # Size gate on the spooled part. NB (DoS1): declaring ``file`` as ``File(...)``
+    # means Starlette has ALREADY parsed the multipart body — spooling it to a
+    # SpooledTemporaryFile (memory up to its threshold, then disk) — by the time
+    # this handler runs, so ``file.size`` is the post-spool size. This gate
+    # therefore does NOT prevent that initial spool; what it prevents is the
+    # SECOND, fully-in-memory copy that ``await file.read()`` would materialize
+    # as a single ``bytes`` for an oversized/unbounded body. We REQUIRE a
+    # declared size (411 — a chunked/no-Content-Length part has ``size is None``)
+    # and reject over the hard ceiling (413), both BEFORE ``file.read()``. The
+    # finer per-field maxMB + per-packet aggregate caps still apply afterward.
+    # (The plain attachments upload route has no equivalent pre-check.)
+    if file.size is None:
+        raise HTTPException(
+            status_code=411, detail="A file size (Content-Length) is required."
+        )
+    if file.size > ONBOARDING_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="File is too large.")
+    content = await file.read()
+    with packet_errors_mapped():
+        result = await store_document_upload(
+            db,
+            packet=packet,
+            doc=doc,
+            field_id=field_id,
+            original_filename=file.filename or "upload",
+            content=content,
+            token=token,
+        )
+    await db.flush()
+    return result
+
+
+@router.delete(
+    "/{token}/documents/{doc_id}/files/{upload_id}",
+    response_model=FileDeleteResult,
+)
+@limiter.limit("30/minute")
+async def delete_document_file(
+    token: str, doc_id: int, upload_id: int, request: Request, db: DB
+):
+    """Remove one uploaded file before completion (session-gated).
+
+    Deletes the Attachment (storage + row via ``delete_attachment``) + the
+    fence row and drops the id from ``field_values[field_id]``. Rejected once
+    the packet is being finalized.
+    """
+    packet, service = await load_packet_for_public(db, token)
+    require_session(request, packet)
+    if packet.status in ("completing", "completed"):
+        raise HTTPException(
+            status_code=HTTPStatus.CONFLICT, detail="Packet is being finalized."
+        )
+    service._assert_public_writable(packet)
+    documents = await service.load_documents(packet.id)
+    doc = find_document_or_404(documents, doc_id)
+    with packet_errors_mapped():
+        result = await delete_document_upload(
+            db, doc=doc, upload_id=upload_id
+        )
+    await db.flush()
+    return result
 
 
 @router.post("/{token}/signature", response_model=SignatureResult)

@@ -36,7 +36,12 @@ import type {
   OnboardingPublicDocument,
   OnboardingDownloadDocument,
   OnboardingFieldDefinition,
+  OnboardingQuestionnaireField,
+  OnboardingAnswerValue,
+  OnboardingDocumentKind,
 } from '../../types';
+import { OTHER_OPTION_TOKEN } from '../../types';
+import { ONBOARDING_UPLOAD_ACCEPT } from './uploadConstants';
 
 GlobalWorkerOptions.workerSrc = pdfWorker;
 
@@ -123,6 +128,103 @@ const WRITABLE_STATUSES = new Set(['active', 'opened', 'in_progress']);
 // Terminal-dead statuses the server answers with 410 — the link is gone.
 const DEAD_STATUSES = new Set(['abandoned', 'expired', 'revoked']);
 
+// Per-document draft of answers, widened in v3 to carry choice lists + the
+// Other write-in shape (the FE half of P0-1). Keyed doc id → field id → answer.
+type DraftValues = Record<number, Record<string, OnboardingAnswerValue>>;
+
+// The doc's render kind, defaulting to the legacy pdf.js canvas when the server
+// payload predates the v3 discriminator (so the page never breaks mid-deploy).
+function docKind(doc: OnboardingPublicDocument): OnboardingDocumentKind {
+  return doc.kind ?? 'esign_pdf';
+}
+
+/** True iff this document renders the v3 form UI (not the pdf.js canvas). */
+function isFormDoc(doc: OnboardingPublicDocument): boolean {
+  return docKind(doc) !== 'esign_pdf';
+}
+
+// --- questionnaire answer helpers (the {value, other} write-in shape) ------
+
+/** The selected option value(s) for a choice answer, ignoring the write-in. */
+function selectedValues(answer: OnboardingAnswerValue | undefined): string[] {
+  if (answer == null) return [];
+  if (typeof answer === 'string') return answer ? [answer] : [];
+  if (Array.isArray(answer)) return answer;
+  // { value, other } shape
+  const inner = answer.value;
+  if (inner == null) return [];
+  return Array.isArray(inner) ? inner : [inner];
+}
+
+/** The Other write-in text for a choice answer (empty when none). */
+function otherText(answer: OnboardingAnswerValue | undefined): string {
+  if (answer && typeof answer === 'object' && !Array.isArray(answer)) {
+    return answer.other ?? '';
+  }
+  return '';
+}
+
+/** True iff a questionnaire field's required answer is present + complete. */
+function questionnaireFieldSatisfied(
+  field: OnboardingQuestionnaireField,
+  answer: OnboardingAnswerValue | undefined,
+): boolean {
+  if (!field.required) return true;
+  // Sensitive text fields store None in field_values (the plaintext is encrypted
+  // into the secret table server-side), so after a 409-refetch reseed the local
+  // value is undefined and the client can't re-derive whether it's "filled" — the
+  // server holds the ciphertext. Treat a sensitive required field as satisfied so
+  // a refetch never permanently blocks Submit. (The real required-check is the
+  // server's required_satisfied against the secrets table.)
+  if (field.sensitive) return true;
+  if (field.kind === 'file_upload') {
+    // Uploads are reflected back as a list of upload ids under the field id.
+    return Array.isArray(answer) && answer.length > 0;
+  }
+  if (
+    field.kind === 'single_choice' ||
+    field.kind === 'multi_choice'
+  ) {
+    const values = selectedValues(answer);
+    if (values.length === 0) return false;
+    if (values.includes(OTHER_OPTION_TOKEN)) {
+      return otherText(answer).trim().length > 0;
+    }
+    return true;
+  }
+  // text / paragraph / email / url / date → non-empty string
+  return typeof answer === 'string' && answer.trim().length > 0;
+}
+
+/**
+ * The answers to PATCH for a doc, EXCLUDING file_upload fields. Per §C.2 uploads
+ * bypass the version-fence PATCH — the dedicated /files (POST/DELETE) endpoint is
+ * the sole writer of ``field_values[file_field]`` server-side, and the backend's
+ * upload_request.validate_value rejects the FE's reflected string ids (it expects
+ * the int upload-row ids it writes itself). Sending them 422s the whole save, so
+ * an upload_request packet with a file could never persist its text answers /
+ * complete. We keep the reflected ids in local draftValues (for the on-screen
+ * file list + the required-check) and simply never PATCH them.
+ */
+function patchableValues(
+  doc: OnboardingPublicDocument,
+  draft: Record<string, OnboardingAnswerValue> | undefined,
+): Record<string, OnboardingAnswerValue> {
+  if (!draft) return {};
+  if (!isFormDoc(doc)) return draft; // esign: every field is patchable
+  const fileFieldIds = new Set(
+    (doc.field_definitions as OnboardingQuestionnaireField[])
+      .filter((f) => f.kind === 'file_upload')
+      .map((f) => f.id),
+  );
+  if (fileFieldIds.size === 0) return draft;
+  const out: Record<string, OnboardingAnswerValue> = {};
+  for (const [fid, value] of Object.entries(draft)) {
+    if (!fileFieldIds.has(fid)) out[fid] = value;
+  }
+  return out;
+}
+
 function PublicOnboardingView() {
   const { token } = useParams<{ token: string }>();
 
@@ -144,9 +246,10 @@ function PublicOnboardingView() {
 
   // Step-through state — one document at a time.
   const [docIndex, setDocIndex] = useState(0);
-  // Local draft of field values per document (id -> string), seeded from the
-  // server payload and the source of truth for the inputs.
-  const [draftValues, setDraftValues] = useState<Record<number, Record<string, string>>>({});
+  // Local draft of field values per document, seeded from the server payload and
+  // the source of truth for the inputs. Widened in v3 (the FE half of P0-1) to
+  // carry choice lists + the Other write-in shape, not just strings.
+  const [draftValues, setDraftValues] = useState<DraftValues>({});
   // Per-document version captured for the optimistic-lock PATCH ``base_version``.
   const [docVersions, setDocVersions] = useState<Record<number, number>>({});
   // Which documents the client has stepped to / saved (every-doc-viewed gate).
@@ -358,12 +461,44 @@ function PublicOnboardingView() {
     });
   }, [currentDocId]);
 
-  const setFieldValue = useCallback((docId: number, fieldId: string, value: string) => {
-    setDraftValues((curr) => ({
-      ...curr,
-      [docId]: { ...(curr[docId] ?? {}), [fieldId]: value },
-    }));
-  }, []);
+  // For a QUESTIONNAIRE / UPLOAD doc (no PDF stream), the server view-gate is
+  // satisfied only by POST /viewed — an esign doc records the view as a side
+  // effect of its /pdf byte stream, but a form doc has none, so without this the
+  // server's _assert_all_viewed would 422 /complete forever (the P0-4 bug,
+  // relocated). Idempotent server-side; a client-side guard ref avoids a
+  // duplicate POST per doc. esign docs are skipped here (the /pdf GET handles
+  // them) so the legally-meaningful read-before-sign record stays on /pdf.
+  const viewedPostedRef = useRef<Set<number>>(new Set());
+  useEffect(() => {
+    if (!token || currentDoc == null || !isFormDoc(currentDoc)) return;
+    if (viewedPostedRef.current.has(currentDoc.id)) return;
+    viewedPostedRef.current.add(currentDoc.id);
+    const docId = currentDoc.id;
+    void (async () => {
+      try {
+        await publicClient.post(
+          `/api/onboarding/public/${token}/documents/${docId}/viewed`,
+          {},
+          { headers: requestHeaders() },
+        );
+      } catch (err) {
+        // A failed view-mark must not block the page; allow a retry on the next
+        // render by clearing the guard. Logged so a systemic outage is visible.
+        viewedPostedRef.current.delete(docId);
+        console.warn('onboarding: POST /viewed failed', err);
+      }
+    })();
+  }, [token, currentDoc, requestHeaders]);
+
+  const setFieldValue = useCallback(
+    (docId: number, fieldId: string, value: OnboardingAnswerValue) => {
+      setDraftValues((curr) => ({
+        ...curr,
+        [docId]: { ...(curr[docId] ?? {}), [fieldId]: value },
+      }));
+    },
+    [],
+  );
 
   const saveDocument = useCallback(
     async (doc: OnboardingPublicDocument): Promise<boolean> => {
@@ -374,7 +509,9 @@ function PublicOnboardingView() {
         const res = await publicClient.patch<{ field_values_version: number }>(
           `/api/onboarding/public/${token}/documents/${doc.id}`,
           {
-            field_values: draftValues[doc.id] ?? {},
+            // file_upload answers are written by the /files endpoint, not here —
+            // see patchableValues (§C.2: uploads bypass the version-fence PATCH).
+            field_values: patchableValues(doc, draftValues[doc.id]),
             base_version: docVersions[doc.id] ?? doc.field_values_version,
           },
           { headers: requestHeaders() },
@@ -400,6 +537,73 @@ function PublicOnboardingView() {
     },
     [token, draftValues, docVersions, requestHeaders, fetchPacket],
   );
+
+  // --- Debounced autosave + unsaved-changes guard (Form 2 = 18 required
+  // paragraphs — a reload must not lose answers; §7.4). The snapshot is the
+  // last-saved draft per doc; a draft that differs is "dirty" → a debounced
+  // PATCH persists it and a beforeunload warns if the user leaves first.
+  const savedSnapshotRef = useRef<Record<number, string>>({});
+  const isDocDirty = useCallback(
+    (docId: number): boolean => {
+      const snapshot = savedSnapshotRef.current[docId];
+      // No snapshot yet → the doc hasn't been seeded as a baseline this render;
+      // treat as clean so the first render never transiently arms beforeunload.
+      if (snapshot === undefined) return false;
+      return JSON.stringify(draftValues[docId] ?? {}) !== snapshot;
+    },
+    [draftValues],
+  );
+
+  // Record a saved snapshot whenever a doc's persisted version advances (the
+  // PATCH succeeded) OR the server (re)seeds it — so the dirty check is honest.
+  useEffect(() => {
+    for (const doc of docs) {
+      const saved = draftValues[doc.id];
+      if (saved !== undefined && savedSnapshotRef.current[doc.id] === undefined) {
+        savedSnapshotRef.current[doc.id] = JSON.stringify(saved);
+      }
+    }
+  }, [docs, draftValues]);
+
+  // Debounced autosave of the open FORM document. esign docs autosave on
+  // Next/Submit only (the canvas inputs are small); a long questionnaire saves
+  // as you type so a reload never loses 18 paragraphs of answers.
+  const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const packetWritable = packet != null && WRITABLE_STATUSES.has(packet.status);
+  useEffect(() => {
+    if (!currentDoc || !isFormDoc(currentDoc) || !packetWritable) return;
+    if (!isDocDirty(currentDoc.id)) return;
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    const doc = currentDoc;
+    autosaveTimerRef.current = setTimeout(() => {
+      autosaveTimerRef.current = null;
+      void (async () => {
+        const ok = await saveDocument(doc);
+        if (ok) {
+          savedSnapshotRef.current[doc.id] = JSON.stringify(
+            draftValues[doc.id] ?? {},
+          );
+        }
+      })();
+    }, 1200);
+    return () => {
+      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    };
+  }, [currentDoc, draftValues, isDocDirty, saveDocument, packetWritable]);
+
+  // Warn before navigating away with unsaved questionnaire answers
+  // (CLAUDE.md-mandated; absent before v3). Only arms for a writable packet with
+  // a dirty form doc so a completed/read-only page never nags.
+  const anyFormDirty = docs.some((d) => isFormDoc(d) && isDocDirty(d.id));
+  useEffect(() => {
+    if (!anyFormDirty) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [anyFormDirty]);
 
   // --- Signature save (POST) ---------------------------------------------
   const saveSignature = useCallback(async (): Promise<boolean> => {
@@ -471,6 +675,96 @@ function PublicOnboardingView() {
     }
   }, [token, recordingConsent, packet?.esign_disclosure_version, requestHeaders, fetchPacket]);
 
+  // --- Derived gating ----------------------------------------------------
+  // A signature is required when any doc is e-sign OR carries a signature field
+  // — matching the backend completion gate (which demands a signature whenever
+  // a signature field exists). The two are kept consistent at packet creation,
+  // but aligning the predicates keeps the pad from ever hiding on a doc the
+  // server will then refuse to complete without a signature.
+  const requiresSignature = useMemo(
+    () =>
+      docs.some(
+        (d) =>
+          d.requires_esign ||
+          d.field_definitions.some((f) => f.kind === 'signature'),
+      ),
+    [docs],
+  );
+
+  const allDocsViewed = docs.length > 0 && docs.every((d) => viewedDocIds.has(d.id));
+
+  // Structured list of every unsatisfied required field across all documents —
+  // the focus-first-error flow (PF2) navigates to the first entry's document and
+  // focuses its input, and the aggregate summary derives its strings from this.
+  const missingRequiredFields = useMemo(() => {
+    const out: Array<{
+      docId: number;
+      docIndex: number;
+      field: OnboardingQuestionnaireField | OnboardingFieldDefinition;
+      isFormField: boolean;
+      label: string;
+      docFilename: string;
+    }> = [];
+    docs.forEach((doc, di) => {
+      const values = draftValues[doc.id] ?? doc.field_values;
+      const formDoc = isFormDoc(doc);
+      for (const f of doc.field_definitions) {
+        if (f.kind === 'signature') continue; // covered by the drawn signature
+        if (!f.required) continue;
+        const satisfied = formDoc
+          ? questionnaireFieldSatisfied(
+              f as OnboardingQuestionnaireField,
+              values[f.id],
+            )
+          : // esign/text field → non-empty string (the legacy check)
+            typeof values[f.id] === 'string' &&
+            (values[f.id] as string).trim().length > 0;
+        if (!satisfied) {
+          out.push({
+            docId: doc.id,
+            docIndex: di,
+            field: f,
+            isFormField: formDoc,
+            label: f.label,
+            docFilename: doc.original_filename,
+          });
+        }
+      }
+    });
+    return out;
+  }, [docs, draftValues]);
+
+  const missingRequired = useMemo(
+    () => missingRequiredFields.map((m) => `${m.docFilename}: ${m.label}`),
+    [missingRequiredFields],
+  );
+
+  // Submit was attempted at least once → surface per-field aria-invalid + inline
+  // errors (PF2). They clear live as the user fills each field.
+  const [submitAttempted, setSubmitAttempted] = useState(false);
+
+  // Pending focus target captured by handleSubmit; an effect focuses it once the
+  // owning document is the one on screen (a cross-document jump re-renders first).
+  const pendingFocusRef = useRef<{ docId: number; domId: string } | null>(null);
+  useEffect(() => {
+    const target = pendingFocusRef.current;
+    if (!target || currentDocId !== target.docId) return;
+    const el = document.getElementById(target.domId);
+    if (el) {
+      pendingFocusRef.current = null;
+      (el as HTMLElement).focus();
+      el.scrollIntoView({ block: 'center' });
+    }
+  }, [currentDocId]);
+
+  // Everything the server's completion gate also checks. Drives the inline
+  // notices; the Submit button itself only blocks on ``submitting`` (PF6) so it
+  // stays clickable and the click runs the validate-first flow below.
+  const submitReady =
+    allDocsViewed &&
+    missingRequiredFields.length === 0 &&
+    (!requiresSignature || (consentRecorded && signatureSaved));
+
   // --- Submit (POST /complete) + completion poll -------------------------
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => {
@@ -479,6 +773,39 @@ function PublicOnboardingView() {
 
   const handleSubmit = useCallback(async () => {
     if (!token || submitting) return;
+    // Validate-first (PF2/PF6): the Submit button is no longer hard-disabled, so
+    // a click on an incomplete form must surface WHERE the problem is rather than
+    // silently no-op. Flip on the per-field error display, then if a required
+    // field is unsatisfied jump to its document and focus its input. Bail before
+    // any network call until the same gates the server enforces are met.
+    if (!submitReady) {
+      setSubmitAttempted(true);
+      const first = missingRequiredFields[0];
+      if (first?.isFormField) {
+        const domId =
+          first.field.kind === 'file_upload'
+            ? `onb-file-${first.docId}-${first.field.id}`
+            : `onb-${first.docId}-${first.field.id}`;
+        pendingFocusRef.current = { docId: first.docId, domId };
+        if (first.docIndex !== docIndex) {
+          setDocIndex(first.docIndex);
+        } else {
+          // Already on the right document — focus now (the effect only fires on
+          // a docIndex change).
+          const el = document.getElementById(domId);
+          if (el) {
+            pendingFocusRef.current = null;
+            el.focus();
+            el.scrollIntoView({ block: 'center' });
+          }
+        }
+      } else if (first) {
+        // An esign field (no onb- id on the canvas overlay) — at least navigate
+        // to its document so the user sees it; the summary lists the field.
+        if (first.docIndex !== docIndex) setDocIndex(first.docIndex);
+      }
+      return;
+    }
     // Save the open document first so its latest values are persisted before
     // the server validates completion.
     if (currentDoc && !(await saveDocument(currentDoc))) return;
@@ -518,7 +845,17 @@ function PublicOnboardingView() {
     } finally {
       setSubmitting(false);
     }
-  }, [token, submitting, currentDoc, saveDocument, requestHeaders, fetchPacket]);
+  }, [
+    token,
+    submitting,
+    submitReady,
+    missingRequiredFields,
+    docIndex,
+    currentDoc,
+    saveDocument,
+    requestHeaders,
+    fetchPacket,
+  ]);
 
   // When a background ``completing`` poll lands on ``completed``, stop polling
   // and show the success screen with downloads.
@@ -539,44 +876,6 @@ function PublicOnboardingView() {
       }
     }
   }, [packet?.status, sessionToken, completed, fetchPacket]);
-
-  // --- Derived gating ----------------------------------------------------
-  // A signature is required when any doc is e-sign OR carries a signature field
-  // — matching the backend completion gate (which demands a signature whenever
-  // a signature field exists). The two are kept consistent at packet creation,
-  // but aligning the predicates keeps the pad from ever hiding on a doc the
-  // server will then refuse to complete without a signature.
-  const requiresSignature = useMemo(
-    () =>
-      docs.some(
-        (d) =>
-          d.requires_esign ||
-          d.field_definitions.some((f) => f.kind === 'signature'),
-      ),
-    [docs],
-  );
-
-  const allDocsViewed = docs.length > 0 && docs.every((d) => viewedDocIds.has(d.id));
-
-  const missingRequired = useMemo(() => {
-    const missing: string[] = [];
-    for (const doc of docs) {
-      const values = draftValues[doc.id] ?? doc.field_values;
-      for (const f of doc.field_definitions) {
-        if (f.kind === 'signature') continue; // covered by the drawn signature
-        if (f.required && !(values[f.id] ?? '').trim()) {
-          missing.push(`${doc.original_filename}: ${f.label}`);
-        }
-      }
-    }
-    return missing;
-  }, [docs, draftValues]);
-
-  const canSubmit =
-    allDocsViewed &&
-    missingRequired.length === 0 &&
-    (!requiresSignature || (consentRecorded && signatureSaved)) &&
-    !submitting;
 
   const goPrevDoc = async () => {
     if (currentDoc) await saveDocument(currentDoc);
@@ -725,7 +1024,7 @@ function PublicOnboardingView() {
             esignDisclosure={packet.esign_disclosure}
             allDocsViewed={allDocsViewed}
             missingRequired={missingRequired}
-            canSubmit={canSubmit}
+            submitAttempted={submitAttempted}
             submitting={submitting}
             submitError={submitError}
             onSubmit={handleSubmit}
@@ -827,8 +1126,12 @@ interface FillFlowProps {
   docs: OnboardingPublicDocument[];
   docIndex: number;
   currentDoc: OnboardingPublicDocument | null;
-  draftValues: Record<number, Record<string, string>>;
-  setFieldValue: (docId: number, fieldId: string, value: string) => void;
+  draftValues: DraftValues;
+  setFieldValue: (
+    docId: number,
+    fieldId: string,
+    value: OnboardingAnswerValue,
+  ) => void;
   onPrev: () => void;
   onNext: () => void;
   savingDoc: boolean;
@@ -852,7 +1155,7 @@ interface FillFlowProps {
   esignDisclosure?: string | null;
   allDocsViewed: boolean;
   missingRequired: string[];
-  canSubmit: boolean;
+  submitAttempted: boolean;
   submitting: boolean;
   submitError: string | null;
   onSubmit: () => void;
@@ -889,7 +1192,7 @@ function FillFlow({
   esignDisclosure,
   allDocsViewed,
   missingRequired,
-  canSubmit,
+  submitAttempted,
   submitting,
   submitError,
   onSubmit,
@@ -925,7 +1228,25 @@ function FillFlow({
         </p>
       )}
 
-      {currentDoc && (
+      {currentDoc && isFormDoc(currentDoc) ? (
+        <QuestionnaireFiller
+          key={currentDoc.id}
+          token={token}
+          doc={currentDoc}
+          values={draftValues[currentDoc.id] ?? currentDoc.field_values}
+          onFieldChange={(fieldId, value) => setFieldValue(currentDoc.id, fieldId, value)}
+          // PF1: gate ONLY on read-only state — NEVER on savingDoc. The 1200ms
+          // debounced autosave flips savingDoc, and disabling the focused input
+          // mid-keystroke yanks the caret to <body> every autosave cycle. Saving
+          // is non-blocking; the version-fence 409 reconciles any drift. The
+          // passive "Saving…" indicator below replaces the disabled surface.
+          disabled={!isWritable}
+          savingDoc={savingDoc}
+          submitAttempted={submitAttempted}
+          accent={accent}
+          requestHeaders={requestHeaders}
+        />
+      ) : currentDoc ? (
         <DocumentFiller
           key={currentDoc.id}
           token={token}
@@ -937,7 +1258,7 @@ function FillFlow({
           primary={primary}
           requestHeaders={requestHeaders}
         />
-      )}
+      ) : null}
 
       {docError && (
         <p role="alert" aria-live="polite" className="mt-4 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2">
@@ -1097,10 +1418,14 @@ function FillFlow({
               {submitError}
             </p>
           )}
+          {/* PF6: stay enabled until the request starts (gate only on
+              ``submitting``). A click on an incomplete form runs the
+              validate-first + focus-first-error flow in ``onSubmit`` instead of
+              presenting a dead, un-actionable disabled button. */}
           <button
             type="button"
             onClick={onSubmit}
-            disabled={!canSubmit}
+            disabled={submitting}
             className="inline-flex w-full items-center justify-center gap-2 rounded px-5 py-3 text-sm font-semibold text-white shadow-sm hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50 transition-opacity"
             style={{ backgroundColor: accent, outlineColor: accent }}
           >
@@ -1114,14 +1439,707 @@ function FillFlow({
 }
 
 // =====================================================================
+// Questionnaire / upload filler — a real form (no PDF canvas)
+// =====================================================================
+
+interface QuestionnaireFillerProps {
+  token: string;
+  doc: OnboardingPublicDocument;
+  values: Record<string, OnboardingAnswerValue>;
+  onFieldChange: (fieldId: string, value: OnboardingAnswerValue) => void;
+  /** Read-only gate only (PF1) — NOT autosave. */
+  disabled: boolean;
+  /** Drives the passive "Saving…" indicator; never disables the inputs. */
+  savingDoc: boolean;
+  /** Once true, unsatisfied required fields show aria-invalid + inline error. */
+  submitAttempted: boolean;
+  accent: string;
+  requestHeaders: () => Record<string, string> | undefined;
+}
+
+/** A section is a contiguous run of fields sharing a ``section_id`` (first-seen
+ * order). Fields with no section_id form one implicit leading group. */
+interface FieldSection {
+  id: string | null;
+  label: string | null;
+  fields: OnboardingQuestionnaireField[];
+}
+
+function groupSections(
+  fields: OnboardingQuestionnaireField[],
+): FieldSection[] {
+  const sections: FieldSection[] = [];
+  for (const field of fields) {
+    const sid = field.section_id ?? null;
+    const last = sections[sections.length - 1];
+    if (last && last.id === sid) {
+      last.fields.push(field);
+    } else {
+      sections.push({
+        id: sid,
+        label: field.section_label ?? null,
+        fields: [field],
+      });
+    }
+  }
+  return sections;
+}
+
+function QuestionnaireFiller({
+  token,
+  doc,
+  values,
+  onFieldChange,
+  disabled,
+  savingDoc,
+  submitAttempted,
+  accent,
+  requestHeaders,
+}: QuestionnaireFillerProps) {
+  const fields = doc.field_definitions as OnboardingQuestionnaireField[];
+  const sections = useMemo(() => groupSections(fields), [fields]);
+
+  return (
+    <div className="mt-6">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-medium text-gray-900 truncate" title={doc.original_filename}>
+          {doc.original_filename}
+        </p>
+        {/* PF1: passive autosave indicator — never a disabled surface. */}
+        {savingDoc && (
+          <span
+            role="status"
+            aria-live="polite"
+            className="inline-flex flex-shrink-0 items-center gap-1 text-xs text-gray-500"
+          >
+            <ArrowPathIcon className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+            Saving…
+          </span>
+        )}
+      </div>
+
+      <div className="mt-4 space-y-8">
+        {sections.map((section, si) => (
+          <fieldset
+            key={section.id ?? `s${si}`}
+            className="rounded-lg border border-gray-200 bg-white p-5"
+            disabled={disabled}
+          >
+            {section.label && (
+              <legend className="px-1 text-sm font-semibold text-gray-900">
+                {section.label}
+              </legend>
+            )}
+            <div className="space-y-6">
+              {section.fields.map((field) => (
+                <QuestionnaireField
+                  key={field.id}
+                  token={token}
+                  docId={doc.id}
+                  field={field}
+                  value={values[field.id]}
+                  onChange={(v) => onFieldChange(field.id, v)}
+                  disabled={disabled}
+                  submitAttempted={submitAttempted}
+                  accent={accent}
+                  requestHeaders={requestHeaders}
+                />
+              ))}
+            </div>
+          </fieldset>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// =====================================================================
+// One questionnaire field (typed input per kind, a11y-grouped)
+// =====================================================================
+
+interface QuestionnaireFieldProps {
+  token: string;
+  docId: number;
+  field: OnboardingQuestionnaireField;
+  value: OnboardingAnswerValue | undefined;
+  onChange: (value: OnboardingAnswerValue) => void;
+  disabled: boolean;
+  submitAttempted: boolean;
+  accent: string;
+  requestHeaders: () => Record<string, string> | undefined;
+}
+
+function QuestionnaireField({
+  token,
+  docId,
+  field,
+  value,
+  onChange,
+  disabled,
+  submitAttempted,
+  accent,
+  requestHeaders,
+}: QuestionnaireFieldProps) {
+  const fieldDomId = `onb-${docId}-${field.id}`;
+  const helpId = field.help ? `${fieldDomId}-help` : undefined;
+  const labelText = field.label || field.id;
+  const required = !!field.required;
+
+  // PF2: a required field becomes "invalid" once Submit was attempted while it
+  // is still unsatisfied; the flag clears live as the user fills it.
+  const invalid = submitAttempted && !questionnaireFieldSatisfied(field, value);
+  const errorId = invalid ? `${fieldDomId}-error` : undefined;
+  // Merge help + error into aria-describedby; aria-errormessage points at the
+  // error alone (only valid while aria-invalid is set).
+  const describedBy = [helpId, errorId].filter(Boolean).join(' ') || undefined;
+
+  const labelNode = (
+    <span className="block text-sm font-medium text-gray-800">
+      {labelText}
+      {required && (
+        <span aria-hidden="true" className="ml-0.5 text-red-600">*</span>
+      )}
+    </span>
+  );
+  const help = field.help ? (
+    <p id={helpId} className="mt-0.5 text-xs text-gray-500 text-pretty">
+      {field.help}
+    </p>
+  ) : null;
+  const errorNode = invalid ? (
+    <p id={errorId} role="alert" className="mt-1 text-xs font-medium text-red-700">
+      This field is required.
+    </p>
+  ) : null;
+
+  // --- file upload (upload_request kind / file_upload field) ---
+  if (field.kind === 'file_upload') {
+    return (
+      <FileUploadField
+        token={token}
+        docId={docId}
+        field={field}
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+        accent={accent}
+        labelNode={labelNode}
+        help={help}
+        helpId={helpId}
+        invalid={invalid}
+        errorId={errorId}
+        errorNode={errorNode}
+        requestHeaders={requestHeaders}
+      />
+    );
+  }
+
+  // --- choice kinds (radio / checkbox / dropdown) ---
+  if (field.kind === 'single_choice' || field.kind === 'multi_choice') {
+    return (
+      <ChoiceField
+        fieldDomId={fieldDomId}
+        field={field}
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+        accent={accent}
+        labelNode={labelNode}
+        help={help}
+        helpId={helpId}
+        invalid={invalid}
+        errorId={errorId}
+        errorNode={errorNode}
+      />
+    );
+  }
+
+  // --- text-ish kinds (short_text / paragraph / email / url / date) ---
+  const text = typeof value === 'string' ? value : '';
+  const onTextChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
+  ) => onChange(e.target.value);
+  const commonInput = {
+    id: fieldDomId,
+    name: field.id,
+    value: text,
+    disabled,
+    required,
+    'aria-required': required,
+    'aria-invalid': invalid || undefined,
+    'aria-errormessage': errorId,
+    maxLength: field.maxLength ?? undefined,
+    onChange: onTextChange,
+    'aria-describedby': describedBy,
+    className:
+      'mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:bg-gray-100',
+    style: { outlineColor: accent } as React.CSSProperties,
+  };
+
+  return (
+    <div>
+      <label htmlFor={fieldDomId}>{labelNode}</label>
+      {help}
+      {field.kind === 'paragraph' ? (
+        <textarea {...commonInput} rows={4} inputMode="text" spellCheck />
+      ) : field.kind === 'date' ? (
+        <input {...commonInput} type="date" inputMode="numeric" />
+      ) : field.kind === 'email' ? (
+        <input
+          {...commonInput}
+          type="email"
+          inputMode="email"
+          autoComplete="email"
+          spellCheck={false}
+          placeholder="you@example.com"
+        />
+      ) : field.kind === 'url' ? (
+        <input
+          {...commonInput}
+          type="url"
+          inputMode="url"
+          spellCheck={false}
+          placeholder="https://example.com..."
+        />
+      ) : (
+        <input {...commonInput} type="text" inputMode="text" />
+      )}
+      {errorNode}
+    </div>
+  );
+}
+
+// =====================================================================
+// Choice field — radio (single) / checkbox (multi) / dropdown
+// =====================================================================
+
+interface ChoiceFieldProps {
+  fieldDomId: string;
+  field: OnboardingQuestionnaireField;
+  value: OnboardingAnswerValue | undefined;
+  onChange: (value: OnboardingAnswerValue) => void;
+  disabled: boolean;
+  accent: string;
+  labelNode: React.ReactNode;
+  help: React.ReactNode;
+  helpId?: string;
+  invalid?: boolean;
+  errorId?: string;
+  errorNode?: React.ReactNode;
+}
+
+function ChoiceField({
+  fieldDomId,
+  field,
+  value,
+  onChange,
+  disabled,
+  accent,
+  labelNode,
+  help,
+  helpId,
+  invalid,
+  errorId,
+  errorNode,
+}: ChoiceFieldProps) {
+  const isMulti = field.kind === 'multi_choice';
+  const selected = selectedValues(value);
+  const other = otherText(value);
+  const allowOther = !!field.allow_other;
+  const options = field.options ?? [];
+  const otherSelected = selected.includes(OTHER_OPTION_TOKEN);
+  const describedBy = [helpId, errorId].filter(Boolean).join(' ') || undefined;
+
+  const emitSingle = (optValue: string) => {
+    if (optValue === OTHER_OPTION_TOKEN) {
+      onChange({ value: OTHER_OPTION_TOKEN, other });
+    } else {
+      onChange(optValue);
+    }
+  };
+
+  const emitMulti = (optValue: string, checked: boolean) => {
+    const next = checked
+      ? [...selected, optValue]
+      : selected.filter((v) => v !== optValue);
+    if (next.includes(OTHER_OPTION_TOKEN)) {
+      onChange({ value: next, other });
+    } else {
+      onChange(next);
+    }
+  };
+
+  const emitOtherText = (text: string) => {
+    if (isMulti) {
+      const next = otherSelected ? selected : [...selected, OTHER_OPTION_TOKEN];
+      onChange({ value: next, other: text });
+    } else {
+      onChange({ value: OTHER_OPTION_TOKEN, other: text });
+    }
+  };
+
+  // Dropdown display for a single_choice (§7.3 fold).
+  if (!isMulti && field.display === 'dropdown') {
+    const current = selected[0] ?? '';
+    return (
+      <div>
+        <label htmlFor={fieldDomId}>{labelNode}</label>
+        {help}
+        <select
+          id={fieldDomId}
+          name={field.id}
+          value={current}
+          disabled={disabled}
+          required={!!field.required}
+          aria-required={!!field.required}
+          aria-invalid={invalid || undefined}
+          aria-errormessage={errorId}
+          aria-describedby={describedBy}
+          onChange={(e) => emitSingle(e.target.value)}
+          className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:bg-gray-100"
+          style={{ outlineColor: accent }}
+        >
+          <option value="" disabled>Select…</option>
+          {options.map((opt) => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+          {allowOther && <option value={OTHER_OPTION_TOKEN}>Other…</option>}
+        </select>
+        {otherSelected && (
+          <OtherWriteIn
+            fieldDomId={fieldDomId}
+            value={other}
+            onChange={emitOtherText}
+            disabled={disabled}
+            accent={accent}
+          />
+        )}
+        {errorNode}
+      </div>
+    );
+  }
+
+  // Radio (single) / checkbox (multi) group. ``id`` + ``tabIndex={-1}`` make the
+  // group focusable so the focus-first-error flow (PF2) can land on it via the
+  // shared ``onb-${docId}-${fieldId}`` id; ``aria-required`` announces the
+  // requirement to SR users (the visual * is aria-hidden — PF5).
+  return (
+    <fieldset
+      id={fieldDomId}
+      tabIndex={-1}
+      aria-required={!!field.required}
+      aria-invalid={invalid || undefined}
+      aria-errormessage={errorId}
+      aria-describedby={describedBy}
+      className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 rounded"
+      style={{ outlineColor: accent }}
+    >
+      <legend className="text-sm font-medium text-gray-800">{labelNode}</legend>
+      {help}
+      <div className="mt-2 space-y-1.5">
+        {options.map((opt) => {
+          const optId = `${fieldDomId}-${opt.value}`;
+          const checked = selected.includes(opt.value);
+          return (
+            <label key={opt.value} htmlFor={optId} className="flex items-center gap-2 text-sm text-gray-700">
+              <input
+                id={optId}
+                type={isMulti ? 'checkbox' : 'radio'}
+                name={field.id}
+                value={opt.value}
+                checked={checked}
+                disabled={disabled}
+                onChange={(e) =>
+                  isMulti
+                    ? emitMulti(opt.value, e.target.checked)
+                    : emitSingle(opt.value)
+                }
+                className="h-4 w-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+                style={{ accentColor: accent, outlineColor: accent }}
+              />
+              <span>{opt.label}</span>
+            </label>
+          );
+        })}
+        {allowOther && (
+          <label
+            htmlFor={`${fieldDomId}-other`}
+            className="flex items-center gap-2 text-sm text-gray-700"
+          >
+            <input
+              id={`${fieldDomId}-other`}
+              type={isMulti ? 'checkbox' : 'radio'}
+              name={field.id}
+              value={OTHER_OPTION_TOKEN}
+              checked={otherSelected}
+              disabled={disabled}
+              onChange={(e) =>
+                isMulti
+                  ? emitMulti(OTHER_OPTION_TOKEN, e.target.checked)
+                  : emitSingle(OTHER_OPTION_TOKEN)
+              }
+              className="h-4 w-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+              style={{ accentColor: accent, outlineColor: accent }}
+            />
+            <span>Other</span>
+          </label>
+        )}
+      </div>
+      {otherSelected && (
+        <OtherWriteIn
+          fieldDomId={fieldDomId}
+          value={other}
+          onChange={emitOtherText}
+          disabled={disabled}
+          accent={accent}
+        />
+      )}
+      {errorNode}
+    </fieldset>
+  );
+}
+
+function OtherWriteIn({
+  fieldDomId,
+  value,
+  onChange,
+  disabled,
+  accent,
+}: {
+  fieldDomId: string;
+  value: string;
+  onChange: (v: string) => void;
+  disabled: boolean;
+  accent: string;
+}) {
+  const id = `${fieldDomId}-other-text`;
+  return (
+    <div className="mt-2">
+      <label htmlFor={id} className="sr-only">Other — please specify</label>
+      <input
+        id={id}
+        type="text"
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="Please specify..."
+        className="block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:bg-gray-100"
+        style={{ outlineColor: accent }}
+      />
+    </div>
+  );
+}
+
+// =====================================================================
+// File upload field (upload_request) — POSTs each file to the P3 endpoint
+// =====================================================================
+
+interface FileUploadFieldProps {
+  token: string;
+  docId: number;
+  field: OnboardingQuestionnaireField;
+  value: OnboardingAnswerValue | undefined;
+  onChange: (value: OnboardingAnswerValue) => void;
+  disabled: boolean;
+  accent: string;
+  labelNode: React.ReactNode;
+  help: React.ReactNode;
+  helpId?: string;
+  invalid?: boolean;
+  errorId?: string;
+  errorNode?: React.ReactNode;
+  requestHeaders: () => Record<string, string> | undefined;
+}
+
+/** One uploaded file row as reflected back from the P3 ``/files`` endpoint. */
+interface UploadedFile {
+  upload_id: number;
+  field_id: string;
+  original_filename: string;
+}
+
+function FileUploadField({
+  token,
+  docId,
+  field,
+  value,
+  onChange,
+  disabled,
+  accent,
+  labelNode,
+  help,
+  helpId,
+  invalid,
+  errorId,
+  errorNode,
+  requestHeaders,
+}: FileUploadFieldProps) {
+  const inputId = `onb-file-${docId}-${field.id}`;
+  const limitsId = `${inputId}-limits`;
+  const maxFiles = field.maxFiles ?? 5;
+  const maxMB = field.maxMB ?? 10;
+
+  // The answer for a file_upload field is the list of upload ids; we keep a
+  // richer local list (with filenames) for display and reflect the ids back as
+  // the draft answer so the completion gate counts them. On (re)load the draft
+  // answer carries only the ids — seed the count from them so a reload reflects
+  // already-uploaded files; P3's doc payload (``field_uploads`` with names)
+  // rehydrates the filenames when wired.
+  const [files, setFiles] = useState<UploadedFile[]>(() =>
+    (Array.isArray(value) ? value : []).map((id) => ({
+      upload_id: Number(id),
+      field_id: field.id,
+      original_filename: `Uploaded file #${id}`,
+    })),
+  );
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Reflect the current file ids into the draft answer (the version-fence PATCH
+  // ignores these; uploads have their own endpoint, §C.2).
+  const reflect = useCallback(
+    (next: UploadedFile[]) => {
+      setFiles(next);
+      onChange(next.map((f) => String(f.upload_id)));
+    },
+    [onChange],
+  );
+
+  const handleSelect = useCallback(
+    async (selected: FileList | null) => {
+      if (!selected || selected.length === 0) return;
+      setError(null);
+      const remaining = maxFiles - files.length;
+      if (remaining <= 0) {
+        setError(`You can upload at most ${maxFiles} file${maxFiles === 1 ? '' : 's'}.`);
+        return;
+      }
+      const toUpload = Array.from(selected).slice(0, remaining);
+      setUploading(true);
+      const added: UploadedFile[] = [];
+      try {
+        for (const file of toUpload) {
+          if (file.size > maxMB * 1024 * 1024) {
+            setError(`"${file.name}" exceeds the ${maxMB} MB limit.`);
+            continue;
+          }
+          const form = new FormData();
+          form.append('field_id', field.id);
+          form.append('file', file);
+          const res = await publicClient.post<UploadedFile>(
+            `/api/onboarding/public/${token}/documents/${docId}/files`,
+            form,
+            { headers: { ...requestHeaders(), 'Content-Type': 'multipart/form-data' } },
+          );
+          added.push({
+            upload_id: res.data.upload_id,
+            field_id: res.data.field_id,
+            original_filename: res.data.original_filename,
+          });
+        }
+        if (added.length > 0) reflect([...files, ...added]);
+      } catch (err) {
+        setError(publicErrorMessage(err, 'We could not upload that file. Please try again.'));
+      } finally {
+        setUploading(false);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
+    },
+    [field.id, files, maxFiles, maxMB, token, docId, requestHeaders, reflect],
+  );
+
+  const removeFile = useCallback(
+    async (uploadId: number) => {
+      setError(null);
+      try {
+        await publicClient.delete(
+          `/api/onboarding/public/${token}/documents/${docId}/files/${uploadId}`,
+          { headers: requestHeaders() },
+        );
+        reflect(files.filter((f) => f.upload_id !== uploadId));
+      } catch (err) {
+        setError(publicErrorMessage(err, 'We could not remove that file. Please try again.'));
+      }
+    },
+    [files, token, docId, requestHeaders, reflect],
+  );
+
+  const atLimit = files.length >= maxFiles;
+
+  return (
+    <div>
+      <label htmlFor={inputId}>{labelNode}</label>
+      {help}
+      <p id={limitsId} className="mt-0.5 text-xs text-gray-500">
+        Up to {maxFiles} file{maxFiles === 1 ? '' : 's'}, {maxMB} MB each ·{' '}
+        <span style={{ fontVariantNumeric: 'tabular-nums' }}>{files.length}/{maxFiles}</span> uploaded
+      </p>
+      <input
+        ref={fileInputRef}
+        id={inputId}
+        type="file"
+        name={field.id}
+        // PF4: native picker hint mirroring the backend allow-list (the server
+        // sniff + allow-list stays the authoritative backstop).
+        accept={ONBOARDING_UPLOAD_ACCEPT}
+        multiple={maxFiles > 1}
+        disabled={disabled || uploading || atLimit}
+        aria-required={!!field.required}
+        aria-invalid={invalid || undefined}
+        aria-errormessage={errorId}
+        aria-describedby={[helpId, limitsId, errorId].filter(Boolean).join(' ') || undefined}
+        onChange={(e) => void handleSelect(e.target.files)}
+        className="mt-2 block w-full text-sm text-gray-700 file:mr-3 file:rounded file:border-0 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white disabled:opacity-50"
+        style={{ ['--tw-file-bg' as string]: accent } as React.CSSProperties}
+      />
+      {uploading && (
+        <p role="status" aria-live="polite" className="mt-2 inline-flex items-center gap-1 text-xs text-gray-600">
+          <ArrowPathIcon className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+          Uploading…
+        </p>
+      )}
+      {error && (
+        <p role="alert" aria-live="polite" className="mt-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded px-3 py-2">
+          {error}
+        </p>
+      )}
+      {files.length > 0 && (
+        <ul className="mt-3 space-y-1.5">
+          {files.map((f) => (
+            <li
+              key={f.upload_id}
+              className="flex items-center justify-between gap-3 rounded border border-gray-200 bg-white px-3 py-2 text-sm"
+            >
+              <span className="truncate text-gray-800">{f.original_filename}</span>
+              <button
+                type="button"
+                onClick={() => void removeFile(f.upload_id)}
+                disabled={disabled}
+                aria-label={`Remove ${f.original_filename}`}
+                className="text-xs font-medium text-red-600 hover:text-red-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 rounded disabled:opacity-50"
+                style={{ outlineColor: accent }}
+              >
+                Remove
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {errorNode}
+    </div>
+  );
+}
+
+// =====================================================================
 // Document filler — pdf.js canvas + editable field inputs overlaid
 // =====================================================================
 
 interface DocumentFillerProps {
   token: string;
   doc: OnboardingPublicDocument;
-  values: Record<string, string>;
-  onFieldChange: (fieldId: string, value: string) => void;
+  values: Record<string, OnboardingAnswerValue>;
+  onFieldChange: (fieldId: string, value: OnboardingAnswerValue) => void;
   disabled: boolean;
   accent: string;
   primary: string;
@@ -1138,6 +2156,10 @@ function DocumentFiller({
   primary,
   requestHeaders,
 }: DocumentFillerProps) {
+  // This component only renders for an ``esign_pdf`` doc (the FillFlow branches
+  // form kinds to QuestionnaireFiller), so its field definitions are the PDF
+  // coord list — narrow the union once here for the page/box reads below.
+  const esignFields = doc.field_definitions as OnboardingFieldDefinition[];
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const docRef = useRef<PDFDocumentProxy | null>(null);
   const renderTaskRef = useRef<{ cancel: () => void } | null>(null);
@@ -1181,7 +2203,7 @@ function DocumentFiller({
         setPageCount(pdf.numPages);
         // Seed to the first page that actually has a field, so single-field
         // documents don't open on a blank cover page.
-        const firstFieldPage = doc.field_definitions[0]?.page;
+        const firstFieldPage = esignFields[0]?.page;
         setPageIdx(firstFieldPage ? clamp(firstFieldPage - 1, 0, pdf.numPages - 1) : 0);
         setLoadingDoc(false);
       } catch (err) {
@@ -1203,7 +2225,7 @@ function DocumentFiller({
       }
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [token, doc.id, doc.field_definitions, requestHeaders]);
+  }, [token, doc.id, esignFields, requestHeaders]);
 
   // Render the active page to the canvas at RENDER_SCALE (natural pixels).
   useEffect(() => {
@@ -1267,7 +2289,7 @@ function DocumentFiller({
   // Fields visible on the current page, positioned in natural canvas pixels.
   const visibleFields: Array<{ field: OnboardingFieldDefinition; box: DrawnBox }> = [];
   if (canvasSize) {
-    for (const field of doc.field_definitions) {
+    for (const field of esignFields) {
       if (field.page - 1 === pageIdx) {
         visibleFields.push({ field, box: pdfCoordsToBox(field, canvasSize.h) });
       }
@@ -1346,7 +2368,11 @@ function DocumentFiller({
                     key={field.id}
                     field={field}
                     box={box}
-                    value={values[field.id] ?? ''}
+                    value={
+                      typeof values[field.id] === 'string'
+                        ? (values[field.id] as string)
+                        : ''
+                    }
                     onChange={(v) => onFieldChange(field.id, v)}
                     disabled={disabled}
                     accent={accent}

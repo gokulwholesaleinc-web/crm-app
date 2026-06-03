@@ -59,12 +59,48 @@ async def get_upload_url(object_key: str) -> str:
     )
 
 
-async def get_download_url(object_key: str, ttl_sec: int = 3600) -> str:
+def _safe_disposition_filename(filename: str) -> str:
+    """A header-safe ``filename`` token for ``Content-Disposition``.
+
+    Strips CR/LF (header-injection) and double-quotes (which would close the
+    quoted-string early), keeping a plain ASCII-ish basename. boto URL-encodes
+    the whole param value into the presigned query string, so this only has to
+    guarantee a well-formed quoted-string — not percent-encoding.
+    """
+    cleaned = "".join(c for c in filename if c not in '"\r\n').strip()
+    return cleaned or "download"
+
+
+async def get_download_url(
+    object_key: str,
+    ttl_sec: int = 3600,
+    *,
+    filename: str | None = None,
+    content_type: str = "application/octet-stream",
+) -> str:
+    """Presign a GET. When ``filename`` is given, force an ATTACHMENT download
+    (never an inline render) by baking ``response-content-disposition`` +
+    ``response-content-type`` into the signed URL.
+
+    R2/S3 only honour these as *signed* query params (an unsigned override is
+    ignored), so they must be part of the presign ``Params`` — they cannot be
+    added to the redirect afterward. Without them a renamed active-content file
+    (e.g. an HTML/SVG payload, or PII a sniffing browser would render inline)
+    could open in the browser tab; the local-disk ``FileResponse`` branch sets
+    the equivalent ``attachment`` + nosniff headers, and this closes the same
+    gap on the object-storage redirect branch (§D.4 / PF3).
+    """
+    params: dict[str, str] = {"Bucket": _get_bucket_name(), "Key": object_key}
+    if filename is not None:
+        params["ResponseContentDisposition"] = (
+            f'attachment; filename="{_safe_disposition_filename(filename)}"'
+        )
+        params["ResponseContentType"] = content_type
     client = _get_r2_client()
     return await _run_boto(
         lambda: client.generate_presigned_url(
             "get_object",
-            Params={"Bucket": _get_bucket_name(), "Key": object_key},
+            Params=params,
             ExpiresIn=ttl_sec,
         )
     )

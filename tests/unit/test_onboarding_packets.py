@@ -157,6 +157,35 @@ async def test_revoke_already_terminal_raises_409(db_session, test_contact):
         await cleanup_packet_storage(db_session, service, packet.id)
 
 
+async def test_expiry_sweep_scrubs_then_flips_status(db_session, test_contact):
+    """SF1: the list-time expiry sweep SCRUBS PII and only THEN flips status to
+    the terminal ``expired`` (status is the last mutation). The end state proves
+    both halves ran in order: PII gone AND status terminal AND token invalidated.
+    """
+    service, packet, raw = await _packet_with_values(db_session, test_contact.id)
+    # Plant a saved answer + signature so we can confirm the scrub actually ran.
+    [doc] = await service.load_documents(packet.id)
+    doc.field_values = {"name": "Jane Client"}
+    old_hash = packet.token_hash
+    # Force the access token into the past so the sweep treats it as expired.
+    packet.token_expires_at = datetime.now(UTC) - timedelta(hours=1)
+    await db_session.flush()
+
+    try:
+        # list_packets runs _sweep_packet on every row.
+        await service.list_packets(test_contact.id)
+
+        assert packet.status == "expired"          # terminal flip happened
+        assert packet.token_hash != old_hash       # token invalidated (dead hash)
+        assert not tokens.verify_hash(raw, packet.token_hash)
+        # PII scrubbed BEFORE the flip — proves the scrub completed.
+        assert packet.signer_signature_image is None
+        for d in await service.load_documents(packet.id):
+            assert d.field_values == {}
+    finally:
+        await cleanup_packet_storage(db_session, service, packet.id)
+
+
 async def test_purge_pii_nulls_values_and_signature(db_session, test_contact):
     """Should null field_values + signature but leave status unchanged."""
     service, packet, _ = await _packet_with_values(db_session, test_contact.id)

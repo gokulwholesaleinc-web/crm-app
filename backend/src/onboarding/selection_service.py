@@ -16,6 +16,7 @@ from __future__ import annotations
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.onboarding.kinds import KIND_HANDLERS
 from src.onboarding.models import (
     OnboardingTemplate,
     ProposalOnboardingSelection,
@@ -184,29 +185,37 @@ class SelectionService:
             )
 
     async def _assert_templates_active(self, template_ids: list[int]) -> None:
-        """422 if any template is missing, retired, or has no PDF.
+        """422 if any template is missing, retired, unknown-kind, or (for a
+        PDF-copy kind) has no PDF.
 
-        A no-PDF template would pass this guard but blow up later in the
-        trigger's ``create_packet`` (which requires a PDF), turning a clean
+        A no-PDF esign template would pass this guard but blow up later in the
+        trigger's ``create_packet`` (which copies a PDF), turning a clean
         SET-time 422 into a silent acceptance-time failure — so reject it here.
+        A questionnaire/upload template legitimately has no PDF (P0-5), so the
+        PDF requirement is gated on the kind's ``needs_pdf_copy``.
         """
         result = await self.db.execute(
             select(
                 OnboardingTemplate.id,
                 OnboardingTemplate.is_active,
                 OnboardingTemplate.pdf_path,
+                OnboardingTemplate.kind,
             ).where(OnboardingTemplate.id.in_(template_ids))
         )
-        by_id = {row[0]: (row[1], row[2]) for row in result.all()}
+        by_id = {row[0]: (row[1], row[2], row[3]) for row in result.all()}
         for tid in template_ids:
             if tid not in by_id:
                 raise PacketValidationError(f"Template {tid} not found.")
-            is_active, pdf_path = by_id[tid]
+            is_active, pdf_path, kind = by_id[tid]
             if not is_active:
                 raise PacketValidationError(
                     f"Template {tid} is retired and cannot be selected."
                 )
-            if not pdf_path:
+            if kind not in KIND_HANDLERS:
+                raise PacketValidationError(
+                    f"Template {tid} has an unknown kind '{kind}'."
+                )
+            if KIND_HANDLERS[kind].needs_pdf_copy and not pdf_path:
                 raise PacketValidationError(
                     f"Template {tid} has no PDF uploaded yet and cannot be "
                     "selected."

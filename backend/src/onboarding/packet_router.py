@@ -8,7 +8,8 @@ create gates ``contacts.create``, mutations gate ``contacts.update``.
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import select
 
 from src.auth.models import User
 from src.core.constants import HTTPStatus
@@ -16,12 +17,18 @@ from src.core.data_scope import DataScope, get_data_scope
 from src.core.entity_access import require_entity_access
 from src.core.permissions import require_permission
 from src.core.router_utils import DBSession, raise_not_found
-from src.onboarding import completion
+from src.onboarding import completion, crypto
+from src.onboarding.models import (
+    OnboardingPacketDocument,
+    OnboardingSecretValue,
+)
 from src.onboarding.packet_schemas import (
     PacketCreate,
     PacketResponse,
     PurgeResult,
     ResendResult,
+    SecretValue,
+    SecretValuesResponse,
 )
 from src.onboarding.packet_service import PacketService
 from src.onboarding.packet_view import build_packet_response
@@ -209,3 +216,94 @@ async def purge_pii(
     )
     await service.purge_pii(packet)
     return PurgeResult(purged=True)
+
+
+async def _assert_owner_or_admin(db, packet, data_scope: DataScope) -> None:
+    """Owner-or-admin gate for the sensitive-secret read (§D.4 / §F #3).
+
+    The route already ran ``require_entity_access`` (contact access). For the
+    encrypted F4-password read that is NOT enough: only an admin/manager
+    (``can_see_all``) OR the contact OWNER may decrypt. A shared-list reader is
+    refused.
+    """
+    if data_scope.can_see_all():
+        return
+    from src.contacts.models import Contact
+
+    owner_id = (
+        await db.execute(
+            select(Contact.owner_id).where(Contact.id == packet.contact_id)
+        )
+    ).scalar_one_or_none()
+    if owner_id is None or owner_id != data_scope.user_id:
+        raise HTTPException(
+            status_code=HTTPStatus.FORBIDDEN,
+            detail="Only the contact owner or an admin may read these values.",
+        )
+
+
+@router.get(
+    "/packets/{packet_id}/documents/{doc_id}/secrets",
+    response_model=SecretValuesResponse,
+)
+async def get_document_secrets(
+    packet_id: int,
+    doc_id: int,
+    current_user: ReadUser,
+    db: DBSession,
+    data_scope: Scope,
+):
+    """Decrypt + return a document's sensitive answers (owner/admin only, §F #1).
+
+    F4 passwords are stored as Fernet ciphertext (``onboarding_secret_values``)
+    and NEVER rendered into the summary PDF or the public GET. This is the ONLY
+    read path back to the plaintext — gated owner-or-admin, decrypting via
+    ``crypto.decrypt_field``. A missing ``ONBOARDING_FIELD_KEY`` (or a token
+    encrypted under a rotated-out key) fails loudly (503) rather than returning
+    garbage.
+    """
+    service, packet = await _load_packet_checked(
+        db, packet_id, current_user, data_scope
+    )
+    await _assert_owner_or_admin(db, packet, data_scope)
+
+    doc = (
+        await db.execute(
+            select(OnboardingPacketDocument)
+            .where(OnboardingPacketDocument.id == doc_id)
+            .where(OnboardingPacketDocument.packet_id == packet_id)
+        )
+    ).scalar_one_or_none()
+    if doc is None:
+        raise_not_found("Onboarding document", doc_id)
+
+    labels = {
+        f.get("id"): f.get("label")
+        for f in (doc.field_definitions or [])
+        if f.get("id")
+    }
+    rows = (
+        await db.execute(
+            select(OnboardingSecretValue)
+            .where(OnboardingSecretValue.packet_document_id == doc_id)
+            .order_by(OnboardingSecretValue.field_id)
+        )
+    ).scalars().all()
+
+    values: list[SecretValue] = []
+    for row in rows:
+        try:
+            plaintext = crypto.decrypt_field(row.ciphertext)
+        except crypto.OnboardingCryptoError as exc:
+            raise HTTPException(
+                status_code=HTTPStatus.SERVICE_UNAVAILABLE,
+                detail="Secret decryption is unavailable.",
+            ) from exc
+        values.append(
+            SecretValue(
+                field_id=row.field_id,
+                label=labels.get(row.field_id),
+                value=plaintext,
+            )
+        )
+    return SecretValuesResponse(document_id=doc_id, values=values)

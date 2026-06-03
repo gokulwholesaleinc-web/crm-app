@@ -252,6 +252,39 @@ class TestCreateTemplate:
         assert resp.status_code == 201, resp.text
         assert resp.json()["requires_esign"] is False
 
+    @pytest.mark.asyncio
+    async def test_create_duplicate_name_422(self, client, auth_headers):
+        """S1: a second template with the same name → clean 422 (not a 500).
+
+        The unique constraint ``uq_onboarding_templates_name`` (created by
+        ``Base.metadata.create_all`` on the SQLite test DB) raises an
+        IntegrityError that ``service.create`` translates to
+        ``DuplicateTemplateNameError`` → 422. No duplicate row is created.
+        """
+        first = await client.post(
+            "/api/onboarding/templates",
+            json={"name": "Strategy Intake"},
+            headers=auth_headers,
+        )
+        assert first.status_code == 201, first.text
+
+        dup = await client.post(
+            "/api/onboarding/templates",
+            json={"name": "Strategy Intake"},
+            headers=auth_headers,
+        )
+        assert dup.status_code == 422, dup.text
+        assert "already exists" in dup.json()["detail"].lower()
+
+        # The session is still usable after the rolled-back collision — a
+        # differently-named create still succeeds.
+        ok = await client.post(
+            "/api/onboarding/templates",
+            json={"name": "Strategy Intake 2"},
+            headers=auth_headers,
+        )
+        assert ok.status_code == 201, ok.text
+
 
 # =============================================================================
 # GET /templates  (global team library)

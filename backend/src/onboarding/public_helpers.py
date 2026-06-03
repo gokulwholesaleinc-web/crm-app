@@ -74,7 +74,9 @@ async def load_packet_for_public(
     ):
         documents = await service.load_documents(packet.id)
         packet.status = "expired"
-        scrub_packet(packet, documents)
+        # Expiry is a non-delivery terminal — full PII purge (delete uploads +
+        # secrets), unlike completion which retains the deliverable.
+        await scrub_packet(db, packet, documents, purge=True)
         await db.commit()
         raise HTTPException(
             status_code=HTTPStatus.GONE,
