@@ -9,6 +9,7 @@ create gates ``contacts.create``, mutations gate ``contacts.update``.
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 from sqlalchemy import select
 
 from src.auth.models import User
@@ -24,6 +25,7 @@ from src.onboarding.completion_notices import queue_invite
 from src.onboarding.models import (
     OnboardingPacket,
     OnboardingPacketDocument,
+    OnboardingPacketUpload,
     OnboardingSecretValue,
 )
 from src.onboarding.packet_schemas import (
@@ -35,8 +37,13 @@ from src.onboarding.packet_schemas import (
     SecretValue,
     SecretValuesResponse,
 )
-from src.onboarding.packet_service import PacketService
+from src.onboarding.packet_service import PacketService, ensure_pdf_suffix
 from src.onboarding.packet_view import build_packet_response
+from src.onboarding.public_helpers import (
+    NO_STORE_HEADERS,
+    read_pdf_or_http,
+    safe_content_disposition_filename,
+)
 from src.onboarding.validation import packet_errors_mapped
 
 router = APIRouter(prefix="/api/onboarding", tags=["onboarding-packets"])
@@ -386,3 +393,114 @@ async def get_document_secrets(
             )
         )
     return SecretValuesResponse(document_id=doc_id, values=values)
+
+
+def _inline_attachment_response(
+    content: bytes, *, media_type: str, filename: str
+) -> Response:
+    """Proxy attachment bytes inline (no-store, nosniff) for a staff preview.
+
+    A counterpart to the forced-download attachments route: staff want to view
+    onboarding deliverables in a browser tab. ``nosniff`` pins the declared
+    type; the bytes are an app-generated PDF or an upload that passed the
+    allow-list + magic-byte sniff, so inline rendering carries no stored-XSS
+    surface.
+    """
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={
+            **NO_STORE_HEADERS,
+            "X-Content-Type-Options": "nosniff",
+            "Content-Disposition": f'inline; filename="{filename}"',
+        },
+    )
+
+
+@router.get("/packets/{packet_id}/uploads/{upload_id}/view", response_model=None)
+async def view_packet_upload(
+    packet_id: int,
+    upload_id: int,
+    current_user: ReadUser,
+    db: DBSession,
+    data_scope: Scope,
+):
+    """Stream one client-uploaded file inline (staff preview, contact-access).
+
+    Scoped to this packet's documents so a guessed id can't read another
+    packet's file. A ``sensitive`` upload (gov-ID etc.) is owner/admin-only —
+    the same bar the generic attachments download enforces (§D.4).
+    """
+    service, packet = await _load_packet_checked(
+        db, packet_id, current_user, data_scope
+    )
+    upload = (
+        await db.execute(
+            select(OnboardingPacketUpload)
+            .join(
+                OnboardingPacketDocument,
+                OnboardingPacketUpload.packet_document_id
+                == OnboardingPacketDocument.id,
+            )
+            .where(OnboardingPacketUpload.id == upload_id)
+            .where(OnboardingPacketDocument.packet_id == packet_id)
+        )
+    ).scalar_one_or_none()
+    if upload is None or upload.attachment_id is None:
+        raise_not_found("Uploaded file", upload_id)
+    if upload.sensitive:
+        await _assert_owner_or_admin(db, packet, data_scope)
+
+    from src.attachments.service import AttachmentService
+
+    attachment = await AttachmentService(db).get_attachment(upload.attachment_id)
+    if attachment is None:
+        raise_not_found("Uploaded file", upload_id)
+    content = await read_pdf_or_http(attachment.file_path)
+    return _inline_attachment_response(
+        content,
+        media_type=upload.mime_type,
+        filename=safe_content_disposition_filename(upload.original_filename),
+    )
+
+
+@router.get("/packets/{packet_id}/documents/{doc_id}/view", response_model=None)
+async def view_packet_document(
+    packet_id: int,
+    doc_id: int,
+    current_user: ReadUser,
+    db: DBSession,
+    data_scope: Scope,
+):
+    """Stream a completed document's generated PDF inline (staff preview).
+
+    This is how staff see "what the client entered" — the filled/signed PDF the
+    completion run landed on the document's ``attachment_id``. A document with no
+    attachment yet (not completed) → 404. Contact-access gated.
+    """
+    service, packet = await _load_packet_checked(
+        db, packet_id, current_user, data_scope
+    )
+    doc = (
+        await db.execute(
+            select(OnboardingPacketDocument)
+            .where(OnboardingPacketDocument.id == doc_id)
+            .where(OnboardingPacketDocument.packet_id == packet_id)
+        )
+    ).scalar_one_or_none()
+    if doc is None or doc.attachment_id is None:
+        raise_not_found("Onboarding document", doc_id)
+
+    from src.attachments.service import AttachmentService
+
+    attachment = await AttachmentService(db).get_attachment(doc.attachment_id)
+    if attachment is None:
+        raise_not_found("Onboarding document", doc_id)
+    content = await read_pdf_or_http(attachment.file_path)
+    return _inline_attachment_response(
+        content,
+        media_type="application/pdf",
+        filename=safe_content_disposition_filename(
+            ensure_pdf_suffix(doc.original_filename)
+        ),
+    )

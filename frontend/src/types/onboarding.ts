@@ -174,6 +174,8 @@ export interface OnboardingPacketDocumentSummary {
   requires_esign: boolean;
   status: string;
   completed_at?: string | null;
+  /** The generated/signed deliverable PDF — set once the document completes. */
+  attachment_id?: number | null;
 }
 
 /**

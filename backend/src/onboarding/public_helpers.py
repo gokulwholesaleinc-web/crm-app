@@ -25,6 +25,20 @@ _BodyModel = TypeVar("_BodyModel", bound=BaseModel)
 # field_values JSON). Shared by the public + download routers (one source).
 NO_STORE_HEADERS = {"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"}
 
+# Only these chars survive into a Content-Disposition filename. Client-uploaded
+# names are attacker-controlled, so we strip everything else (CR/LF header
+# injection, quotes/backslash that break the quoted-string, and non-latin1 bytes
+# Starlette can't header-encode) to a single safe ASCII token.
+import re as _re
+
+_CD_FILENAME_UNSAFE = _re.compile(r"[^A-Za-z0-9._ -]+")
+
+
+def safe_content_disposition_filename(name: str | None) -> str:
+    """Collapse a client-supplied filename to a header-safe ASCII token."""
+    cleaned = _CD_FILENAME_UNSAFE.sub("_", (name or "").strip()).strip("._ ")
+    return cleaned[:200] or "file"
+
 # Re-exported for the download router's expiry check (single UTC-now source).
 from src.onboarding.packet_service import (
     DEAD_STATUSES,

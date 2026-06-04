@@ -45,9 +45,11 @@ from src.onboarding.public_helpers import (
     read_pdf_or_http,
     require_session,
     resolve_public_branding,
+    safe_content_disposition_filename,
 )
 from src.onboarding.uploads import (
     delete_document_upload,
+    get_document_upload,
     store_document_upload,
 )
 from src.onboarding.validation import complete_errors_mapped, packet_errors_mapped
@@ -333,6 +335,59 @@ async def upload_document_file(
         )
     await db.flush()
     return result
+
+
+@router.get("/{token}/documents/{doc_id}/files/{upload_id}", response_model=None)
+@limiter.limit("60/minute")
+async def view_document_file(
+    token: str, doc_id: int, upload_id: int, request: Request, db: DB
+):
+    """Stream one client-uploaded file inline so the recipient can review what
+    they uploaded before completing (session-gated).
+
+    Proxies the bytes (never an R2 redirect) like the document ``/pdf`` route,
+    so the no-store / no-referrer headers apply. The served MIME is the verified
+    extension-derived type stored on the upload row (never the client's declared
+    Content-Type), and ``nosniff`` pins it — combined with the upload-time
+    allow-list + magic-byte sniff this makes inline rendering safe (no
+    stored-XSS surface). The recipient is viewing their OWN just-uploaded file
+    within their verified session, so ``sensitive`` files are not extra-gated
+    here (that gate is for the post-completion staff download).
+    """
+    packet, service = await load_packet_for_public(db, token)
+    require_session(request, packet)
+    if packet.status in ("completing", "completed"):
+        raise HTTPException(
+            status_code=HTTPStatus.CONFLICT, detail="Packet is being finalized."
+        )
+    documents = await service.load_documents(packet.id)
+    doc = find_document_or_404(documents, doc_id)
+    with packet_errors_mapped():
+        upload = await get_document_upload(db, doc=doc, upload_id=upload_id)
+    if upload.attachment_id is None:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND,
+            detail="Uploaded file is no longer available.",
+        )
+    from src.attachments.service import AttachmentService
+
+    attachment = await AttachmentService(db).get_attachment(upload.attachment_id)
+    if attachment is None:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND,
+            detail="Uploaded file is no longer available.",
+        )
+    content = await read_pdf_or_http(attachment.file_path)
+    filename = safe_content_disposition_filename(upload.original_filename)
+    return Response(
+        content=content,
+        media_type=upload.mime_type,
+        headers={
+            **NO_STORE_HEADERS,
+            "X-Content-Type-Options": "nosniff",
+            "Content-Disposition": f'inline; filename="{filename}"',
+        },
+    )
 
 
 @router.delete(

@@ -159,6 +159,41 @@ export const getOnboardingPacket = async (
   return response.data;
 };
 
+/**
+ * Fetch a staff-side onboarding deliverable (a client upload or a completed
+ * document PDF) as a blob and open it inline in a new tab. The blank tab is
+ * claimed synchronously inside the click gesture so pop-up blockers don't
+ * swallow it, then navigated once the (auth'd) bytes arrive. Throws on failure
+ * so the caller can surface a toast.
+ */
+const openOnboardingFileInTab = async (url: string): Promise<void> => {
+  const win = window.open('', '_blank');
+  try {
+    const response = await apiClient.get<Blob>(url, { responseType: 'blob' });
+    const objectUrl = URL.createObjectURL(response.data);
+    if (win && !win.closed) win.location.href = objectUrl;
+    else window.open(objectUrl, '_blank', 'noopener');
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+  } catch (err) {
+    if (win && !win.closed) win.close();
+    throw err;
+  }
+};
+
+/** Open a client-uploaded file inline (staff preview). */
+export const viewOnboardingPacketUpload = (
+  packetId: number,
+  uploadId: number,
+): Promise<void> =>
+  openOnboardingFileInTab(`${PACKETS_BASE}/${packetId}/uploads/${uploadId}/view`);
+
+/** Open a completed document's generated PDF inline (staff preview). */
+export const viewOnboardingPacketDocument = (
+  packetId: number,
+  docId: number,
+): Promise<void> =>
+  openOnboardingFileInTab(`${PACKETS_BASE}/${packetId}/documents/${docId}/view`);
+
 /** Revoke a live packet — kills the link and scrubs PII. */
 export const revokeOnboardingPacket = async (
   packetId: number,

@@ -7,8 +7,10 @@ import {
   EnvelopeIcon,
   LinkIcon,
   PaperClipIcon,
+  DocumentTextIcon,
   ChevronDownIcon,
   ArrowDownTrayIcon,
+  EyeIcon,
 } from '@heroicons/react/24/outline';
 import { Button, Badge, ConfirmDialog, CopyButton } from '../../components/ui';
 import {
@@ -19,6 +21,8 @@ import {
   resendOnboardingCompletionNotice,
   resendOnboardingPacketInvite,
   regenerateOnboardingPacketLink,
+  viewOnboardingPacketUpload,
+  viewOnboardingPacketDocument,
 } from '../../api/onboarding';
 import { downloadAttachmentFile } from '../../api/attachments';
 import { formatDate, formatFileSize } from '../../utils/formatters';
@@ -30,7 +34,7 @@ import type {
   OnboardingPacket,
   OnboardingPacketStatus,
   OnboardingPacketDelivery,
-  OnboardingPacketUpload,
+  OnboardingPacketDocumentSummary,
 } from '../../types';
 
 export const PACKETS_KEY = ['onboarding-packets'] as const;
@@ -406,20 +410,33 @@ function PacketRow({
   );
 }
 
-/** Lazily fetch the packet detail (only when expanded) and list its uploads. */
+/** Lazily fetch the packet detail (only when expanded) and list its files. */
 function PacketFiles({ packetId }: { packetId: number }) {
+  // The id of the file currently opening in a new tab (keys disambiguate an
+  // upload from a document so both lists can show their own spinner).
+  const [viewingKey, setViewingKey] = useState<string | null>(null);
+
   const { data, isLoading, error } = useQuery({
     queryKey: ['onboarding-packet-detail', packetId],
     queryFn: () => getOnboardingPacket(packetId),
   });
 
-  const handleDownload = async (upload: OnboardingPacketUpload) => {
-    if (upload.attachment_id == null) {
+  // window.open must run inside the click gesture (the api helper opens the
+  // blank tab synchronously), so we call the thunk before any await here.
+  const runView = (key: string, open: () => Promise<void>) => {
+    setViewingKey(key);
+    open()
+      .catch(() => showError('Failed to open the file.'))
+      .finally(() => setViewingKey(null));
+  };
+
+  const handleDownload = async (attachmentId: number | null, filename: string) => {
+    if (attachmentId == null) {
       showError('This file is no longer available to download.');
       return;
     }
     try {
-      await downloadAttachmentFile(upload.attachment_id, upload.original_filename);
+      await downloadAttachmentFile(attachmentId, filename);
     } catch {
       showError('Failed to download the file.');
     }
@@ -429,42 +446,109 @@ function PacketFiles({ packetId }: { packetId: number }) {
   if (error) return <p className="mt-3 text-xs text-red-500">Failed to load files.</p>;
 
   const uploads = data?.uploads ?? [];
-  if (uploads.length === 0) {
-    return (
-      <p className="mt-3 text-xs text-gray-400 dark:text-gray-500">
-        No files uploaded by the client yet.
-      </p>
-    );
-  }
+  // Completed documents carry the generated/signed deliverable PDF — viewing it
+  // is how staff see "what the client entered".
+  const completedDocs = (data?.documents ?? []).filter(
+    (d): d is OnboardingPacketDocumentSummary & { attachment_id: number } =>
+      d.attachment_id != null,
+  );
 
   return (
-    <ul className="mt-3 space-y-1.5 rounded-md bg-gray-50 dark:bg-gray-800/40 p-2">
-      {uploads.map((u) => (
-        <li key={u.id} className="flex items-center gap-2">
-          <PaperClipIcon className="h-4 w-4 flex-shrink-0 text-gray-400" aria-hidden="true" />
-          <span className="min-w-0 flex-1 truncate text-sm text-gray-700 dark:text-gray-200" title={u.original_filename}>
-            {u.original_filename}
-          </span>
-          {u.sensitive && (
-            <Badge variant="yellow" size="sm">
-              Sensitive
-            </Badge>
-          )}
-          <span className="flex-shrink-0 text-xs text-gray-400" style={{ fontVariantNumeric: 'tabular-nums' }}>
-            {formatFileSize(u.byte_size)}
-          </span>
-          <button
-            type="button"
-            onClick={() => handleDownload(u)}
-            disabled={u.attachment_id == null}
-            aria-label={`Download ${u.original_filename}`}
-            className="rounded p-1 text-gray-400 hover:text-primary-600 disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-          >
-            <ArrowDownTrayIcon className="h-4 w-4" aria-hidden="true" />
-          </button>
-        </li>
-      ))}
-    </ul>
+    <div className="mt-3 space-y-3">
+      <section>
+        <h4 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+          Completed documents
+        </h4>
+        {completedDocs.length === 0 ? (
+          <p className="text-xs text-gray-400 dark:text-gray-500">
+            No completed documents yet — the signed/filled PDFs appear here once
+            the client finishes.
+          </p>
+        ) : (
+          <ul className="space-y-1.5 rounded-md bg-gray-50 dark:bg-gray-800/40 p-2">
+            {completedDocs.map((d) => {
+              const key = `doc-${d.id}`;
+              return (
+                <li key={d.id} className="flex items-center gap-2">
+                  <DocumentTextIcon className="h-4 w-4 flex-shrink-0 text-gray-400" aria-hidden="true" />
+                  <span className="min-w-0 flex-1 truncate text-sm text-gray-700 dark:text-gray-200" title={d.original_filename}>
+                    {d.original_filename}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => runView(key, () => viewOnboardingPacketDocument(packetId, d.id))}
+                    disabled={viewingKey === key}
+                    aria-label={`View ${d.original_filename}`}
+                    className="rounded p-1 text-gray-400 hover:text-primary-600 disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                  >
+                    <EyeIcon className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDownload(d.attachment_id, d.original_filename)}
+                    aria-label={`Download ${d.original_filename}`}
+                    className="rounded p-1 text-gray-400 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                  >
+                    <ArrowDownTrayIcon className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+
+      <section>
+        <h4 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+          Uploaded files
+        </h4>
+        {uploads.length === 0 ? (
+          <p className="text-xs text-gray-400 dark:text-gray-500">
+            No files uploaded by the client yet.
+          </p>
+        ) : (
+          <ul className="space-y-1.5 rounded-md bg-gray-50 dark:bg-gray-800/40 p-2">
+            {uploads.map((u) => {
+              const key = `upload-${u.id}`;
+              return (
+                <li key={u.id} className="flex items-center gap-2">
+                  <PaperClipIcon className="h-4 w-4 flex-shrink-0 text-gray-400" aria-hidden="true" />
+                  <span className="min-w-0 flex-1 truncate text-sm text-gray-700 dark:text-gray-200" title={u.original_filename}>
+                    {u.original_filename}
+                  </span>
+                  {u.sensitive && (
+                    <Badge variant="yellow" size="sm">
+                      Sensitive
+                    </Badge>
+                  )}
+                  <span className="flex-shrink-0 text-xs text-gray-400" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                    {formatFileSize(u.byte_size)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => runView(key, () => viewOnboardingPacketUpload(packetId, u.id))}
+                    disabled={u.attachment_id == null || viewingKey === key}
+                    aria-label={`View ${u.original_filename}`}
+                    className="rounded p-1 text-gray-400 hover:text-primary-600 disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                  >
+                    <EyeIcon className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDownload(u.attachment_id, u.original_filename)}
+                    disabled={u.attachment_id == null}
+                    aria-label={`Download ${u.original_filename}`}
+                    className="rounded p-1 text-gray-400 hover:text-primary-600 disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                  >
+                    <ArrowDownTrayIcon className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+    </div>
   );
 }
 

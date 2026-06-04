@@ -236,6 +236,25 @@ async def store_document_upload(
     )
 
 
+async def get_document_upload(
+    db: AsyncSession, *, doc: OnboardingPacketDocument, upload_id: int
+) -> OnboardingPacketUpload:
+    """Load one upload row scoped to ``doc`` (422-equivalent if it isn't this
+    document's). Mirrors the scope check in ``delete_document_upload`` so a
+    forwarded link can't read another document's file by guessing an id.
+    """
+    upload = (
+        await db.execute(
+            select(OnboardingPacketUpload)
+            .where(OnboardingPacketUpload.id == upload_id)
+            .where(OnboardingPacketUpload.packet_document_id == doc.id)
+        )
+    ).scalar_one_or_none()
+    if upload is None:
+        raise PacketValidationError("Uploaded file not found for this document.")
+    return upload
+
+
 async def delete_document_upload(
     db: AsyncSession, *, doc: OnboardingPacketDocument, upload_id: int
 ) -> FileDeleteResult:

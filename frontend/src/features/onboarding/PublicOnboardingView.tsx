@@ -1993,6 +1993,7 @@ function FileUploadField({
     })),
   );
   const [uploading, setUploading] = useState(false);
+  const [viewingId, setViewingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -2065,6 +2066,43 @@ function FileUploadField({
     [files, token, docId, requestHeaders, reflect],
   );
 
+  const viewFile = useCallback(
+    async (uploadId: number, filename: string) => {
+      setError(null);
+      // Claim the tab synchronously inside the click gesture so Safari/Firefox
+      // don't pop-up-block it; navigate it once the session-gated bytes arrive.
+      const win = window.open('', '_blank');
+      setViewingId(uploadId);
+      try {
+        const res = await publicClient.get<Blob>(
+          `/api/onboarding/public/${token}/documents/${docId}/files/${uploadId}`,
+          { responseType: 'blob', headers: requestHeaders() },
+        );
+        const objectUrl = URL.createObjectURL(res.data);
+        if (win && !win.closed) {
+          win.location.href = objectUrl;
+        } else {
+          // Pop-up blocked — fall back to a download so the file still opens.
+          const a = document.createElement('a');
+          a.href = objectUrl;
+          a.download = filename;
+          a.rel = 'noopener';
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+        }
+        // Revoke after the new tab has had time to load the blob.
+        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+      } catch (err) {
+        if (win && !win.closed) win.close();
+        setError(publicErrorMessage(err, 'We could not open that file. Please try again.'));
+      } finally {
+        setViewingId(null);
+      }
+    },
+    [token, docId, requestHeaders],
+  );
+
   const atLimit = files.length >= maxFiles;
 
   return (
@@ -2112,16 +2150,28 @@ function FileUploadField({
               className="flex items-center justify-between gap-3 rounded border border-gray-200 bg-white px-3 py-2 text-sm"
             >
               <span className="truncate text-gray-800">{f.original_filename}</span>
-              <button
-                type="button"
-                onClick={() => void removeFile(f.upload_id)}
-                disabled={disabled}
-                aria-label={`Remove ${f.original_filename}`}
-                className="text-xs font-medium text-red-600 hover:text-red-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 rounded disabled:opacity-50"
-                style={{ outlineColor: accent }}
-              >
-                Remove
-              </button>
+              <div className="flex flex-shrink-0 items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => void viewFile(f.upload_id, f.original_filename)}
+                  disabled={viewingId === f.upload_id}
+                  aria-label={`View ${f.original_filename}`}
+                  className="text-xs font-medium text-gray-600 hover:text-gray-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 rounded disabled:opacity-50"
+                  style={{ outlineColor: accent }}
+                >
+                  {viewingId === f.upload_id ? 'Opening…' : 'View'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void removeFile(f.upload_id)}
+                  disabled={disabled}
+                  aria-label={`Remove ${f.original_filename}`}
+                  className="text-xs font-medium text-red-600 hover:text-red-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 rounded disabled:opacity-50"
+                  style={{ outlineColor: accent }}
+                >
+                  Remove
+                </button>
+              </div>
             </li>
           ))}
         </ul>

@@ -577,6 +577,206 @@ async def test_completion_422s_when_required_upload_missing(
         await _cleanup(db_session)
 
 
+# --------------------------------------------------------------------------
+# View: stream an uploaded file inline (client preview before completion)
+# --------------------------------------------------------------------------
+
+
+async def test_view_upload_streams_inline(client, db_session, test_contact):
+    """GET the file route returns the exact bytes inline with the verified mime."""
+    service, packet, raw = await _make_upload_packet(
+        db_session, test_contact.id, [_upload_field()]
+    )
+    headers = await _session(client, raw)
+    doc_id = await _doc_id(service, packet)
+    png = _png(128)
+    try:
+        up = await client.post(
+            f"/api/onboarding/public/{raw}/documents/{doc_id}/files",
+            headers=headers,
+            data={"field_id": "gov_id"},
+            files={"file": ("id.png", io.BytesIO(png), "image/png")},
+        )
+        assert up.status_code == 201, up.text
+        upload_id = up.json()["upload_id"]
+
+        view = await client.get(
+            f"/api/onboarding/public/{raw}/documents/{doc_id}/files/{upload_id}",
+            headers=headers,
+        )
+        assert view.status_code == 200, view.text
+        assert view.content == png  # exact bytes proxied
+        assert view.headers["content-type"].startswith("image/png")
+        assert view.headers["x-content-type-options"] == "nosniff"
+        assert "inline" in view.headers["content-disposition"]
+    finally:
+        await _cleanup(db_session)
+
+
+async def test_view_upload_requires_session(client, db_session, test_contact):
+    """No session header → 401 (the email gate protects the uploaded bytes)."""
+    service, packet, raw = await _make_upload_packet(
+        db_session, test_contact.id, [_upload_field()]
+    )
+    headers = await _session(client, raw)
+    doc_id = await _doc_id(service, packet)
+    try:
+        up = await client.post(
+            f"/api/onboarding/public/{raw}/documents/{doc_id}/files",
+            headers=headers,
+            data={"field_id": "gov_id"},
+            files={"file": ("id.png", io.BytesIO(_png()), "image/png")},
+        )
+        upload_id = up.json()["upload_id"]
+        # No X-Onboarding-Session header → unauthorized.
+        view = await client.get(
+            f"/api/onboarding/public/{raw}/documents/{doc_id}/files/{upload_id}"
+        )
+        assert view.status_code == 401, view.text
+    finally:
+        await _cleanup(db_session)
+
+
+async def test_view_unknown_upload_id_rejected(client, db_session, test_contact):
+    """An upload id that isn't this document's → 422 (no cross-document read)."""
+    service, packet, raw = await _make_upload_packet(
+        db_session, test_contact.id, [_upload_field()]
+    )
+    headers = await _session(client, raw)
+    doc_id = await _doc_id(service, packet)
+    try:
+        view = await client.get(
+            f"/api/onboarding/public/{raw}/documents/{doc_id}/files/999999",
+            headers=headers,
+        )
+        assert view.status_code == 422, view.text
+    finally:
+        await _cleanup(db_session)
+
+
+# --------------------------------------------------------------------------
+# Staff inline-view endpoints (the Onboarding-tab "View" buttons)
+# --------------------------------------------------------------------------
+
+
+async def test_staff_view_upload_inline(
+    client, db_session, test_contact, test_user, auth_headers
+):
+    """Staff GET /packets/{id}/uploads/{upload_id}/view streams bytes inline."""
+    service, packet, raw = await _make_upload_packet(
+        db_session, test_contact.id, [_upload_field()], created_by_id=test_user.id
+    )
+    headers = await _session(client, raw)
+    doc_id = await _doc_id(service, packet)
+    png = _png(96)
+    try:
+        up = await client.post(
+            f"/api/onboarding/public/{raw}/documents/{doc_id}/files",
+            headers=headers,
+            data={"field_id": "gov_id"},
+            files={"file": ("id.png", io.BytesIO(png), "image/png")},
+        )
+        upload_id = up.json()["upload_id"]
+
+        view = await client.get(
+            f"/api/onboarding/packets/{packet.id}/uploads/{upload_id}/view",
+            headers=auth_headers,
+        )
+        assert view.status_code == 200, view.text
+        assert view.content == png
+        assert view.headers["content-type"].startswith("image/png")
+        assert view.headers["x-content-type-options"] == "nosniff"
+        assert "inline" in view.headers["content-disposition"]
+    finally:
+        await _cleanup(db_session)
+
+
+async def test_staff_view_sensitive_upload_allowed_for_owner(
+    client, db_session, test_contact, test_user, auth_headers
+):
+    """The contact owner may view a sensitive upload (owner/admin gate passes)."""
+    service, packet, raw = await _make_upload_packet(
+        db_session,
+        test_contact.id,
+        [_upload_field("ssn_doc", sensitive=True)],
+        created_by_id=test_user.id,
+    )
+    headers = await _session(client, raw)
+    doc_id = await _doc_id(service, packet)
+    try:
+        up = await client.post(
+            f"/api/onboarding/public/{raw}/documents/{doc_id}/files",
+            headers=headers,
+            data={"field_id": "ssn_doc"},
+            files={"file": ("id.pdf", io.BytesIO(one_page_pdf()), "application/pdf")},
+        )
+        upload_id = up.json()["upload_id"]
+        view = await client.get(
+            f"/api/onboarding/packets/{packet.id}/uploads/{upload_id}/view",
+            headers=auth_headers,
+        )
+        assert view.status_code == 200, view.text
+        assert view.headers["content-type"] == "application/pdf"
+    finally:
+        await _cleanup(db_session)
+
+
+async def test_staff_view_unknown_upload_404(
+    client, db_session, test_contact, test_user, auth_headers
+):
+    """A guessed upload id that isn't on this packet → 404."""
+    service, packet, raw = await _make_upload_packet(
+        db_session, test_contact.id, [_upload_field()], created_by_id=test_user.id
+    )
+    try:
+        view = await client.get(
+            f"/api/onboarding/packets/{packet.id}/uploads/424242/view",
+            headers=auth_headers,
+        )
+        assert view.status_code == 404, view.text
+    finally:
+        await _cleanup(db_session)
+
+
+async def test_staff_view_completed_document_pdf(
+    client, db_session, test_contact, test_user, auth_headers
+):
+    """After completion the document's manifest PDF is viewable inline by staff."""
+    service, packet, raw = await _make_upload_packet(
+        db_session, test_contact.id, [_upload_field()], created_by_id=test_user.id
+    )
+    headers = await _session(client, raw)
+    doc_id = await _doc_id(service, packet)
+    packet_id = packet.id
+    try:
+        up = await client.post(
+            f"/api/onboarding/public/{raw}/documents/{doc_id}/files",
+            headers=headers,
+            data={"field_id": "gov_id"},
+            files={"file": ("id.pdf", io.BytesIO(one_page_pdf()), "application/pdf")},
+        )
+        assert up.status_code == 201, up.text
+        viewed = await client.post(
+            f"/api/onboarding/public/{raw}/documents/{doc_id}/viewed",
+            headers=headers,
+        )
+        assert viewed.status_code == 200, viewed.text
+        done = await client.post(
+            f"/api/onboarding/public/{raw}/complete", headers=headers
+        )
+        assert done.status_code == 200 and done.json()["status"] == "completed"
+
+        view = await client.get(
+            f"/api/onboarding/packets/{packet_id}/documents/{doc_id}/view",
+            headers=auth_headers,
+        )
+        assert view.status_code == 200, view.text
+        assert view.headers["content-type"] == "application/pdf"
+        assert view.content[:4] == b"%PDF"
+    finally:
+        await _cleanup(db_session)
+
+
 async def test_completion_attaches_one_manifest_to_upload_doc(
     client, db_session, test_contact
 ):
