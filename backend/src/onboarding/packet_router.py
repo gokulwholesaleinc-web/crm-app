@@ -22,6 +22,7 @@ from src.email.service import assert_gmail_connected
 from src.onboarding import completion, crypto
 from src.onboarding.completion_notices import queue_invite
 from src.onboarding.models import (
+    OnboardingPacket,
     OnboardingPacketDocument,
     OnboardingSecretValue,
 )
@@ -48,7 +49,7 @@ Scope = Annotated[DataScope, Depends(get_data_scope)]
 
 async def _load_packet_checked(
     db, packet_id: int, current_user: User, data_scope: DataScope
-) -> tuple[PacketService, "object"]:
+) -> tuple[PacketService, OnboardingPacket]:
     service = PacketService(db)
     packet = await service.get_packet(packet_id)
     if packet is None:
