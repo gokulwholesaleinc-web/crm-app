@@ -16,6 +16,14 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 # Exactly four field kinds (build-order §G resolution #1).
 FieldKind = Literal["signature", "date", "text", "address"]
 
+# v3 document-kind discriminator (migration 052). Only ``esign_pdf`` templates
+# carry placed-coordinate ``FieldDefinition``s; ``questionnaire`` and
+# ``upload_request`` templates store their own per-kind field shapes (validated
+# in ``src/onboarding/kinds/``). The list/detail response therefore passes
+# ``field_definitions`` through as raw dicts and exposes ``kind`` so callers can
+# discriminate — forcing every kind through the coordinate model 500s the list.
+DocumentKind = Literal["esign_pdf", "questionnaire", "upload_request"]
+
 # A service_tag is a real slug: lowercase alphanumeric segments joined by
 # single hyphens — rejects bare/leading/trailing/doubled hyphens ('-', '--',
 # '-x', 'x-'). ``null`` stays allowed (= a universal template); only a
@@ -174,9 +182,14 @@ class TemplateResponse(BaseModel):
     description: str | None
     service_tag: str | None
     owner_id: int | None
+    kind: DocumentKind
     has_pdf: bool
     pdf_version: int
-    field_definitions: list[FieldDefinition]
+    # Raw passthrough: the shape depends on ``kind`` (coordinate fields for
+    # esign_pdf, questionnaire/upload fields otherwise) and is validated at
+    # write time by the per-kind module, so the response does not re-validate
+    # it against the coordinate ``FieldDefinition`` model.
+    field_definitions: list[dict]
     requires_esign: bool
     is_active: bool
     created_at: datetime
@@ -193,6 +206,7 @@ class TemplateResponse(BaseModel):
             description=template.description,
             service_tag=template.service_tag,
             owner_id=template.owner_id,
+            kind=template.kind,
             has_pdf=template.pdf_path is not None,
             pdf_version=template.pdf_version,
             field_definitions=template.field_definitions,

@@ -40,10 +40,13 @@ describe('guide registry filtering', () => {
   it('keeps admin-only guides out of managers', () => {
     expect(getGuidesForPath('/admin/user-approvals', 'manager')).toHaveLength(0);
     expect(getGuidesForPath('/admin/sharing', 'manager')).toHaveLength(0);
-    expect(getGuidesForPath('/admin/dedup', 'manager')).toHaveLength(0);
+    expect(getGuidesForPath('/admin/audit', 'manager')).toHaveLength(0);
     expect(guideIdsForPath('/settings', 'manager')).not.toContain('settings-admin-tour');
+    // Duplicate cleanup is the one /admin page managers can reach, so its tour
+    // (and only its tour) is allowed for managers.
+    expect(guideIdsForPath('/admin/dedup', 'manager')).toEqual(['duplicate-cleanup-tour']);
     expect(getGuidesForRole('manager').filter((guide) => guide.path.startsWith('/admin')).map((guide) => guide.id))
-      .toEqual([]);
+      .toEqual(['duplicate-cleanup-tour']);
     expect(getGuidesForPath('/admin/user-approvals', 'admin').map((guide) => guide.id))
       .toContain('user-approvals-tour');
     expect(guideIdsForPath('/settings', 'admin')).toContain('settings-admin-tour');
@@ -118,9 +121,9 @@ describe('guide registry filtering', () => {
     const adminGuideIds = new Set([
       'settings-admin-tour',
       'admin-dashboard-tour',
+      'admin-audit-tour',
       'user-approvals-tour',
       'admin-sharing-tour',
-      'duplicate-cleanup-tour',
     ]);
 
     for (const guide of GUIDE_REGISTRY.filter((entry) => (
@@ -130,7 +133,8 @@ describe('guide registry filtering', () => {
     }
 
     expect(guideById('admin-sharing-tour').roles).toEqual(['admin']);
-    expect(guideById('duplicate-cleanup-tour').roles).toEqual(['admin']);
+    // Duplicate cleanup is admin + manager (route is MANAGER_OR_ADMIN), not admin-only.
+    expect(guideById('duplicate-cleanup-tour').roles).toEqual(['admin', 'manager']);
   });
 
   it('limits viewer guides to read-oriented tours', () => {

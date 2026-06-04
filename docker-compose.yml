@@ -18,8 +18,10 @@ services:
 
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      # Repo-root context: the Dockerfiles use Railway-style root-relative
+      # COPY paths (COPY backend/…), so the build context must be the repo root.
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: crm_backend
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://crm_user:crm_password@db:5432/crm_db}
@@ -57,8 +59,9 @@ services:
 
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      # Repo-root context — see the backend service note above.
+      context: .
+      dockerfile: frontend/Dockerfile
     container_name: crm_frontend
     ports:
       - "3000:3000"

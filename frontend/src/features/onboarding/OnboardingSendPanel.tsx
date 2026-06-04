@@ -302,7 +302,13 @@ export function OnboardingSendPanel({ templates }: OnboardingSendPanelProps) {
             ) : (
               <div className="mt-2 space-y-1.5">
                 {activeTemplates.map((t) => {
-                  const disabled = !t.has_pdf;
+                  // Only esign_pdf templates need an uploaded PDF before they
+                  // can be sent. questionnaire / upload_request templates carry
+                  // no PDF by design and are sendable as-is (the backend mints
+                  // them with pdf_path=None), so gating on has_pdf alone would
+                  // wrongly lock them out with a misleading "No PDF" reason.
+                  const isEsignPdf = (t.kind ?? 'esign_pdf') === 'esign_pdf';
+                  const disabled = isEsignPdf && !t.has_pdf;
                   const selected = selectedTemplateIds.has(t.id);
                   return (
                     <button

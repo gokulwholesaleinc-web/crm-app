@@ -18,6 +18,7 @@ from reportlab.pdfgen import canvas
 from src.auth.models import User
 from src.auth.security import create_access_token, get_password_hash
 from src.onboarding import storage
+from src.onboarding.models import OnboardingTemplate
 from src.roles.models import Role, UserRole
 
 # --- in-test PDF builder (no fixtures, no mocks) ---------------------------
@@ -340,6 +341,71 @@ class TestListTemplates:
         """Unauthenticated list → 401."""
         resp = await client.get("/api/onboarding/templates")
         assert resp.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_list_serializes_non_esign_kinds(
+        self, client, auth_headers, db_session
+    ):
+        """Regression: questionnaire / upload_request templates carry non-
+        coordinate field_definitions, so forcing them through the esign
+        ``FieldDefinition`` model 500s the list (it did, for the seeded Google
+        Forms). The response must pass field_definitions through as raw dicts
+        and surface the ``kind`` discriminator instead."""
+        questionnaire = OnboardingTemplate(
+            name="Seeded questionnaire",
+            kind="questionnaire",
+            field_definitions=[
+                {
+                    "id": "full_name",
+                    "kind": "short_text",
+                    "label": "Full name",
+                    "required": True,
+                },
+                {
+                    "id": "interests",
+                    "kind": "multi_choice",
+                    "label": "Interests",
+                    "options": [{"value": "a", "label": "A"}],
+                    "required": False,
+                },
+            ],
+        )
+        upload = OnboardingTemplate(
+            name="Seeded upload request",
+            kind="upload_request",
+            field_definitions=[
+                {
+                    "id": "logo",
+                    "kind": "file_upload",
+                    "label": "Logo",
+                    "maxFiles": 1,
+                    "maxMB": 10,
+                }
+            ],
+        )
+        db_session.add_all([questionnaire, upload])
+        await db_session.commit()
+
+        resp = await client.get("/api/onboarding/templates", headers=auth_headers)
+        assert resp.status_code == 200
+        by_name = {t["name"]: t for t in resp.json()}
+
+        q = by_name["Seeded questionnaire"]
+        assert q["kind"] == "questionnaire"
+        assert q["has_pdf"] is False
+        assert q["field_definitions"][0]["kind"] == "short_text"
+        assert q["field_definitions"][1]["kind"] == "multi_choice"
+
+        u = by_name["Seeded upload request"]
+        assert u["kind"] == "upload_request"
+        assert u["field_definitions"][0]["kind"] == "file_upload"
+
+    @pytest.mark.asyncio
+    async def test_create_exposes_esign_pdf_kind_default(self, client, auth_headers):
+        """A template created via the API defaults to the esign_pdf kind, and
+        the response now surfaces that discriminator."""
+        created = await _create_template(client, auth_headers, name="Default kind")
+        assert created["kind"] == "esign_pdf"
 
 
 # =============================================================================

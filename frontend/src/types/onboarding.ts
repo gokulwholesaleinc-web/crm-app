@@ -51,6 +51,14 @@ export interface OnboardingTemplate {
   service_tag?: string | null;
   owner_id?: number | null;
   /**
+   * The document kind. ``esign_pdf`` templates are managed here (upload a PDF,
+   * place coordinate fields); ``questionnaire`` / ``upload_request`` templates
+   * are form-based (e.g. the seeded Google Forms) and carry no PDF. Optional +
+   * defaults to ``esign_pdf`` so a payload that predates the discriminator
+   * never crashes the row.
+   */
+  kind?: OnboardingDocumentKind;
+  /**
    * Whether a PDF has been uploaded. The backend deliberately does NOT
    * expose the raw storage path (it would leak the R2 key); it sends this
    * computed boolean instead. Drives upload-vs-replace and whether fields

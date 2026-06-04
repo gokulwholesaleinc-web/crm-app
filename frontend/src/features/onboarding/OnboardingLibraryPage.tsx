@@ -32,6 +32,7 @@ import type {
   OnboardingTemplateCreate,
   OnboardingTemplateUpdate,
   OnboardingFieldDefinition,
+  OnboardingDocumentKind,
 } from '../../types';
 
 // The editor pulls in pdf.js — code-split it so the library list stays light.
@@ -269,7 +270,7 @@ function OnboardingLibraryPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-guide="onboarding-page">
       {/* Hidden file input shared by every row's Upload button. */}
       <input
         ref={fileInputRef}
@@ -282,7 +283,7 @@ function OnboardingLibraryPage() {
       />
 
       {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between" data-guide="onboarding-header">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">
             Onboarding
@@ -303,6 +304,7 @@ function OnboardingLibraryPage() {
         className="inline-flex items-center gap-1 rounded-lg bg-gray-100 p-1 dark:bg-gray-800"
         role="tablist"
         aria-label="Onboarding view"
+        data-guide="onboarding-view-toggle"
       >
         {([
           ['templates', 'Templates'],
@@ -367,7 +369,7 @@ function OnboardingLibraryPage() {
           </div>
         </div>
       ) : (
-        <div className="space-y-8">
+        <div className="space-y-8" data-guide="onboarding-templates">
           <TemplateSection
             heading="Universal templates"
             subtitle="Apply to any service."
@@ -517,6 +519,25 @@ interface TemplateRowProps {
   onRestore: (template: OnboardingTemplate) => void;
 }
 
+// esign_pdf rows are PDF-driven (place coordinate fields); questionnaire /
+// upload_request rows are form-based with no PDF, so the count reads as
+// questions / upload fields rather than placed fields.
+function describeFields(
+  kind: OnboardingDocumentKind,
+  count: number,
+  hasPdf: boolean,
+): string {
+  const s = count === 1 ? '' : 's';
+  switch (kind) {
+    case 'questionnaire':
+      return `${count} question${s}`;
+    case 'upload_request':
+      return `${count} upload field${s}`;
+    default: // esign_pdf
+      return hasPdf ? `${count} field${s}` : 'No PDF yet';
+  }
+}
+
 function TemplateRow({
   template,
   isLoadingEditor,
@@ -529,6 +550,9 @@ function TemplateRow({
   const hasPdf = template.has_pdf;
   const isActive = template.is_active;
   const fieldCount = template.field_definitions.length;
+  const kind = template.kind ?? 'esign_pdf';
+  const isEsignPdf = kind === 'esign_pdf';
+  const summary = describeFields(kind, fieldCount, hasPdf);
   return (
     <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="min-w-0">
@@ -549,6 +573,16 @@ function TemplateRow({
               E-sign
             </Badge>
           )}
+          {kind === 'questionnaire' && (
+            <Badge variant="purple" size="sm">
+              Questionnaire
+            </Badge>
+          )}
+          {kind === 'upload_request' && (
+            <Badge variant="indigo" size="sm">
+              Upload request
+            </Badge>
+          )}
         </div>
         {template.description && (
           <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400 line-clamp-2">
@@ -556,33 +590,42 @@ function TemplateRow({
           </p>
         )}
         <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500" style={{ fontVariantNumeric: 'tabular-nums' }}>
-          {hasPdf ? `${fieldCount} field${fieldCount === 1 ? '' : 's'}` : 'No PDF yet'} · Updated {formatDate(template.updated_at)}
+          {summary} · Updated {formatDate(template.updated_at)}
         </p>
       </div>
       <div className="flex flex-shrink-0 flex-wrap gap-2">
         {isActive ? (
           <>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              leftIcon={<ArrowUpTrayIcon className="h-4 w-4" aria-hidden="true" />}
-              onClick={() => onUpload(template.id)}
-            >
-              {hasPdf ? 'Replace PDF' : 'Upload PDF'}
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              leftIcon={<PencilSquareIcon className="h-4 w-4" aria-hidden="true" />}
-              onClick={() => onEdit(template)}
-              disabled={!hasPdf}
-              isLoading={isLoadingEditor}
-              title={hasPdf ? undefined : 'Upload a PDF first'}
-            >
-              Edit fields
-            </Button>
+            {/* PDF + field placement only apply to esign_pdf templates.
+                Form-based questionnaire / upload_request templates (e.g. seeded
+                Google Forms) carry no PDF or placed fields, so those two actions
+                are hidden for them — "Edit details" and the lifecycle actions
+                below are kind-agnostic and stay available for every kind. */}
+            {isEsignPdf && (
+              <>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  leftIcon={<ArrowUpTrayIcon className="h-4 w-4" aria-hidden="true" />}
+                  onClick={() => onUpload(template.id)}
+                >
+                  {hasPdf ? 'Replace PDF' : 'Upload PDF'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  leftIcon={<PencilSquareIcon className="h-4 w-4" aria-hidden="true" />}
+                  onClick={() => onEdit(template)}
+                  disabled={!hasPdf}
+                  isLoading={isLoadingEditor}
+                  title={hasPdf ? undefined : 'Upload a PDF first'}
+                >
+                  Edit fields
+                </Button>
+              </>
+            )}
             <Button
               type="button"
               variant="ghost"
@@ -743,12 +786,18 @@ function EditTemplateMetaForm({ template, onSubmit, onCancel, isLoading }: EditT
         placeholder="Leave blank for a universal template..."
         helperText="Scopes the template to one service. Blank = universal."
       />
-      <Switch
-        checked={requiresEsign}
-        onChange={setRequiresEsign}
-        label="Requires e-signature"
-        description="Adds the ESIGN consent step; needs a placed signature field."
-      />
+      {/* E-signature only applies to esign_pdf templates (the backend rejects
+          requires_esign without a placed signature field). Hidden for
+          questionnaire / upload_request — name/description/service tag stay
+          editable, requires_esign stays false. */}
+      {(template.kind ?? 'esign_pdf') === 'esign_pdf' && (
+        <Switch
+          checked={requiresEsign}
+          onChange={setRequiresEsign}
+          label="Requires e-signature"
+          description="Adds the ESIGN consent step; needs a placed signature field."
+        />
+      )}
       <ModalFooter>
         <Button type="button" variant="secondary" onClick={onCancel} disabled={isLoading}>
           Cancel
