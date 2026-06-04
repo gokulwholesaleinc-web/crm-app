@@ -51,6 +51,14 @@ export interface OnboardingTemplate {
   service_tag?: string | null;
   owner_id?: number | null;
   /**
+   * The document kind. ``esign_pdf`` templates are managed here (upload a PDF,
+   * place coordinate fields); ``questionnaire`` / ``upload_request`` templates
+   * are form-based (e.g. the seeded Google Forms) and carry no PDF. Optional +
+   * defaults to ``esign_pdf`` so a payload that predates the discriminator
+   * never crashes the row.
+   */
+  kind?: OnboardingDocumentKind;
+  /**
    * Whether a PDF has been uploaded. The backend deliberately does NOT
    * expose the raw storage path (it would leak the R2 key); it sends this
    * computed boolean instead. Drives upload-vs-replace and whether fields
@@ -58,18 +66,40 @@ export interface OnboardingTemplate {
    */
   has_pdf: boolean;
   pdf_version: number;
-  field_definitions: OnboardingFieldDefinition[];
+  /**
+   * Per-kind field list — coordinate fields for ``esign_pdf``, questionnaire/
+   * upload fields otherwise (the column holds different shapes by ``kind``).
+   * Consumers narrow on ``kind`` before treating these as one shape.
+   */
+  field_definitions: OnboardingTemplateFieldDef[];
   requires_esign: boolean;
   is_active: boolean;
   created_at: string;
   updated_at: string;
 }
 
+/**
+ * A per-kind field definition on the wire — coordinate fields for esign_pdf,
+ * questionnaire questions / upload file fields otherwise. The backend handler
+ * for the template's ``kind`` validates the shape; the client passes the raw
+ * union through (matching the backend's ``list[dict]`` passthrough).
+ */
+export type OnboardingTemplateFieldDef =
+  | OnboardingFieldDefinition
+  | OnboardingQuestionnaireField;
+
 export interface OnboardingTemplateCreate {
   name: string;
   description?: string | null;
   service_tag?: string | null;
   requires_esign?: boolean;
+  /**
+   * Document kind (default ``esign_pdf``). ``questionnaire``/``upload_request``
+   * may carry initial ``field_definitions``; ``esign_pdf`` places coordinate
+   * fields only after a PDF is uploaded, so it rejects initial fields.
+   */
+  kind?: OnboardingDocumentKind;
+  field_definitions?: OnboardingTemplateFieldDef[] | null;
 }
 
 export interface OnboardingTemplateUpdate {
@@ -77,8 +107,12 @@ export interface OnboardingTemplateUpdate {
   description?: string | null;
   service_tag?: string | null;
   requires_esign?: boolean | null;
-  /** Reassigns the whole list; rejected (422) until a PDF is uploaded. */
-  field_definitions?: OnboardingFieldDefinition[] | null;
+  /**
+   * Reassigns the whole field list. For esign_pdf these are coordinate fields
+   * (rejected 422 until a PDF is uploaded); for questionnaire/upload they are
+   * the per-kind question/file fields, validated server-side by the handler.
+   */
+  field_definitions?: OnboardingTemplateFieldDef[] | null;
   /**
    * Optimistic-lock token sent alongside ``field_definitions``. The editor
    * captures the template's ``pdf_version`` when opened; if the PDF was
@@ -164,8 +198,27 @@ export interface OnboardingPacket {
   emails?: OnboardingPacketEmail[];
 }
 
+/**
+ * One client-uploaded file on a packet (staff detail view, D5). Carries the
+ * packet/doc/field correlation the contact-Attachments list drops; the file
+ * itself is a contacts Attachment downloadable via ``attachment_id``.
+ */
+export interface OnboardingPacketUpload {
+  id: number;
+  packet_document_id: number;
+  field_id: string;
+  attachment_id: number | null;
+  original_filename: string;
+  byte_size: number;
+  mime_type: string;
+  sensitive: boolean;
+  created_at?: string | null;
+}
+
 export interface OnboardingPacketDetail extends OnboardingPacket {
   documents: OnboardingPacketDocumentSummary[];
+  /** Client-uploaded files (present on the GET /packets/{id} detail only). */
+  uploads?: OnboardingPacketUpload[];
 }
 
 export interface OnboardingPacketCreate {
@@ -174,6 +227,13 @@ export interface OnboardingPacketCreate {
   recipient_name?: string | null;
   company_id?: number | null;
   template_ids: number[];
+  /**
+   * When true the backend emails the invite to the recipient (from the
+   * creating staff's connected Gmail) and still returns the one-time
+   * ``access_url`` for the copy-link backup. When false/omitted the packet is
+   * minted and only the link is returned (the copy-only secondary path).
+   */
+  send_email?: boolean;
 }
 
 // ---------------------------------------------------------------------------

@@ -25,7 +25,8 @@ from src.onboarding.limits import MAX_TEXT_VALUE_BYTES
 from src.onboarding.packet_errors import PacketValidationError
 from src.onboarding.service import FieldDefinitionError
 from src.onboarding.stamper import stamp_document
-from unit._onboarding_helpers import (
+
+from ._onboarding_helpers import (
     one_page_pdf,
     signature_field,
     text_field,

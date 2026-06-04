@@ -1,0 +1,21 @@
+# docker-compose builds both services from the repo ROOT context (the
+# Dockerfiles use Railway-style root-relative COPY paths: `COPY backend/…`,
+# `COPY frontend/…`). Docker only honours the .dockerignore at the context
+# root, so the per-directory backend/.dockerignore and frontend/.dockerignore
+# are NOT applied under this context — this file unions them.
+#
+# The critical one is frontend/node_modules: without it, `COPY frontend/ .`
+# copies the host's (darwin/arm64) node_modules over the image's `npm ci`
+# result, and the platform-specific esbuild/rollup binaries break `npm run
+# build`. The rest avoid baking secrets / caches / build output into images.
+.git
+**/.env
+**/*.log
+**/__pycache__
+**/*.pyc
+**/*.egg-info
+backend/.venv
+backend/.pytest_cache
+backend/.mypy_cache
+frontend/node_modules
+frontend/dist

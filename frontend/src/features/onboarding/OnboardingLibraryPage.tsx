@@ -32,12 +32,16 @@ import type {
   OnboardingTemplateCreate,
   OnboardingTemplateUpdate,
   OnboardingFieldDefinition,
+  OnboardingQuestionnaireField,
+  OnboardingDocumentKind,
 } from '../../types';
 
 // The editor pulls in pdf.js — code-split it so the library list stays light.
 const OnboardingTemplateEditor = lazy(() => import('./OnboardingTemplateEditor'));
 // The send panel pulls in the contacts query + packet API — code-split too.
 const OnboardingSendPanel = lazy(() => import('./OnboardingSendPanel'));
+// The questionnaire/upload builder — only loaded when authoring a form kind.
+const OnboardingFormBuilder = lazy(() => import('./OnboardingFormBuilder'));
 
 const ONBOARDING_KEY = ['onboarding-templates'] as const;
 
@@ -74,6 +78,8 @@ function OnboardingLibraryPage() {
     template: OnboardingTemplate;
     pdfUrl: string;
   } | null>(null);
+  // The questionnaire/upload builder target (no PDF — opens immediately).
+  const [formBuilderTarget, setFormBuilderTarget] = useState<OnboardingTemplate | null>(null);
   const [loadingEditorId, setLoadingEditorId] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const uploadTargetIdRef = useRef<number | null>(null);
@@ -122,6 +128,13 @@ function OnboardingLibraryPage() {
   const editMetaMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: OnboardingTemplateMetaUpdate }) =>
       updateOnboardingTemplate(id, data),
+    onSuccess: () => invalidate(),
+  });
+
+  // Save questionnaire/upload fields (no pdf_version — these kinds carry no PDF).
+  const saveFormFieldsMutation = useMutation({
+    mutationFn: ({ id, fields }: { id: number; fields: OnboardingQuestionnaireField[] }) =>
+      updateOnboardingTemplate(id, { field_definitions: fields }),
     onSuccess: () => invalidate(),
   });
 
@@ -234,6 +247,19 @@ function OnboardingLibraryPage() {
     }
   };
 
+  const handleSaveFormFields = async (fields: OnboardingQuestionnaireField[]) => {
+    if (!formBuilderTarget) return;
+    try {
+      await saveFormFieldsMutation.mutateAsync({ id: formBuilderTarget.id, fields });
+      showSuccess('Fields saved.');
+    } catch (err) {
+      // Surface the server's per-kind 422 detail; re-throw so the builder stays
+      // open for the author to fix and retry (it swallows the rejection).
+      showError(extractApiErrorDetail(err) ?? 'Failed to save fields');
+      throw err;
+    }
+  };
+
   const handleEditMeta = async (data: OnboardingTemplateMetaUpdate) => {
     if (!metaTarget) return;
     try {
@@ -269,7 +295,7 @@ function OnboardingLibraryPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-guide="onboarding-page">
       {/* Hidden file input shared by every row's Upload button. */}
       <input
         ref={fileInputRef}
@@ -282,7 +308,7 @@ function OnboardingLibraryPage() {
       />
 
       {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between" data-guide="onboarding-header">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">
             Onboarding
@@ -303,6 +329,7 @@ function OnboardingLibraryPage() {
         className="inline-flex items-center gap-1 rounded-lg bg-gray-100 p-1 dark:bg-gray-800"
         role="tablist"
         aria-label="Onboarding view"
+        data-guide="onboarding-view-toggle"
       >
         {([
           ['templates', 'Templates'],
@@ -367,7 +394,7 @@ function OnboardingLibraryPage() {
           </div>
         </div>
       ) : (
-        <div className="space-y-8">
+        <div className="space-y-8" data-guide="onboarding-templates">
           <TemplateSection
             heading="Universal templates"
             subtitle="Apply to any service."
@@ -376,6 +403,7 @@ function OnboardingLibraryPage() {
             loadingEditorId={loadingEditorId}
             onUpload={triggerUpload}
             onEdit={openEditor}
+            onEditForm={setFormBuilderTarget}
             onEditMeta={setMetaTarget}
             onRetire={setRetireTarget}
             onRestore={handleRestore}
@@ -388,6 +416,7 @@ function OnboardingLibraryPage() {
             loadingEditorId={loadingEditorId}
             onUpload={triggerUpload}
             onEdit={openEditor}
+            onEditForm={setFormBuilderTarget}
             onEditMeta={setMetaTarget}
             onRetire={setRetireTarget}
             onRestore={handleRestore}
@@ -424,7 +453,7 @@ function OnboardingLibraryPage() {
         )}
       </Modal>
 
-      {/* Field editor */}
+      {/* Field editor (esign coordinate placement) */}
       {editorState && (
         <Suspense fallback={null}>
           <OnboardingTemplateEditor
@@ -432,8 +461,27 @@ function OnboardingLibraryPage() {
             onClose={closeEditor}
             templateName={editorState.template.name}
             pdfUrl={editorState.pdfUrl}
-            currentFields={editorState.template.field_definitions}
+            // esign templates hold coordinate fields — narrow the per-kind union.
+            currentFields={editorState.template.field_definitions as OnboardingFieldDefinition[]}
             onSave={handleSaveFields}
+          />
+        </Suspense>
+      )}
+
+      {/* Questionnaire / upload field builder (form kinds, no PDF) */}
+      {formBuilderTarget && (
+        <Suspense fallback={null}>
+          <OnboardingFormBuilder
+            isOpen
+            onClose={() => setFormBuilderTarget(null)}
+            templateName={formBuilderTarget.name}
+            kind={formBuilderTarget.kind === 'upload_request' ? 'upload_request' : 'questionnaire'}
+            // The column holds the form-field shape for these kinds; narrow the
+            // per-kind union down to the questionnaire/upload field type.
+            currentFields={
+              (formBuilderTarget.field_definitions ?? []) as OnboardingQuestionnaireField[]
+            }
+            onSave={handleSaveFormFields}
           />
         </Suspense>
       )}
@@ -462,6 +510,7 @@ interface TemplateSectionProps {
   loadingEditorId: number | null;
   onUpload: (id: number) => void;
   onEdit: (template: OnboardingTemplate) => void;
+  onEditForm: (template: OnboardingTemplate) => void;
   onEditMeta: (template: OnboardingTemplate) => void;
   onRetire: (template: OnboardingTemplate) => void;
   onRestore: (template: OnboardingTemplate) => void;
@@ -475,6 +524,7 @@ function TemplateSection({
   loadingEditorId,
   onUpload,
   onEdit,
+  onEditForm,
   onEditMeta,
   onRetire,
   onRestore,
@@ -496,6 +546,7 @@ function TemplateSection({
               isLoadingEditor={loadingEditorId === template.id}
               onUpload={onUpload}
               onEdit={onEdit}
+              onEditForm={onEditForm}
               onEditMeta={onEditMeta}
               onRetire={onRetire}
               onRestore={onRestore}
@@ -512,9 +563,29 @@ interface TemplateRowProps {
   isLoadingEditor: boolean;
   onUpload: (id: number) => void;
   onEdit: (template: OnboardingTemplate) => void;
+  onEditForm: (template: OnboardingTemplate) => void;
   onEditMeta: (template: OnboardingTemplate) => void;
   onRetire: (template: OnboardingTemplate) => void;
   onRestore: (template: OnboardingTemplate) => void;
+}
+
+// esign_pdf rows are PDF-driven (place coordinate fields); questionnaire /
+// upload_request rows are form-based with no PDF, so the count reads as
+// questions / upload fields rather than placed fields.
+function describeFields(
+  kind: OnboardingDocumentKind,
+  count: number,
+  hasPdf: boolean,
+): string {
+  const s = count === 1 ? '' : 's';
+  switch (kind) {
+    case 'questionnaire':
+      return `${count} question${s}`;
+    case 'upload_request':
+      return `${count} upload field${s}`;
+    default: // esign_pdf
+      return hasPdf ? `${count} field${s}` : 'No PDF yet';
+  }
 }
 
 function TemplateRow({
@@ -522,6 +593,7 @@ function TemplateRow({
   isLoadingEditor,
   onUpload,
   onEdit,
+  onEditForm,
   onEditMeta,
   onRetire,
   onRestore,
@@ -529,6 +601,9 @@ function TemplateRow({
   const hasPdf = template.has_pdf;
   const isActive = template.is_active;
   const fieldCount = template.field_definitions.length;
+  const kind = template.kind ?? 'esign_pdf';
+  const isEsignPdf = kind === 'esign_pdf';
+  const summary = describeFields(kind, fieldCount, hasPdf);
   return (
     <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="min-w-0">
@@ -549,6 +624,16 @@ function TemplateRow({
               E-sign
             </Badge>
           )}
+          {kind === 'questionnaire' && (
+            <Badge variant="purple" size="sm">
+              Questionnaire
+            </Badge>
+          )}
+          {kind === 'upload_request' && (
+            <Badge variant="indigo" size="sm">
+              Upload request
+            </Badge>
+          )}
         </div>
         {template.description && (
           <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400 line-clamp-2">
@@ -556,33 +641,55 @@ function TemplateRow({
           </p>
         )}
         <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500" style={{ fontVariantNumeric: 'tabular-nums' }}>
-          {hasPdf ? `${fieldCount} field${fieldCount === 1 ? '' : 's'}` : 'No PDF yet'} · Updated {formatDate(template.updated_at)}
+          {summary} · Updated {formatDate(template.updated_at)}
         </p>
       </div>
       <div className="flex flex-shrink-0 flex-wrap gap-2">
         {isActive ? (
           <>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              leftIcon={<ArrowUpTrayIcon className="h-4 w-4" aria-hidden="true" />}
-              onClick={() => onUpload(template.id)}
-            >
-              {hasPdf ? 'Replace PDF' : 'Upload PDF'}
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              leftIcon={<PencilSquareIcon className="h-4 w-4" aria-hidden="true" />}
-              onClick={() => onEdit(template)}
-              disabled={!hasPdf}
-              isLoading={isLoadingEditor}
-              title={hasPdf ? undefined : 'Upload a PDF first'}
-            >
-              Edit fields
-            </Button>
+            {/* PDF + field placement only apply to esign_pdf templates.
+                Form-based questionnaire / upload_request templates (e.g. seeded
+                Google Forms) carry no PDF or placed fields, so those two actions
+                are hidden for them — "Edit details" and the lifecycle actions
+                below are kind-agnostic and stay available for every kind. */}
+            {isEsignPdf && (
+              <>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  leftIcon={<ArrowUpTrayIcon className="h-4 w-4" aria-hidden="true" />}
+                  onClick={() => onUpload(template.id)}
+                >
+                  {hasPdf ? 'Replace PDF' : 'Upload PDF'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  leftIcon={<PencilSquareIcon className="h-4 w-4" aria-hidden="true" />}
+                  onClick={() => onEdit(template)}
+                  disabled={!hasPdf}
+                  isLoading={isLoadingEditor}
+                  title={hasPdf ? undefined : 'Upload a PDF first'}
+                >
+                  Edit fields
+                </Button>
+              </>
+            )}
+            {/* Form kinds carry no PDF — author their questions/files in the
+                builder (PATCHes field_definitions through the widened API). */}
+            {!isEsignPdf && (
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                leftIcon={<PencilSquareIcon className="h-4 w-4" aria-hidden="true" />}
+                onClick={() => onEditForm(template)}
+              >
+                {kind === 'questionnaire' ? 'Edit questions' : 'Edit files'}
+              </Button>
+            )}
             <Button
               type="button"
               variant="ghost"
@@ -625,10 +732,29 @@ interface CreateTemplateFormProps {
   isLoading: boolean;
 }
 
+const KIND_OPTIONS: { value: OnboardingDocumentKind; label: string; hint: string }[] = [
+  {
+    value: 'esign_pdf',
+    label: 'E-sign PDF',
+    hint: 'Upload a PDF and place a signature field to enable e-signature from Edit details.',
+  },
+  {
+    value: 'questionnaire',
+    label: 'Questionnaire',
+    hint: 'Ask typed questions (text, choices, dates). Add them with “Edit questions” after creating.',
+  },
+  {
+    value: 'upload_request',
+    label: 'File upload',
+    hint: 'Collect files (ID, brand assets, documents). Define them with “Edit files” after creating.',
+  },
+];
+
 function CreateTemplateForm({ onSubmit, onCancel, isLoading }: CreateTemplateFormProps) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [serviceTag, setServiceTag] = useState('');
+  const [kind, setKind] = useState<OnboardingDocumentKind>('esign_pdf');
 
   const canSubmit = name.trim().length > 0;
 
@@ -637,16 +763,47 @@ function CreateTemplateForm({ onSubmit, onCancel, isLoading }: CreateTemplateFor
     if (!canSubmit) return;
     // E-sign is NOT set at create — a new template has no fields yet, so the
     // backend rejects requires_esign: true (422). It's enabled later via the
-    // edit-details PATCH, once a signature field has been placed.
+    // edit-details PATCH (esign) once a signature field has been placed.
+    // Form kinds author their fields via the builder after creating.
     void onSubmit({
       name: name.trim(),
       description: description.trim() || null,
       service_tag: serviceTag.trim() || null,
+      kind,
     });
   };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <span className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+          Document type
+        </span>
+        <div
+          className="inline-flex flex-wrap items-center gap-1 rounded-lg bg-gray-100 p-1 dark:bg-gray-800"
+          role="radiogroup"
+          aria-label="Document type"
+        >
+          {KIND_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              role="radio"
+              aria-checked={kind === opt.value}
+              onClick={() => setKind(opt.value)}
+              className={clsx(
+                'rounded-md px-3 py-1.5 text-sm font-medium transition-colors motion-reduce:transition-none',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500',
+                kind === opt.value
+                  ? 'bg-primary-600 text-white shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white',
+              )}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
       <Input
         label="Name"
         value={name}
@@ -674,8 +831,7 @@ function CreateTemplateForm({ onSubmit, onCancel, isLoading }: CreateTemplateFor
         helperText="Scopes the template to one service. Blank = universal."
       />
       <p className="text-xs text-gray-500 dark:text-gray-400">
-        Upload a PDF and place a signature field to enable e-signature from Edit
-        details.
+        {KIND_OPTIONS.find((o) => o.value === kind)?.hint}
       </p>
       <ModalFooter>
         <Button type="button" variant="secondary" onClick={onCancel} disabled={isLoading}>
@@ -743,12 +899,18 @@ function EditTemplateMetaForm({ template, onSubmit, onCancel, isLoading }: EditT
         placeholder="Leave blank for a universal template..."
         helperText="Scopes the template to one service. Blank = universal."
       />
-      <Switch
-        checked={requiresEsign}
-        onChange={setRequiresEsign}
-        label="Requires e-signature"
-        description="Adds the ESIGN consent step; needs a placed signature field."
-      />
+      {/* E-signature only applies to esign_pdf templates (the backend rejects
+          requires_esign without a placed signature field). Hidden for
+          questionnaire / upload_request — name/description/service tag stay
+          editable, requires_esign stays false. */}
+      {(template.kind ?? 'esign_pdf') === 'esign_pdf' && (
+        <Switch
+          checked={requiresEsign}
+          onChange={setRequiresEsign}
+          label="Requires e-signature"
+          description="Adds the ESIGN consent step; needs a placed signature field."
+        />
+      )}
       <ModalFooter>
         <Button type="button" variant="secondary" onClick={onCancel} disabled={isLoading}>
           Cancel

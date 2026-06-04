@@ -19,7 +19,7 @@ from src.core.router_utils import DBSession
 from src.onboarding import tokens
 from src.onboarding.models import OnboardingPacket
 from src.onboarding.packet_schemas import DownloadDocument, DownloadLandingResponse
-from src.onboarding.packet_service import PacketService
+from src.onboarding.packet_service import PacketService, ensure_pdf_suffix
 from src.onboarding.public_helpers import (
     NO_STORE_HEADERS,
     _ensure_aware,
@@ -106,6 +106,10 @@ async def download_document(
         media_type="application/pdf",
         headers={
             **NO_STORE_HEADERS,
-            "Content-Disposition": f'attachment; filename="{doc.original_filename}"',
+            # Always a PDF download — ensure a ``.pdf`` filename even for form
+            # kinds whose title has no extension (F2).
+            "Content-Disposition": (
+                f'attachment; filename="{ensure_pdf_suffix(doc.original_filename)}"'
+            ),
         },
     )

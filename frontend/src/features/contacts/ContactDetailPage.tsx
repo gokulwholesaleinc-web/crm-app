@@ -35,8 +35,10 @@ const SendInvoiceModal = lazy(() =>
 const OnboardingLinkGenerator = lazy(() =>
   import('../payments/components/OnboardingLinkGenerator').then(m => ({ default: m.OnboardingLinkGenerator }))
 );
+// The onboarding tab pulls in the packet API + uploads — code-split it.
+const ContactOnboardingTab = lazy(() => import('../onboarding/ContactOnboardingTab'));
 
-type TabType = 'details' | 'activities' | 'notes' | 'emails' | 'proposals' | 'payments' | 'documents' | 'attachments' | 'history' | 'sharing';
+type TabType = 'details' | 'activities' | 'notes' | 'emails' | 'proposals' | 'payments' | 'documents' | 'attachments' | 'onboarding' | 'history' | 'sharing';
 
 const TABS: { id: TabType; name: string }[] = [
   { id: 'details', name: 'Details' },
@@ -49,6 +51,7 @@ const TABS: { id: TabType; name: string }[] = [
   { id: 'payments', name: 'Payments' },
   { id: 'documents', name: 'Documents' },
   { id: 'attachments', name: 'Attachments' },
+  { id: 'onboarding', name: 'Onboarding' },
   { id: 'history', name: 'History' },
   { id: 'sharing', name: 'Sharing' },
 ];
@@ -543,6 +546,12 @@ function ContactDetailPage() {
             <DocumentsTab entityType="contacts" entityId={contactId} />
           </Suspense>
         </div>
+      )}
+
+      {activeTab === 'onboarding' && contactId && (
+        <Suspense fallback={<SuspenseFallback />}>
+          <ContactOnboardingTab contactId={contactId} />
+        </Suspense>
       )}
 
       {contactId && (

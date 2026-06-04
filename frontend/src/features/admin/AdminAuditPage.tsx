@@ -771,7 +771,7 @@ export default function AdminAuditPage() {
             Estimated active CRM time and audit activity
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2" data-guide="admin-audit-exports">
           <Button
             variant="secondary"
             leftIcon={<ArrowDownTrayIcon className="h-4 w-4" />}
@@ -843,7 +843,7 @@ export default function AdminAuditPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5" data-guide="admin-audit-metrics">
         <MetricCard
           label="Active CRM time"
           value={totals ? formatDuration(totals.active_crm_seconds) : '-'}
@@ -871,84 +871,86 @@ export default function AdminAuditPage() {
         />
       </div>
 
-      <Card padding="sm" shadow="sm">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap gap-2">
-            {DATE_PRESETS.map((preset) => (
-              <Button
-                key={preset.label}
-                variant="ghost"
-                size="sm"
-                onClick={() => applyDatePreset(preset.days)}
-              >
-                {preset.label}
-              </Button>
-            ))}
+      <div data-guide="admin-audit-filters">
+        <Card padding="sm" shadow="sm">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap gap-2">
+              {DATE_PRESETS.map((preset) => (
+                <Button
+                  key={preset.label}
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => applyDatePreset(preset.days)}
+                >
+                  {preset.label}
+                </Button>
+              ))}
+            </div>
+            <Button variant="ghost" size="sm" onClick={resetFilters}>
+              Reset filters
+            </Button>
           </div>
-          <Button variant="ghost" size="sm" onClick={resetFilters}>
-            Reset filters
-          </Button>
-        </div>
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3 xl:grid-cols-6">
-          <Input
-            label="Start"
-            type="date"
-            value={startDate}
-            onChange={(e) => {
-              setStartDate(e.target.value);
-              resetPage();
-            }}
-          />
-          <Input
-            label="End"
-            type="date"
-            value={endDate}
-            onChange={(e) => {
-              setEndDate(e.target.value);
-              resetPage();
-            }}
-          />
-          <Select
-            label="User"
-            value={userId}
-            options={userOptions}
-            onChange={(e) => {
-              setUserId(e.target.value);
-              resetPage();
-            }}
-          />
-          <Select
-            label="Entity"
-            value={entityType}
-            options={ENTITY_OPTIONS}
-            onChange={(e) => {
-              setEntityType(e.target.value);
-              resetPage();
-            }}
-          />
-          <Select
-            label="Action"
-            value={action}
-            options={ACTION_OPTIONS}
-            onChange={(e) => {
-              setAction(e.target.value);
-              resetPage();
-            }}
-          />
-          <Input
-            label="Search"
-            value={search}
-            placeholder="Name, action, diff"
-            onChange={(e) => {
-              setSearch(e.target.value);
-              resetPage();
-            }}
-          />
-        </div>
-      </Card>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3 xl:grid-cols-6">
+            <Input
+              label="Start"
+              type="date"
+              value={startDate}
+              onChange={(e) => {
+                setStartDate(e.target.value);
+                resetPage();
+              }}
+            />
+            <Input
+              label="End"
+              type="date"
+              value={endDate}
+              onChange={(e) => {
+                setEndDate(e.target.value);
+                resetPage();
+              }}
+            />
+            <Select
+              label="User"
+              value={userId}
+              options={userOptions}
+              onChange={(e) => {
+                setUserId(e.target.value);
+                resetPage();
+              }}
+            />
+            <Select
+              label="Entity"
+              value={entityType}
+              options={ENTITY_OPTIONS}
+              onChange={(e) => {
+                setEntityType(e.target.value);
+                resetPage();
+              }}
+            />
+            <Select
+              label="Action"
+              value={action}
+              options={ACTION_OPTIONS}
+              onChange={(e) => {
+                setAction(e.target.value);
+                resetPage();
+              }}
+            />
+            <Input
+              label="Search"
+              value={search}
+              placeholder="Name, action, diff"
+              onChange={(e) => {
+                setSearch(e.target.value);
+                resetPage();
+              }}
+            />
+          </div>
+        </Card>
+      </div>
 
       <Card padding="none">
-        <div className="flex flex-col gap-2 px-4 pt-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-2 px-4 pt-2 sm:flex-row sm:items-center sm:justify-between" data-guide="admin-audit-tabs">
           <TabBar tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} />
           <p className="pb-2 text-xs text-gray-500 dark:text-gray-400 sm:pb-0">
             {tabCountLabel(activeTab, feed, summary)}

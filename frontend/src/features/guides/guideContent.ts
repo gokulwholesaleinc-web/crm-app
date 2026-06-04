@@ -295,7 +295,7 @@ export const GUIDE_REGISTRY: readonly Guide[] = [
   {
     id: 'proposal-detail-tour',
     title: 'Proposal detail',
-    description: 'Edit proposal sections, send safely, place signing documents, and audit acceptance.',
+    description: 'Edit sections inline, send safely, run option bundles, attach onboarding, and audit acceptance.',
     roles: staffRoles,
     path: '/proposals',
     matchPath: '/proposals/:id',
@@ -313,9 +313,60 @@ export const GUIDE_REGISTRY: readonly Guide[] = [
         selector: target('proposal-detail-actions'),
       },
       {
+        title: 'Follow the status timeline',
+        body: 'The timeline tells the draft → sent → viewed → signed story at a glance, so you can see where the proposal stalled without digging through dates.',
+        selector: target('proposal-detail-status-timeline'),
+      },
+      {
+        title: 'Offer option bundles',
+        body: 'On a draft or bundled proposal you can add alternative options (good/better/best), mark one as recommended, and send the whole bundle on one public link.',
+        selector: target('proposal-detail-options'),
+      },
+      {
+        title: 'Edit sections inline',
+        body: 'Executive summary, scope, pricing, timeline, and terms each edit in place via the pencil icon — no need to open the full edit modal to tweak a sentence.',
+        action: 'click a section pencil to edit it without leaving the page.',
+        selector: target('proposal-detail-sections'),
+      },
+      {
+        title: 'Attach files to the public link',
+        body: 'Attachments ride along on the public proposal link. They lock once the client signs so the audit trail stays honest about what they were shown.',
+        selector: target('proposal-detail-attachments'),
+      },
+      {
+        title: 'Queue onboarding documents',
+        body: 'Pick the onboarding templates to auto-send when this proposal is accepted, in order. The list locks on acceptance, once the packet is minted and emailed.',
+        selector: target('proposal-detail-onboarding-selections'),
+      },
+      {
         title: 'Signing and audit trail',
-        body: 'Signing documents, public-link views, acceptance data, related records, and sharing live beside the editable proposal sections.',
+        body: 'Signing documents, public-link views, acceptance data, related records, and sharing live beside the editable proposal sections. And if stamping a countersigned PDF ever fails, an amber alert with a Re-stamp button appears on the proposal so you can retry without re-sending it.',
         selector: target('proposal-detail-signing-documents'),
+      },
+    ],
+  },
+  {
+    id: 'onboarding-tour',
+    title: 'Client onboarding',
+    description: 'Build onboarding templates, place fields, and send packets — manually or from an accepted proposal.',
+    roles: staffRoles,
+    path: '/onboarding',
+    steps: [
+      {
+        title: 'Reusable onboarding templates',
+        body: 'Onboarding templates are PDFs with placed fields clients fill in. Create one, upload its PDF, then place the fields and optionally require e-signature.',
+        selector: target('onboarding-header'),
+      },
+      {
+        title: 'Library vs sending',
+        body: 'The toggle switches between managing the template library and sending a packet to a client. Selecting a proposal’s onboarding documents auto-sends them on acceptance.',
+        action: 'switch to Send to client when a template is ready to go out.',
+        selector: target('onboarding-view-toggle'),
+      },
+      {
+        title: 'Manage each template',
+        body: 'Per template you can upload or replace the PDF, place fields, edit details, and retire or restore it. Retired templates are hidden from senders until restored.',
+        selector: target('onboarding-templates'),
       },
     ],
   },
@@ -467,7 +518,9 @@ export const GUIDE_REGISTRY: readonly Guide[] = [
     id: 'campaigns-tour',
     title: 'Campaigns',
     description: 'Plan email campaigns, enroll members, and monitor results.',
-    roles: managerRoles,
+    // Email Campaigns sits in the ungated main nav, so any staff role can
+    // open /campaigns — keep the page tour reachable for sales reps too.
+    roles: staffRoles,
     path: '/campaigns',
     steps: [
       {
@@ -584,6 +637,37 @@ export const GUIDE_REGISTRY: readonly Guide[] = [
     ],
   },
   {
+    id: 'admin-audit-tour',
+    title: 'CRM audit',
+    description: 'Read active CRM time, security signals, audit tabs, and compliance exports.',
+    roles: adminRoles,
+    path: '/admin/audit',
+    steps: [
+      {
+        title: 'Active time and signals',
+        body: 'The metric cards summarize estimated active CRM time, audit-event volume, active users, calls, and security signals for the selected range.',
+        selector: target('admin-audit-metrics'),
+      },
+      {
+        title: 'Scope the window',
+        body: 'Date presets plus start/end, user, entity, action, and free-text search narrow every tab and export to exactly the slice you are investigating.',
+        action: 'pick a date preset or set filters before reading the feed.',
+        selector: target('admin-audit-filters'),
+      },
+      {
+        title: 'Switch audit views',
+        body: 'Tabs pivot the same filtered window between the live event feed, per-user rollups, per-entity activity, and security events.',
+        selector: target('admin-audit-tabs'),
+      },
+      {
+        title: 'Export for compliance',
+        body: 'Export visible pulls just the rows on screen; Export filter streams every audit row matching the current filter for a full compliance pull.',
+        action: 'use Export filter when you need the complete matching set, not just the page.',
+        selector: target('admin-audit-exports'),
+      },
+    ],
+  },
+  {
     id: 'user-approvals-tour',
     title: 'User approvals',
     description: 'Approve pending sign-ups, choose roles, and manage blocked emails.',
@@ -630,7 +714,9 @@ export const GUIDE_REGISTRY: readonly Guide[] = [
     id: 'duplicate-cleanup-tour',
     title: 'Duplicate cleanup',
     description: 'Find duplicate clusters and merge redundant records into the best winner.',
-    roles: adminRoles,
+    // /admin/dedup is gated to admin + manager (PrivateRoute + MANAGER_OR_ADMIN_IDS),
+    // so managers must get this tour too — not admin-only.
+    roles: managerRoles,
     path: '/admin/dedup',
     steps: [
       {
@@ -649,7 +735,9 @@ export const GUIDE_REGISTRY: readonly Guide[] = [
     id: 'import-export-tour',
     title: 'Import and export',
     description: 'Move CRM data by CSV with templates, previews, and dedup checks.',
-    roles: managerRoles,
+    // Import/Export is an ungated secondary-nav page, reachable by any staff
+    // role — keep the tour available so sales reps are not left without one.
+    roles: staffRoles,
     path: '/import-export',
     steps: [
       {
@@ -684,10 +772,12 @@ export const ROLE_RECOMMENDATIONS: Record<GuideRole, readonly string[]> = {
     'pipeline-tour',
     'reports-tour',
     'campaigns-tour',
+    'duplicate-cleanup-tour',
   ],
   admin: [
     'user-approvals-tour',
     'admin-dashboard-tour',
+    'admin-audit-tour',
     'settings-admin-tour',
     'admin-sharing-tour',
     'duplicate-cleanup-tour',

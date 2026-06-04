@@ -110,11 +110,15 @@ async def test_resend_invite_refused_for_terminal_statuses(
 
 
 async def test_resend_route_queues_new_invite(
-    client, db_session, test_contact, test_user, admin_auth_headers
+    client, db_session, test_contact, gmail_connected_test_user, admin_auth_headers
 ):
-    """POST /packets/{id}/resend queues a new invite + returns the packet."""
+    """POST /packets/{id}/resend queues a new invite + returns the packet.
+
+    The owner (``created_by_id``) is Gmail-connected so the F4 pre-flight
+    passes — the route sends from the owner's connected account.
+    """
     service, packet, _ = await _make_packet(
-        db_session, test_contact.id, test_user.id
+        db_session, test_contact.id, gmail_connected_test_user.id
     )
     try:
         resp = await client.post(
@@ -131,11 +135,15 @@ async def test_resend_route_queues_new_invite(
 
 
 async def test_resend_route_409_for_completed(
-    client, db_session, test_contact, test_user, admin_auth_headers
+    client, db_session, test_contact, gmail_connected_test_user, admin_auth_headers
 ):
-    """The route surfaces the terminal-status refusal as a 409."""
+    """The route surfaces the terminal-status refusal as a 409.
+
+    Owner Gmail-connected so the F4 pre-flight passes; the 409 comes from the
+    terminal-status guard in ``resend_invite`` (not the Gmail check).
+    """
     service, packet, _ = await _make_packet(
-        db_session, test_contact.id, test_user.id
+        db_session, test_contact.id, gmail_connected_test_user.id
     )
     try:
         packet.status = "completed"

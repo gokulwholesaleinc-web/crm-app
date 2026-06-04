@@ -2,7 +2,7 @@
  * Attachments API
  */
 
-import { apiClient } from './client';
+import { apiClient, getToken } from './client';
 
 export interface AttachmentResponse {
   id: number;
@@ -64,6 +64,37 @@ export const deleteAttachment = async (attachmentId: number): Promise<void> => {
 export const getDownloadUrl = (attachmentId: number): string => {
   const baseUrl = apiClient.defaults.baseURL || '';
   return `${baseUrl}${BASE}/${attachmentId}/download`;
+};
+
+/**
+ * Download an attachment by id. Asks the backend for a presigned URL as JSON
+ * (``?as_json=1``) — rather than following the default 307 to R2, which returns
+ * no CORS headers — then anchor-clicks the presigned URL (a top-level
+ * navigation that bypasses CORS). Throws on a non-OK response so callers can
+ * surface a failure toast.
+ */
+export const downloadAttachmentFile = async (
+  attachmentId: number,
+  filename: string,
+): Promise<void> => {
+  const token = getToken();
+  const response = await fetch(`${getDownloadUrl(attachmentId)}?as_json=1`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!response.ok) throw new Error('Download failed');
+  const { download_url: downloadUrl } = (await response.json()) as {
+    download_url: string;
+  };
+  // Guard a malformed/empty 200 body so it surfaces as a failure (caller toast)
+  // rather than silently anchor-clicking a dead 'undefined' URL.
+  if (!downloadUrl) throw new Error('Download failed');
+  const link = document.createElement('a');
+  link.href = downloadUrl;
+  link.download = filename;
+  link.rel = 'noopener noreferrer';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 };
 
 export const attachmentsApi = {

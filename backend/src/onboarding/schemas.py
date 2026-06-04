@@ -16,6 +16,14 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 # Exactly four field kinds (build-order §G resolution #1).
 FieldKind = Literal["signature", "date", "text", "address"]
 
+# v3 document-kind discriminator (migration 052). Only ``esign_pdf`` templates
+# carry placed-coordinate ``FieldDefinition``s; ``questionnaire`` and
+# ``upload_request`` templates store their own per-kind field shapes (validated
+# in ``src/onboarding/kinds/``). The list/detail response therefore passes
+# ``field_definitions`` through as raw dicts and exposes ``kind`` so callers can
+# discriminate — forcing every kind through the coordinate model 500s the list.
+DocumentKind = Literal["esign_pdf", "questionnaire", "upload_request"]
+
 # A service_tag is a real slug: lowercase alphanumeric segments joined by
 # single hyphens — rejects bare/leading/trailing/doubled hyphens ('-', '--',
 # '-x', 'x-'). ``null`` stays allowed (= a universal template); only a
@@ -79,13 +87,23 @@ class FieldDefinition(BaseModel):
 
 
 class TemplateCreate(BaseModel):
-    """Create the metadata row. field_definitions cannot be set here — a PDF
-    must exist first so coords can be bounds-validated."""
+    """Create the metadata row + optional initial fields.
+
+    ``kind`` discriminates the document type (default ``esign_pdf``). An
+    ``esign_pdf`` template still cannot carry ``field_definitions`` at create —
+    a PDF must exist first so coords can be bounds-validated (the service
+    rejects initial fields for it). A ``questionnaire``/``upload_request``
+    template has no PDF, so its fields are authored up front and validated by
+    the per-kind handler in the service (raw ``dict`` passthrough — the handler,
+    not this schema, owns each kind's field shape).
+    """
 
     name: str = Field(min_length=1, max_length=255)
     description: str | None = None
     service_tag: str | None = Field(default=None, max_length=100)
     requires_esign: bool = False
+    kind: DocumentKind = "esign_pdf"
+    field_definitions: list[dict] | None = None
 
     @field_validator("name")
     @classmethod
@@ -111,14 +129,24 @@ class TemplateCreate(BaseModel):
 
 
 class TemplateUpdate(BaseModel):
-    """Partial update (exclude_unset). field_definitions revalidates against
-    the stored PDF in the service (422 on failure)."""
+    """Partial update (exclude_unset).
+
+    ``field_definitions`` is a raw ``list[dict]`` passed straight to the
+    template kind's handler (``get_handler(kind).validate_definitions``) in the
+    service — the handler, not this schema, owns each kind's field shape
+    (esign coords vs questionnaire questions vs upload fields), so forcing the
+    coordinate ``FieldDefinition`` model here would 422 every questionnaire/
+    upload save before the per-kind validator ever ran. The esign⇄signature
+    reconciliation is row-aware and lives in
+    ``service.update._assert_esign_signature_consistency`` (it can see the
+    stored kind + the merged field set, which this schema cannot).
+    """
 
     name: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = None
     service_tag: str | None = Field(default=None, max_length=100)
     requires_esign: bool | None = None
-    field_definitions: list[FieldDefinition] | None = None
+    field_definitions: list[dict] | None = None
     # Optimistic-lock token (C2): the pdf_version the editor was opened
     # against. When a PATCH carries field_definitions AND a pdf_version that
     # no longer matches the row, the PDF was re-uploaded out from under the
@@ -135,26 +163,6 @@ class TemplateUpdate(BaseModel):
     @classmethod
     def _validate_service_tag(cls, value: str | None) -> str | None:
         return _normalized_service_tag(value)
-
-    @model_validator(mode="after")
-    def _validate_esign_has_signature(self) -> "TemplateUpdate":
-        """#10 (schema half): if this *same* PATCH turns on requires_esign and
-        also supplies field_definitions, those fields must include ≥1
-        signature field. The authoritative cross-field reconciliation against
-        the row's persisted state lives in the service (it can see both the
-        stored requires_esign and the stored fields); this catches the common
-        single-payload case early at 422.
-        """
-        if (
-            self.requires_esign is True
-            and self.field_definitions is not None
-            and not any(f.kind == "signature" for f in self.field_definitions)
-        ):
-            raise ValueError(
-                "requires_esign templates must define at least one "
-                "signature field"
-            )
-        return self
 
 
 class TemplateResponse(BaseModel):
@@ -174,9 +182,14 @@ class TemplateResponse(BaseModel):
     description: str | None
     service_tag: str | None
     owner_id: int | None
+    kind: DocumentKind
     has_pdf: bool
     pdf_version: int
-    field_definitions: list[FieldDefinition]
+    # Raw passthrough: the shape depends on ``kind`` (coordinate fields for
+    # esign_pdf, questionnaire/upload fields otherwise) and is validated at
+    # write time by the per-kind module, so the response does not re-validate
+    # it against the coordinate ``FieldDefinition`` model.
+    field_definitions: list[dict]
     requires_esign: bool
     is_active: bool
     created_at: datetime
@@ -193,6 +206,7 @@ class TemplateResponse(BaseModel):
             description=template.description,
             service_tag=template.service_tag,
             owner_id=template.owner_id,
+            kind=template.kind,
             has_pdf=template.pdf_path is not None,
             pdf_version=template.pdf_version,
             field_definitions=template.field_definitions,

@@ -12,11 +12,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
 from src.email.models import EmailQueue
-from src.onboarding.models import OnboardingPacket
+from src.onboarding.models import (
+    OnboardingPacket,
+    OnboardingPacketDocument,
+    OnboardingPacketUpload,
+)
 from src.onboarding.packet_schemas import (
     PacketDelivery,
     PacketDocumentSummary,
     PacketResponse,
+    PacketUpload,
 )
 from src.onboarding.packet_service import PacketService, _mask_email
 
@@ -27,9 +32,13 @@ async def build_packet_response(
     packet: OnboardingPacket,
     *,
     raw_token: str | None = None,
+    with_uploads: bool = False,
 ) -> PacketResponse:
     documents = await service.load_documents(packet.id)
     deliveries = await _load_deliveries(db, packet.id)
+    # Client-uploaded files (D5) are loaded ONLY for the single-packet detail
+    # view — the list endpoint passes with_uploads=False to avoid an N+1.
+    uploads = await _load_uploads(db, packet.id) if with_uploads else []
     access_url = None
     if raw_token is not None:
         base_url = settings.FRONTEND_BASE_URL or "http://localhost:3000"
@@ -49,8 +58,34 @@ async def build_packet_response(
         created_at=packet.created_at,
         documents=[PacketDocumentSummary.model_validate(d) for d in documents],
         emails=deliveries,
+        uploads=uploads,
         access_url=access_url,
     )
+
+
+async def _load_uploads(
+    db: AsyncSession, packet_id: int
+) -> list[PacketUpload]:
+    """Load the packet's client-uploaded files (joined via its documents).
+
+    Ordered by document then upload time so the staff detail groups files under
+    the question that collected them. Never exposes ``token_hash``/sha256.
+    """
+    rows = await db.execute(
+        select(OnboardingPacketUpload)
+        .join(
+            OnboardingPacketDocument,
+            OnboardingPacketUpload.packet_document_id
+            == OnboardingPacketDocument.id,
+        )
+        .where(OnboardingPacketDocument.packet_id == packet_id)
+        .order_by(
+            OnboardingPacketUpload.packet_document_id,
+            OnboardingPacketUpload.created_at,
+            OnboardingPacketUpload.id,
+        )
+    )
+    return [PacketUpload.model_validate(r) for r in rows.scalars().all()]
 
 
 async def _load_deliveries(db: AsyncSession, packet_id: int) -> list[PacketDelivery]:

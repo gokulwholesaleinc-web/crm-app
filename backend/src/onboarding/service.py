@@ -81,7 +81,25 @@ class OnboardingTemplateService:
         description: str | None = None,
         service_tag: str | None = None,
         requires_esign: bool = False,
+        kind: str = "esign_pdf",
+        field_definitions: list[dict] | None = None,
     ) -> OnboardingTemplate:
+        # esign_pdf places coordinate fields only AFTER a PDF is uploaded (coords
+        # bounds-check against it), so it cannot carry initial field_definitions;
+        # questionnaire/upload_request author their fields up front and validate
+        # them now via the per-kind handler (no PDF needed — P0-9).
+        defs = field_definitions or []
+        if kind == "esign_pdf":
+            if defs:
+                raise FieldDefinitionError(
+                    "esign_pdf templates place fields after uploading a PDF; "
+                    "create the template, upload a PDF, then add fields."
+                )
+        elif defs:
+            # KeyError is impossible here — ``kind`` is a DocumentKind literal
+            # validated by the schema, so the handler always exists. Store the
+            # handler's RETURN (the validated/normalized list), not the raw input.
+            defs = list(get_handler(kind).validate_definitions(defs, pdf_bytes=None))
         # AuditableMixin does NOT auto-populate created_by_id; set it (and
         # owner_id) explicitly so check_ownership and the audit trail work.
         template = OnboardingTemplate(
@@ -89,9 +107,10 @@ class OnboardingTemplateService:
             description=description,
             service_tag=service_tag,
             requires_esign=requires_esign,
+            kind=kind,
             owner_id=current_user.id,
             created_by_id=current_user.id,
-            field_definitions=[],
+            field_definitions=defs,
         )
         self.db.add(template)
         try:
@@ -181,8 +200,12 @@ class OnboardingTemplateService:
                 if handler.needs_pdf_copy
                 else None
             )
-            handler.validate_definitions(field_definitions, pdf_bytes=pdf_bytes)
-            template.field_definitions = list(field_definitions)
+            # Persist the handler's RETURN (the validated/normalized list) — for
+            # esign that is the model-normalized shape (declared keys, coerced
+            # types), not the raw request dict, so storage matches validation.
+            template.field_definitions = list(
+                handler.validate_definitions(field_definitions, pdf_bytes=pdf_bytes)
+            )
 
         # #10: reconcile esign ⇄ signature-field consistency against the
         # merged state (the requires_esign just set above + the fields now on

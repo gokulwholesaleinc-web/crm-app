@@ -21,6 +21,8 @@ import {
   ShareIcon,
   UserPlusIcon,
   ViewColumnsIcon,
+  ClipboardDocumentCheckIcon,
+  ClipboardDocumentListIcon,
 } from '@heroicons/react/24/outline';
 
 export interface Section {
@@ -103,9 +105,9 @@ export const SECTIONS: Section[] = [
           <ul className="space-y-1.5">
             <Bullet>
               The left sidebar has two groups: a main group (Dashboard, Contacts, Companies,
-              Leads, Pipeline, Inbox, Proposals, Payments, Activities, Calendar,
+              Leads, Pipeline, Inbox, Proposals, Onboarding, Payments, Activities, Calendar,
               Email Campaigns) and a secondary group (Import/Export, Reports,
-              Settings, Help, Admin, User Approvals, Sharing, Duplicate Cleanup).
+              Settings, Help, Admin, Audit, User Approvals, Sharing, Duplicate Cleanup).
             </Bullet>
             <Bullet>
               Click <strong>Customize Menu</strong> at the bottom of the sidebar to drag items into
@@ -117,8 +119,9 @@ export const SECTIONS: Section[] = [
               Leads, and Proposals. You can also toggle dark mode and start a guide from the header.
             </Bullet>
             <Bullet>
-              Admin, User Approvals, Sharing, and Duplicate Cleanup are admin-only in the sidebar,
-              and those pages also enforce role checks before loading protected data.
+              Admin, Audit, User Approvals, and Sharing are admin-only in the sidebar;
+              Duplicate Cleanup is open to managers and admins. Those pages also enforce role
+              checks before loading protected data.
             </Bullet>
           </ul>
         </div>
@@ -179,8 +182,11 @@ export const SECTIONS: Section[] = [
             <Step n={6}>
               Status flips to <Badge variant="green">accepted</Badge>. The CRM stores signer name,
               email, IP, browser user-agent, timestamp, and signature image, stamps signature/date
-              onto each signing PDF, and emails the signer a signed copy. Billing is created
-              manually from <strong>Payments</strong> after signing.
+              onto each signing PDF, and emails the signer a signed copy. If you attached
+              onboarding documents to the proposal, acceptance also auto-builds an onboarding
+              packet and emails the client their onboarding link — see{' '}
+              <strong>Onboarding</strong>. Billing is still created manually from{' '}
+              <strong>Payments</strong> after signing.
             </Step>
           </ol>
           <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
@@ -400,6 +406,8 @@ export const SECTIONS: Section[] = [
             captures the decision, drawn signature, ESIGN consent, signer email, IP,
             user-agent, and signed timestamp. Status flips to <em>accepted</em> or
             <em> rejected</em>, and signed PDFs are stamped and emailed to the signer.
+            If the proposal had onboarding documents attached, acceptance also auto-sends
+            the client their onboarding packet.
           </Step>
           <Step n={6}>
             <strong>You collect Payment manually.</strong> The Payments tab creates and tracks
@@ -672,12 +680,18 @@ export const SECTIONS: Section[] = [
             the CRM stamps signature and date onto the placed areas and emails the signer a signed copy.
           </Bullet>
           <Bullet>
+            Use the <strong>Onboarding documents</strong> card on the proposal to queue onboarding
+            templates. When the proposal is accepted the CRM auto-builds an onboarding packet from
+            them, in order, and emails the client their onboarding link — see <strong>Onboarding</strong>.
+          </Bullet>
+          <Bullet>
             Each view is logged with timestamp and IP, so you can see view count and last-viewed
             time on the proposal record.
           </Bullet>
           <Bullet>
             Status flow: <em>draft → sent → viewed → accepted / rejected</em>. Accepting a
-            proposal does not create Stripe invoices or checkout sessions.
+            proposal does not create Stripe invoices or checkout sessions, but it does auto-send any
+            onboarding documents you attached.
           </Bullet>
         </ul>
       </div>
@@ -685,6 +699,54 @@ export const SECTIONS: Section[] = [
   },
   // Contracts section removed 2026-05-14 — contracts router unmounted;
   // contract terms now fold into the Proposal T&C inline.
+  {
+    id: 'onboarding',
+    title: 'Onboarding',
+    icon: ClipboardDocumentCheckIcon,
+    searchText:
+      'onboarding client templates packet documents fields pdf upload place fields e-sign esign requires signature retire restore service tag universal send to client proposal auto-send accepted invite link completion',
+    body: (
+      <div className="space-y-3">
+        <p className="text-sm text-gray-700 dark:text-gray-300">
+          Onboarding is where you build reusable client-onboarding document templates and send
+          them to clients to fill out. A template is a PDF with placed fields the client completes;
+          some can also require an e-signature.
+        </p>
+        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Two views</h4>
+        <ul className="space-y-1.5">
+          <Bullet>
+            <strong>Templates</strong> — manage the library: create a template, upload (or replace)
+            its PDF, place the fields clients fill in, edit details, and toggle
+            <em> requires e-signature</em>. Templates can be tagged to a service or marked
+            <em> Universal</em> (applies to any service).
+          </Bullet>
+          <Bullet>
+            <strong>Send to client</strong> — pick a contact and the template(s) to mint a
+            packet. This creates a <strong>one-time link</strong> that you copy and share with
+            the client yourself (email, text, or chat); the CRM does not notify them for you on
+            this path. When the client finishes, you get the completed file back. (The
+            auto-send-from-proposal path below is the one that emails the client automatically.)
+          </Bullet>
+        </ul>
+        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Retiring templates</h4>
+        <p className="text-sm text-gray-700 dark:text-gray-300">
+          Retire a template to hide it from senders without deleting its history; restore it later
+          if you need it again. Toggle <em>Show retired templates</em> to see retired ones.
+        </p>
+        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Auto-send from a proposal</h4>
+        <p className="text-sm text-gray-700 dark:text-gray-300">
+          On a proposal you can attach onboarding documents (the <em>Onboarding documents</em> card).
+          When the client <strong>accepts</strong> that proposal, the CRM automatically builds an
+          onboarding packet from the attached templates — in the order you set — and emails the
+          client their onboarding link. No manual send step is needed for that path.
+        </p>
+        <Tip>
+          Only active templates that have an uploaded PDF can be attached to a proposal or sent to a
+          client. Retired or PDF-less templates are hidden from those pickers.
+        </Tip>
+      </div>
+    ),
+  },
   {
     id: 'payments',
     title: 'Payments',
@@ -910,7 +972,7 @@ export const SECTIONS: Section[] = [
     body: (
       <div className="space-y-3">
         <p className="text-sm text-gray-700 dark:text-gray-300">
-          <strong>Admin → Duplicate Cleanup</strong> is admin-only. It finds
+          <strong>Admin → Duplicate Cleanup</strong> is open to managers and admins. It finds
           and merges records that already slipped into the CRM. The old <code>/duplicates</code>{' '}
           bookmark redirects here.
         </p>
@@ -1038,8 +1100,13 @@ export const SECTIONS: Section[] = [
     body: (
       <div className="space-y-3">
         <p className="text-sm text-gray-700 dark:text-gray-300">
-          Settings is where you configure how your CRM behaves. Most sections are editable by
-          everyone; some (Roles &amp; Permissions, Branding) require admin rights.
+          Settings is where you configure how your CRM behaves. Most sections are visible to
+          everyone. <strong>Branding</strong> and <strong>Email Settings</strong> require superuser
+          (account-owner) access; <strong>Lead Sources</strong>, <strong>Webhooks</strong>, and
+          <strong> Lead Auto-Assignment Rules</strong> require manager or admin. Sections you
+          can&rsquo;t access are hidden from the section nav. <strong>Roles &amp; Permissions</strong>{' '}
+          stays visible to everyone — it shows your role and the permission matrix — but only admins
+          can assign roles to other users.
         </p>
         <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Sections</h4>
         <ul className="space-y-1.5">
@@ -1130,7 +1197,59 @@ export const SECTIONS: Section[] = [
         <p className="text-sm text-gray-700 dark:text-gray-300">
           A 30-day chronological log of every action across the system: who did it, what they did
           (create/update/delete), which entity, when. Color-coded so you can spot anything unusual.
+          For filtering, active-time estimates, security signals, tabbed views, and CSV exports, use
+          the dedicated <strong>Audit</strong> page — see <em>Admin Audit</em> below.
         </p>
+      </div>
+    ),
+  },
+  {
+    id: 'admin-audit',
+    title: 'Admin Audit',
+    icon: ClipboardDocumentListIcon,
+    searchText:
+      'admin audit crm audit active time security signals events users entities tabs filters date preset export visible export filter compliance feed log staleness refresh',
+    body: (
+      <div className="space-y-3">
+        <p className="text-sm text-gray-700 dark:text-gray-300">
+          <strong>Admin → Audit</strong> is admin-only. It is the deep audit surface that goes
+          beyond the Admin dashboard&rsquo;s activity feed: estimated active CRM time, audit-event
+          volume, security signals, and exportable, filterable views of every logged action.
+        </p>
+        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Top-line metrics</h4>
+        <p className="text-sm text-gray-700 dark:text-gray-300">
+          Cards summarize the selected window: <em>Active CRM time</em>, <em>Audit events</em>,{' '}
+          <em>Users</em>, <em>Calls</em>, and <em>Security</em> signals.
+        </p>
+        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Filters</h4>
+        <ul className="space-y-1.5">
+          <Bullet>
+            Date presets plus an explicit start/end range scope the whole page.
+          </Bullet>
+          <Bullet>
+            Narrow further by user, entity type, action, and free-text search (name, action, diff).
+            <em> Reset filters</em> clears everything.
+          </Bullet>
+        </ul>
+        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Tabbed views</h4>
+        <p className="text-sm text-gray-700 dark:text-gray-300">
+          The same filtered window pivots across tabs: the live event <em>Feed</em>, per-user{' '}
+          <em>Users</em> rollups, per-entity <em>Entities</em> activity, and <em>Security</em> events.
+        </p>
+        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Exports</h4>
+        <ul className="space-y-1.5">
+          <Bullet>
+            <strong>Export visible</strong> downloads just the rows currently on screen.
+          </Bullet>
+          <Bullet>
+            <strong>Export filter</strong> streams every audit row matching the current filter —
+            use it for compliance pulls.
+          </Bullet>
+        </ul>
+        <Tip>
+          A staleness badge next to the export buttons shows how fresh the feed is; click{' '}
+          <em>Refresh</em> to re-pull both the summary and the feed.
+        </Tip>
       </div>
     ),
   },
@@ -1188,7 +1307,9 @@ export const SECTIONS: Section[] = [
             when access was granted.
           </Bullet>
           <Bullet>
-            Admins and managers can revoke stale shares directly from the table.
+            Admins can revoke stale shares directly from the table. (Admin Sharing is admin-only;
+            the per-record Sharing tab is where a record&rsquo;s owner, recipient, or any
+            manager/admin can revoke an individual share.)
           </Bullet>
         </ul>
       </div>

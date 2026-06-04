@@ -219,6 +219,25 @@ export const resendOnboardingPacketInvite = async (
   return response.data;
 };
 
+/**
+ * Rotate the access token and return the NEW one-time ``access_url`` to copy —
+ * the recovery path when the original link was lost (the raw token is never
+ * stored, so it can't be re-served). The previously shared link stops working.
+ * Pass ``sendEmail`` to also re-queue the invite (only then is the owner's
+ * Gmail required). 409 for terminal states (completed/revoked/completing/
+ * abandoned).
+ */
+export const regenerateOnboardingPacketLink = async (
+  packetId: number,
+  sendEmail = false,
+): Promise<OnboardingPacket> => {
+  const response = await apiClient.post<OnboardingPacket>(
+    `${PACKETS_BASE}/${packetId}/regenerate-link`,
+    { send_email: sendEmail },
+  );
+  return response.data;
+};
+
 // ---------------------------------------------------------------------------
 // Phase 3 — proposal → onboarding-template selections (staff curation)
 // ---------------------------------------------------------------------------

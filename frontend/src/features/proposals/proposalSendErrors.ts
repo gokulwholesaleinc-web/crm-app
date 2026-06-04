@@ -1,4 +1,8 @@
 import { GMAIL_SETTINGS_PATH } from '../../utils/integrationLinks';
+import { isGmailReconnectSendError } from '../../utils/gmailSendError';
+
+// Re-exported so existing import sites (and tests) keep resolving it here.
+export { isGmailReconnectSendError };
 
 export interface ProposalSendFailure {
   title: string;
@@ -7,18 +11,6 @@ export interface ProposalSendFailure {
     label: string;
     to: string;
   };
-}
-
-const GMAIL_RECONNECT_PATTERNS = [
-  /gmail account is not connected/i,
-  /gmail connection has expired/i,
-  /reconnect.*gmail/i,
-  /connect.*gmail/i,
-];
-
-export function isGmailReconnectSendError(message: string | null | undefined): boolean {
-  if (!message) return false;
-  return GMAIL_RECONNECT_PATTERNS.some((pattern) => pattern.test(message));
 }
 
 export function buildProposalSendFailure(detail: string | null): ProposalSendFailure {

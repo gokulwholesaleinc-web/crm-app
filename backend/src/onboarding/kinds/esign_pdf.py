@@ -29,7 +29,6 @@ from pypdf import PdfReader
 # methods, where the app graph is already initialized.
 from src.onboarding.limits import MAX_TEXT_VALUE_BYTES
 from src.onboarding.packet_errors import PacketValidationError
-from src.onboarding.prefill import ALLOWED_PREFILL
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -56,27 +55,51 @@ def _fields_with_values(doc: OnboardingPacketDocument) -> list[dict]:
 
 def validate_esign_definitions(
     defs: list[dict], pdf_bytes: bytes | None
-) -> None:
-    """Geometry / bounds / uniqueness / prefill checks → ``FieldDefinitionError``.
+) -> list[dict]:
+    """Validate + NORMALIZE esign field definitions → the canonical list to store.
 
     Branches on ``pdf_bytes is None`` FIRST (P0-9: never read a missing PDF).
-    Reuses the shared ``ALLOWED_PREFILL`` (never a local copy → ``email``/PII can
-    never be made prefillable). Extracted verbatim from the pre-v3
-    ``OnboardingTemplateService._validate_field_definitions`` so behavior is
-    unchanged; P1 makes that method delegate here.
+    Prefill is enforced by the ``FieldDefinition`` model's ``PrefillSource``
+    literal (= the shared ``ALLOWED_PREFILL`` set), so ``email``/PII can never be
+    made prefillable. Returns the normalized definitions (declared keys only,
+    types coerced) — the caller persists exactly what was validated.
     """
     # Lazy (author-time only) — keeps the module's top-level imports leaf-only.
+    from pydantic import TypeAdapter, ValidationError
+
+    from src.onboarding.schemas import FieldDefinition
     from src.onboarding.service import FieldDefinitionError
 
     if pdf_bytes is None:
         raise FieldDefinitionError(
             "Upload a PDF before defining fields on this template."
         )
+    # Field-SHAPE validation (id-slug, kind enum, label, required/prefill types,
+    # page≥1, x/y/w/h presence + numeric). This used to come "for free" from the
+    # ``list[FieldDefinition]`` request schema; now that the request carries raw
+    # dicts (so the form kinds aren't forced through the coordinate model), THIS
+    # handler owns the esign shape.
+    try:
+        validated = TypeAdapter(list[FieldDefinition]).validate_python(defs)
+    except ValidationError as exc:
+        first = exc.errors()[0] if exc.errors() else {}
+        loc = ".".join(str(p) for p in first.get("loc", ()))
+        raise FieldDefinitionError(
+            f"Invalid field definition ({loc or 'shape'}): "
+            f"{first.get('msg', 'malformed field')}"
+        ) from exc
+    # Persist the NORMALIZED model output — declared keys only, types coerced
+    # (``required:'no'`` → real bool, junk keys dropped) — so the stored shape
+    # matches what was validated, exactly the guarantee ``list[FieldDefinition]``
+    # gave before the widening to ``list[dict]``. The geometry/bounds checks
+    # below (which need the PDF, so the model can't do them) run on the
+    # normalized values and the same normalized list is returned to store.
+    normalized = [field.model_dump() for field in validated]
     reader = PdfReader(io.BytesIO(pdf_bytes))
     page_count = len(reader.pages)
     seen_ids: set[str | None] = set()
 
-    for index, field in enumerate(defs):
+    for index, field in enumerate(normalized):
         label = f"field '{field.get('id', index)}'"
 
         field_id = field.get("id")
@@ -84,25 +107,18 @@ def validate_esign_definitions(
             raise FieldDefinitionError(f"Duplicate field id '{field_id}'")
         seen_ids.add(field_id)
 
-        if field.get("prefill") not in (None, *ALLOWED_PREFILL):
-            raise FieldDefinitionError(
-                f"{label}: unsupported prefill '{field.get('prefill')}'"
-            )
-
-        page = field.get("page")
-        if not isinstance(page, int) or page < 1 or page > page_count:
+        # id-slug, kind, label, prefill literal, and page≥1 are already enforced
+        # by the model above; only the PDF-relative checks remain here.
+        page = field["page"]
+        if page > page_count:
             raise FieldDefinitionError(
                 f"{label}: page {page} out of range (1..{page_count})"
             )
 
-        try:
-            x = float(field["x"])
-            y = float(field["y"])
-            w = float(field["w"])
-            h = float(field["h"])
-        except (KeyError, TypeError, ValueError) as exc:
-            raise FieldDefinitionError(f"{label}: malformed coordinates") from exc
-
+        x = float(field["x"])
+        y = float(field["y"])
+        w = float(field["w"])
+        h = float(field["h"])
         if not all(math.isfinite(v) for v in (x, y, w, h)):
             raise FieldDefinitionError(f"{label}: non-finite coordinates")
         if w <= 0 or h <= 0:
@@ -118,6 +134,7 @@ def validate_esign_definitions(
                 f"{label}: box is outside the page bounds "
                 f"({page_w:.0f}x{page_h:.0f} pt)"
             )
+    return normalized
 
 
 class EsignPdfDocumentType:
@@ -130,8 +147,8 @@ class EsignPdfDocumentType:
 
     def validate_definitions(
         self, defs: list[dict], *, pdf_bytes: bytes | None
-    ) -> None:
-        validate_esign_definitions(defs, pdf_bytes)
+    ) -> list[dict]:
+        return validate_esign_definitions(defs, pdf_bytes)
 
     def validate_value(
         self, field: dict, value: object
