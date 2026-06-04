@@ -15,9 +15,12 @@ from src.auth.models import User
 from src.core.constants import HTTPStatus
 from src.core.data_scope import DataScope, get_data_scope
 from src.core.entity_access import require_entity_access
+from src.core.http_errors import value_error_as_400
 from src.core.permissions import require_permission
 from src.core.router_utils import DBSession, raise_not_found
+from src.email.service import assert_gmail_connected
 from src.onboarding import completion, crypto
+from src.onboarding.completion_notices import queue_invite
 from src.onboarding.models import (
     OnboardingPacketDocument,
     OnboardingSecretValue,
@@ -26,6 +29,7 @@ from src.onboarding.packet_schemas import (
     PacketCreate,
     PacketResponse,
     PurgeResult,
+    RegenerateLinkRequest,
     ResendResult,
     SecretValue,
     SecretValuesResponse,
@@ -55,6 +59,23 @@ async def _load_packet_checked(
     return service, packet
 
 
+async def _preflight_sender_gmail(db, sent_by_id: int | None) -> None:
+    """Pre-flight the SENDER's Gmail BEFORE minting/rotating a token (F4).
+
+    Onboarding invites send from the packet owner's connected Gmail and have no
+    transactional fallback, so a Gmail-down send/resend must fail BEFORE any
+    token is minted or rotated — never stranding the client with a dead link
+    and no delivery. Raises ``ValueError`` (mapped to 400) the UI turns into a
+    Connect-Gmail prompt; a None owner can never send, so it is refused too.
+    """
+    if sent_by_id is None:
+        raise ValueError(
+            "This packet has no owner to send the invite from. Assign an owner "
+            "before emailing the onboarding link."
+        )
+    await assert_gmail_connected(db, sent_by_id)
+
+
 @router.post(
     "/packets", response_model=PacketResponse, status_code=HTTPStatus.CREATED
 )
@@ -81,6 +102,12 @@ async def create_packet(
             db, "proposals", data.proposal_id, current_user, data_scope
         )
     service = PacketService(db)
+    # F3/F4: when emailing, pre-flight the creator's Gmail BEFORE minting so a
+    # Gmail-down send creates no packet/token (nothing minted, nothing to roll
+    # back). The creator is the sender (created_by_id below).
+    if data.send_email:
+        with value_error_as_400():
+            await _preflight_sender_gmail(db, current_user.id)
     with packet_errors_mapped():
         packet, raw_token = await service.create_packet(
             created_by_id=current_user.id,
@@ -92,6 +119,15 @@ async def create_packet(
             template_ids=data.template_ids,
             requires_esign_override=data.requires_esign_override,
         )
+    if data.send_email:
+        # Commit the token BEFORE queuing the invite — queue_email may send
+        # synchronously, so the link must be durable first (mirrors the resend
+        # route + trigger.py). queue_invite is fail-soft: a send failure becomes
+        # a visible failed EmailQueue row, and the live link already exists.
+        await db.commit()
+        await queue_invite(db, packet=packet, raw_access_token=raw_token)
+    # ``access_url`` (raw token) is returned on BOTH paths so "copy link" stays
+    # available as the secondary action even after an email send.
     return await build_packet_response(db, service, packet, raw_token=raw_token)
 
 
@@ -154,11 +190,14 @@ async def resend_invite(
     ``resend_completion_notices``). The invite is NOT suppressed by the
     idempotency guard (deliberate staff action).
     """
-    from src.onboarding.completion_notices import queue_invite
-
     service, packet = await _load_packet_checked(
         db, packet_id, current_user, data_scope
     )
+    # F4: pre-flight the OWNER's Gmail BEFORE rotating — a Gmail-down resend must
+    # not kill the live link without delivering the new one (resend always
+    # rotates + emails). The owner (created_by_id) is the sender.
+    with value_error_as_400():
+        await _preflight_sender_gmail(db, packet.created_by_id)
     with packet_errors_mapped():
         raw_token = await service.resend_invite(packet, actor_id=current_user.id)
     await db.commit()
@@ -167,6 +206,44 @@ async def resend_invite(
     )
     packet = await service.get_packet(packet_id)
     return await build_packet_response(db, service, packet)
+
+
+@router.post("/packets/{packet_id}/regenerate-link", response_model=PacketResponse)
+async def regenerate_link(
+    packet_id: int,
+    data: RegenerateLinkRequest,
+    current_user: UpdateUser,
+    db: DBSession,
+    data_scope: Scope,
+):
+    """Rotate the access token + return the NEW raw ``access_url`` to copy (F5/D1).
+
+    Recovers a lost/forgotten link without re-serving the unrecoverable old
+    token (only its hash is stored): rotate (the previously shared link dies),
+    commit, and return the fresh raw link. ``send_email`` optionally also
+    re-queues the invite — only then is the owner's Gmail pre-flighted, since
+    copying the link in-hand strands nobody. Allowed for
+    active/opened/in_progress/expired; 409 for terminal states.
+    """
+    service, packet = await _load_packet_checked(
+        db, packet_id, current_user, data_scope
+    )
+    if data.send_email:
+        with value_error_as_400():
+            await _preflight_sender_gmail(db, packet.created_by_id)
+    with packet_errors_mapped():
+        raw_token = await service.resend_invite(packet, actor_id=current_user.id)
+    # Commit the rotated token BEFORE returning the link / queuing: a failing
+    # trailing request-commit could otherwise roll the hash back to the
+    # already-dead old value, leaving the recipient a broken link.
+    await db.commit()
+    if data.send_email:
+        await queue_invite(
+            db, packet=packet, raw_access_token=raw_token, suppress_if_exists=False
+        )
+    packet = await service.get_packet(packet_id)
+    # raw_token surfaces the new link ONCE as ``access_url`` (the copy target).
+    return await build_packet_response(db, service, packet, raw_token=raw_token)
 
 
 @router.post("/packets/{packet_id}/retry-completion", response_model=PacketResponse)

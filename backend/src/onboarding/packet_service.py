@@ -85,6 +85,17 @@ def _ensure_aware(value: datetime | None) -> datetime | None:
     return value
 
 
+def ensure_pdf_suffix(name: str) -> str:
+    """Append ``.pdf`` to a document title that lacks it (F2).
+
+    A doc's ``original_filename`` is the human-facing title — no extension for
+    questionnaire/upload kinds — but the COMPLETION artifacts (the contact
+    attachment + the download Content-Disposition) are always a real PDF, so
+    their file names must end in ``.pdf``. esign titles already do (no-op).
+    """
+    return name if name.lower().endswith(".pdf") else f"{name}.pdf"
+
+
 def _mask_email(email: str | None) -> str:
     """``alice@example.com`` → ``a***@example.com`` (staff list, no full PII)."""
     if not email or "@" not in email:
@@ -245,7 +256,17 @@ class PacketService:
                 packet_id=packet.id,
                 display_order=order,
                 source_template_id=template.id,
-                original_filename=f"{template.name}.pdf",
+                # Kind-appropriate title (F2): only esign_pdf docs ARE a PDF, so
+                # only they carry the ``.pdf`` suffix. A questionnaire/upload doc
+                # is a form — a bare ``{name}.pdf`` showed a bogus extension on
+                # the public fill page + the generated summary heading. Generated
+                # PDF artifacts (the completion attachment / download) re-append
+                # ``.pdf`` via ``ensure_pdf_suffix`` so their filenames stay valid.
+                original_filename=(
+                    f"{template.name}.pdf"
+                    if handler.kind == "esign_pdf"
+                    else template.name
+                ),
                 kind=template.kind,
                 pdf_path=pdf_path,
                 field_definitions=field_defs,

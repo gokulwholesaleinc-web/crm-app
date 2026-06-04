@@ -26,6 +26,26 @@ class PacketCreate(BaseModel):
     proposal_id: int | None = None
     template_ids: list[int] = Field(min_length=1)
     requires_esign_override: bool | None = None
+    # When True the manual send emails the invite to the recipient (from the
+    # creating staff's connected Gmail) — the route pre-flights Gmail BEFORE
+    # minting and commits the token BEFORE queuing (F3/F4). When False the
+    # packet is minted and the one-time ``access_url`` is returned to copy
+    # without any email (the copy-link-only secondary path). Defaults False so
+    # the create contract stays backward-compatible; the UI opts in per action.
+    send_email: bool = False
+
+
+class RegenerateLinkRequest(BaseModel):
+    """Body for the copy-only link-regenerate action (F5/D1).
+
+    Rotates the access token (the previously shared link dies) and returns the
+    NEW raw ``access_url`` for staff to copy after a refresh lost the original.
+    ``send_email`` (default False) optionally also re-queues the invite — only
+    then is the owner's Gmail pre-flighted, since copying the link in-hand
+    strands nobody.
+    """
+
+    send_email: bool = False
 
 
 class PacketDocumentSummary(BaseModel):

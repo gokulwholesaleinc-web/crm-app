@@ -50,6 +50,7 @@ from src.onboarding.packet_service import (
     WRITABLE_STATUSES,
     PacketService,
     _ensure_aware,
+    ensure_pdf_suffix,
     scrub_packet,
 )
 from src.onboarding.view_ledger import get_unviewed_packet_document_ids
@@ -432,7 +433,11 @@ async def _phase_b_stamp(db: AsyncSession, *, packet_id: int) -> None:
                 )
             att = await AttachmentService(db).create_from_bytes(
                 content=stamped,
-                original_filename=doc.original_filename,
+                # The artifact is always a PDF (esign stamp / questionnaire
+                # summary / upload manifest); the saved attachment name carries
+                # ``.pdf`` even for form kinds whose title has none (F2 — the
+                # doc title itself stays clean on the fill page).
+                original_filename=ensure_pdf_suffix(doc.original_filename),
                 entity_type="contacts",
                 entity_id=packet.contact_id,
                 category="onboarding",

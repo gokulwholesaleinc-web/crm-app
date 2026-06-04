@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import clsx from 'clsx';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -6,6 +7,7 @@ import {
   NoSymbolIcon,
   ArrowPathIcon,
   EnvelopeIcon,
+  LinkIcon,
 } from '@heroicons/react/24/outline';
 import { CheckIcon } from '@heroicons/react/20/solid';
 import {
@@ -25,10 +27,13 @@ import {
   retryOnboardingPacket,
   resendOnboardingCompletionNotice,
   resendOnboardingPacketInvite,
+  regenerateOnboardingPacketLink,
 } from '../../api/onboarding';
 import { formatDate } from '../../utils/formatters';
 import { showSuccess, showError } from '../../utils/toast';
 import { extractApiErrorDetail } from '../../utils/errors';
+import { isGmailReconnectSendError } from '../../utils/gmailSendError';
+import { GMAIL_SETTINGS_PATH } from '../../utils/integrationLinks';
 import type {
   OnboardingTemplate,
   OnboardingPacket,
@@ -107,14 +112,24 @@ const INVITE_RESENDABLE = new Set<OnboardingPacketStatus>([
 
 export function OnboardingSendPanel({ templates }: OnboardingSendPanelProps) {
   const queryClient = useQueryClient();
-  const [contactId, setContactId] = useState<number | null>(null);
+  // Persist the picked contact in ?contact= so a full refresh keeps the packet
+  // list + selection (F5/F7 — the link itself is unrecoverable, but the list
+  // is rebuilt from the contact).
+  const [searchParams, setSearchParams] = useSearchParams();
+  const contactParam = searchParams.get('contact');
+  const [contactId, setContactId] = useState<number | null>(
+    contactParam ? Number(contactParam) || null : null,
+  );
   const [contactSearch, setContactSearch] = useState('');
   const [recipientEmail, setRecipientEmail] = useState('');
   const [recipientName, setRecipientName] = useState('');
   const [selectedTemplateIds, setSelectedTemplateIds] = useState<Set<number>>(() => new Set());
-  // The one-time access_url returned by the create call — shown once, copied,
-  // then dropped on the next create (it is never re-served by the API §8).
-  const [accessUrl, setAccessUrl] = useState<string | null>(null);
+  // The one-time access_url from a create OR regenerate — shown once, copied,
+  // then dropped on the next action (it is never re-served by the API §8).
+  const [copyLink, setCopyLink] = useState<string | null>(null);
+  // Set when a send fails because the operator's Gmail isn't connected — drives
+  // the inline Connect-Gmail prompt instead of a generic error toast (F4).
+  const [gmailPrompt, setGmailPrompt] = useState<string | null>(null);
   const [revokeTarget, setRevokeTarget] = useState<OnboardingPacket | null>(null);
 
   const activeTemplates = useMemo(() => templates.filter((t) => t.is_active), [templates]);
@@ -142,9 +157,8 @@ export function OnboardingSendPanel({ templates }: OnboardingSendPanelProps) {
 
   const createMutation = useMutation({
     mutationFn: createOnboardingPacket,
-    onSuccess: (packet) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [...PACKETS_KEY, contactId] });
-      setAccessUrl(packet.access_url ?? null);
     },
   });
 
@@ -179,7 +193,26 @@ export function OnboardingSendPanel({ templates }: OnboardingSendPanelProps) {
       queryClient.invalidateQueries({ queryKey: [...PACKETS_KEY, contactId] });
       showSuccess('Fresh invite link re-sent — check delivery status below.');
     },
-    onError: (err) => showError(extractApiErrorDetail(err) ?? 'Failed to resend the invite'),
+    onError: (err) => {
+      const detail = extractApiErrorDetail(err);
+      if (isGmailReconnectSendError(detail)) {
+        setGmailPrompt(detail ?? 'Connect your Gmail to email onboarding invites.');
+        return;
+      }
+      showError(detail ?? 'Failed to resend the invite');
+    },
+  });
+
+  // Link recovery (F5): rotate the token + surface the NEW link to copy. The
+  // previously shared link dies; no email unless the operator also resends.
+  const regenerateMutation = useMutation({
+    mutationFn: (packetId: number) => regenerateOnboardingPacketLink(packetId),
+    onSuccess: (packet) => {
+      queryClient.invalidateQueries({ queryKey: [...PACKETS_KEY, contactId] });
+      setCopyLink(packet.access_url ?? null);
+      showSuccess('Fresh link generated — copy it below. The previous link no longer works.');
+    },
+    onError: (err) => showError(extractApiErrorDetail(err) ?? 'Failed to regenerate the link'),
   });
 
   const toggleTemplate = (id: number) => {
@@ -193,7 +226,17 @@ export function OnboardingSendPanel({ templates }: OnboardingSendPanelProps) {
 
   const handleContactChange = (id: number | null) => {
     setContactId(id);
-    setAccessUrl(null);
+    setCopyLink(null);
+    setGmailPrompt(null);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (id == null) next.delete('contact');
+        else next.set('contact', String(id));
+        return next;
+      },
+      { replace: true },
+    );
     // Prefill the recipient email from the picked contact when available.
     const picked = (contactList?.items ?? []).find((c) => c.id === id);
     setRecipientEmail(picked?.email ?? '');
@@ -206,19 +249,35 @@ export function OnboardingSendPanel({ templates }: OnboardingSendPanelProps) {
     selectedTemplateIds.size > 0 &&
     !createMutation.isPending;
 
-  const handleSend = async () => {
+  const handleSend = async (sendEmail: boolean) => {
     if (!canSend || contactId == null) return;
+    setGmailPrompt(null);
     try {
-      await createMutation.mutateAsync({
+      const packet = await createMutation.mutateAsync({
         contact_id: contactId,
         recipient_email: recipientEmail.trim(),
         recipient_name: recipientName.trim() || null,
         template_ids: [...selectedTemplateIds],
+        send_email: sendEmail,
       });
       setSelectedTemplateIds(new Set());
-      showSuccess('Onboarding link created. Copy it below to share with the client.');
+      setCopyLink(packet.access_url ?? null);
+      showSuccess(
+        sendEmail
+          ? // The send queues from the owner's Gmail and is fail-soft, so don't
+            // assert delivery — steer staff to the per-packet status badge.
+            `Onboarding invite queued to ${recipientEmail.trim()} — check delivery status below. The copy link is shown as a backup.`
+          : 'Onboarding link created. Copy it below to share with the client.',
+      );
     } catch (err) {
-      showError(extractApiErrorDetail(err) ?? 'Failed to create onboarding link');
+      const detail = extractApiErrorDetail(err);
+      // A Gmail-down send mints nothing (the backend pre-flights before create),
+      // so steer the operator to reconnect rather than show a dead-end error.
+      if (sendEmail && isGmailReconnectSendError(detail)) {
+        setGmailPrompt(detail ?? 'Connect your Gmail to email onboarding invites.');
+      } else {
+        showError(detail ?? 'Failed to create onboarding link');
+      }
     }
   };
 
@@ -349,26 +408,58 @@ export function OnboardingSendPanel({ templates }: OnboardingSendPanelProps) {
             )}
           </fieldset>
 
-          <Button
-            leftIcon={<PaperAirplaneIcon className="h-4 w-4" aria-hidden="true" />}
-            onClick={handleSend}
-            disabled={!canSend}
-            isLoading={createMutation.isPending}
-          >
-            Create onboarding link
-          </Button>
+          {/* Connect-Gmail prompt — only after a send failed on a missing Gmail. */}
+          {gmailPrompt && (
+            <div
+              role="alert"
+              aria-live="polite"
+              className="rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-3"
+            >
+              <p className="text-sm font-medium text-amber-900 dark:text-amber-200">{gmailPrompt}</p>
+              <Link
+                to={GMAIL_SETTINGS_PATH}
+                className="mt-2 inline-flex items-center gap-1 rounded text-sm font-semibold text-amber-900 underline underline-offset-2 hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 dark:text-amber-200"
+              >
+                Connect Gmail in Settings
+              </Link>
+              <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                Or use “Create link only” to share the link yourself without email.
+              </p>
+            </div>
+          )}
 
-          {/* One-time access URL */}
-          {accessUrl && (
+          {/* Primary: email the invite (D4). Secondary: mint a copy-only link. */}
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              leftIcon={<PaperAirplaneIcon className="h-4 w-4" aria-hidden="true" />}
+              onClick={() => handleSend(true)}
+              disabled={!canSend}
+              isLoading={createMutation.isPending}
+            >
+              Send onboarding email
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              leftIcon={<LinkIcon className="h-4 w-4" aria-hidden="true" />}
+              onClick={() => handleSend(false)}
+              disabled={!canSend}
+            >
+              Create link only
+            </Button>
+          </div>
+
+          {/* One-time access URL (from a create or a regenerate) */}
+          {copyLink && (
             <div className="rounded-md border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 p-3" role="status" aria-live="polite">
               <p className="text-sm font-medium text-green-900 dark:text-green-200">
                 Link ready — copy it now. It is shown only once.
               </p>
               <div className="mt-2 flex items-center gap-2">
                 <code className="min-w-0 flex-1 truncate rounded bg-white dark:bg-gray-800 border border-green-200 dark:border-green-800 px-2 py-1 text-xs text-gray-700 dark:text-gray-200">
-                  {accessUrl}
+                  {copyLink}
                 </code>
-                <CopyButton value={accessUrl} label="onboarding link" />
+                <CopyButton value={copyLink} label="onboarding link" />
               </div>
             </div>
           )}
@@ -401,6 +492,11 @@ export function OnboardingSendPanel({ templates }: OnboardingSendPanelProps) {
                         ? () => resendInviteMutation.mutate(p.id)
                         : undefined
                     }
+                    onRegenerate={
+                      INVITE_RESENDABLE.has(p.status) && !regenerateMutation.isPending
+                        ? () => regenerateMutation.mutate(p.id)
+                        : undefined
+                    }
                     onRevoke={REVOKABLE.has(p.status) ? () => setRevokeTarget(p) : undefined}
                   />
                 ))}
@@ -430,10 +526,11 @@ interface PacketRowProps {
   onRetry?: () => void;
   onResend?: () => void;
   onResendInvite?: () => void;
+  onRegenerate?: () => void;
   onRevoke?: () => void;
 }
 
-function PacketRow({ packet, onRetry, onResend, onResendInvite, onRevoke }: PacketRowProps) {
+function PacketRow({ packet, onRetry, onResend, onResendInvite, onRegenerate, onRevoke }: PacketRowProps) {
   const emails = packet.emails ?? [];
   return (
     <li className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between">
@@ -463,7 +560,7 @@ function PacketRow({ packet, onRetry, onResend, onResendInvite, onRevoke }: Pack
           </div>
         )}
       </div>
-      {(onRetry || onResend || onResendInvite || onRevoke) && (
+      {(onRetry || onResend || onResendInvite || onRegenerate || onRevoke) && (
         <div className="flex flex-shrink-0 flex-wrap items-center gap-1">
           {/* Retry comes first for a stuck/failed packet so the destructive
               Revoke is never the only (or primary) action offered — revoke
@@ -488,6 +585,19 @@ function PacketRow({ packet, onRetry, onResend, onResendInvite, onRevoke }: Pack
               onClick={onResendInvite}
             >
               Resend invite
+            </Button>
+          )}
+          {/* Recover a lost link: rotate + surface a fresh copyable URL (the old
+              one dies). Distinct from "Resend invite", which emails it. */}
+          {onRegenerate && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              leftIcon={<LinkIcon className="h-4 w-4" aria-hidden="true" />}
+              onClick={onRegenerate}
+            >
+              Copy new link
             </Button>
           )}
           {onResend && (

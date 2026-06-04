@@ -182,6 +182,13 @@ export interface OnboardingPacketCreate {
   recipient_name?: string | null;
   company_id?: number | null;
   template_ids: number[];
+  /**
+   * When true the backend emails the invite to the recipient (from the
+   * creating staff's connected Gmail) and still returns the one-time
+   * ``access_url`` for the copy-link backup. When false/omitted the packet is
+   * minted and only the link is returned (the copy-only secondary path).
+   */
+  send_email?: boolean;
 }
 
 // ---------------------------------------------------------------------------
