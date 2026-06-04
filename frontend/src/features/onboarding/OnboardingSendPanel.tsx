@@ -131,6 +131,9 @@ export function OnboardingSendPanel({ templates }: OnboardingSendPanelProps) {
   // the inline Connect-Gmail prompt instead of a generic error toast (F4).
   const [gmailPrompt, setGmailPrompt] = useState<string | null>(null);
   const [revokeTarget, setRevokeTarget] = useState<OnboardingPacket | null>(null);
+  // Regenerate rotates the token immediately (the old link dies), so it is
+  // confirmed first — a misclick must not strand a client on a dead link.
+  const [regenerateTarget, setRegenerateTarget] = useState<OnboardingPacket | null>(null);
 
   const activeTemplates = useMemo(() => templates.filter((t) => t.is_active), [templates]);
 
@@ -289,6 +292,19 @@ export function OnboardingSendPanel({ templates }: OnboardingSendPanelProps) {
       setRevokeTarget(null);
     } catch (err) {
       showError(extractApiErrorDetail(err) ?? 'Failed to revoke link');
+    }
+  };
+
+  const handleRegenerateConfirm = async () => {
+    if (!regenerateTarget) return;
+    try {
+      // Success/error toasts + copyLink are handled by the mutation callbacks.
+      await regenerateMutation.mutateAsync(regenerateTarget.id);
+    } catch {
+      // Already surfaced by the mutation's onError; swallow so the rejected
+      // promise (ConfirmDialog calls onConfirm un-awaited) isn't unhandled.
+    } finally {
+      setRegenerateTarget(null);
     }
   };
 
@@ -494,7 +510,7 @@ export function OnboardingSendPanel({ templates }: OnboardingSendPanelProps) {
                     }
                     onRegenerate={
                       INVITE_RESENDABLE.has(p.status) && !regenerateMutation.isPending
-                        ? () => regenerateMutation.mutate(p.id)
+                        ? () => setRegenerateTarget(p)
                         : undefined
                     }
                     onRevoke={REVOKABLE.has(p.status) ? () => setRevokeTarget(p) : undefined}
@@ -516,6 +532,18 @@ export function OnboardingSendPanel({ templates }: OnboardingSendPanelProps) {
         cancelLabel="Cancel"
         variant="danger"
         isLoading={revokeMutation.isPending}
+      />
+
+      <ConfirmDialog
+        isOpen={regenerateTarget !== null}
+        onClose={() => setRegenerateTarget(null)}
+        onConfirm={handleRegenerateConfirm}
+        title="Generate a new link"
+        message="This immediately stops the current link from working — anyone who already has the old link will get an error. The new link is shown for you to copy; no email is sent unless you resend the invite."
+        confirmLabel="Generate new link"
+        cancelLabel="Cancel"
+        variant="danger"
+        isLoading={regenerateMutation.isPending}
       />
     </section>
   );

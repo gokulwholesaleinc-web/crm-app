@@ -66,18 +66,40 @@ export interface OnboardingTemplate {
    */
   has_pdf: boolean;
   pdf_version: number;
-  field_definitions: OnboardingFieldDefinition[];
+  /**
+   * Per-kind field list — coordinate fields for ``esign_pdf``, questionnaire/
+   * upload fields otherwise (the column holds different shapes by ``kind``).
+   * Consumers narrow on ``kind`` before treating these as one shape.
+   */
+  field_definitions: OnboardingTemplateFieldDef[];
   requires_esign: boolean;
   is_active: boolean;
   created_at: string;
   updated_at: string;
 }
 
+/**
+ * A per-kind field definition on the wire — coordinate fields for esign_pdf,
+ * questionnaire questions / upload file fields otherwise. The backend handler
+ * for the template's ``kind`` validates the shape; the client passes the raw
+ * union through (matching the backend's ``list[dict]`` passthrough).
+ */
+export type OnboardingTemplateFieldDef =
+  | OnboardingFieldDefinition
+  | OnboardingQuestionnaireField;
+
 export interface OnboardingTemplateCreate {
   name: string;
   description?: string | null;
   service_tag?: string | null;
   requires_esign?: boolean;
+  /**
+   * Document kind (default ``esign_pdf``). ``questionnaire``/``upload_request``
+   * may carry initial ``field_definitions``; ``esign_pdf`` places coordinate
+   * fields only after a PDF is uploaded, so it rejects initial fields.
+   */
+  kind?: OnboardingDocumentKind;
+  field_definitions?: OnboardingTemplateFieldDef[] | null;
 }
 
 export interface OnboardingTemplateUpdate {
@@ -85,8 +107,12 @@ export interface OnboardingTemplateUpdate {
   description?: string | null;
   service_tag?: string | null;
   requires_esign?: boolean | null;
-  /** Reassigns the whole list; rejected (422) until a PDF is uploaded. */
-  field_definitions?: OnboardingFieldDefinition[] | null;
+  /**
+   * Reassigns the whole field list. For esign_pdf these are coordinate fields
+   * (rejected 422 until a PDF is uploaded); for questionnaire/upload they are
+   * the per-kind question/file fields, validated server-side by the handler.
+   */
+  field_definitions?: OnboardingTemplateFieldDef[] | null;
   /**
    * Optimistic-lock token sent alongside ``field_definitions``. The editor
    * captures the template's ``pdf_version`` when opened; if the PDF was

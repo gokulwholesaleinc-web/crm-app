@@ -44,11 +44,14 @@ class DocumentType(Protocol):
 
     def validate_definitions(
         self, defs: list[dict], *, pdf_bytes: bytes | None
-    ) -> None:
+    ) -> list[dict]:
         """Author-time field validation; branches BEFORE any PDF read (P0-9).
 
         MUST reuse the shared ``ALLOWED_PREFILL`` so ``email``/PII can never be
-        made prefillable.
+        made prefillable. Returns the canonical definitions to STORE — esign
+        normalizes through its pydantic model (declared keys only, types
+        coerced); the form kinds return their validated list unchanged. The
+        caller persists exactly this return value.
         """
         ...
 

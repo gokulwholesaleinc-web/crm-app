@@ -122,9 +122,11 @@ class UploadRequestDocumentType:
 
     def validate_definitions(
         self, defs: list[dict], *, pdf_bytes: bytes | None
-    ) -> None:
+    ) -> list[dict]:
         # ``pdf_bytes`` is deliberately ignored (P0-9): branch BEFORE any read.
+        # The validated list is the canonical stored form (no model to normalize).
         validate_upload_definitions(defs)
+        return defs
 
     def validate_value(
         self, field: dict, value: object

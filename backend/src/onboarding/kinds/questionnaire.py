@@ -181,10 +181,12 @@ class QuestionnaireDocumentType:
 
     def validate_definitions(
         self, defs: list[dict], *, pdf_bytes: bytes | None
-    ) -> None:
+    ) -> list[dict]:
         # Branch BEFORE any PDF read (P0-9): a questionnaire never has a PDF, so
-        # ``pdf_bytes`` is ignored entirely — never opened.
+        # ``pdf_bytes`` is ignored entirely — never opened. The validated list is
+        # the canonical stored form (no pydantic model to normalize through).
         validate_questionnaire_definitions(defs)
+        return defs
 
     def validate_value(
         self, field: dict, value: object
