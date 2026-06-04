@@ -198,8 +198,27 @@ export interface OnboardingPacket {
   emails?: OnboardingPacketEmail[];
 }
 
+/**
+ * One client-uploaded file on a packet (staff detail view, D5). Carries the
+ * packet/doc/field correlation the contact-Attachments list drops; the file
+ * itself is a contacts Attachment downloadable via ``attachment_id``.
+ */
+export interface OnboardingPacketUpload {
+  id: number;
+  packet_document_id: number;
+  field_id: string;
+  attachment_id: number | null;
+  original_filename: string;
+  byte_size: number;
+  mime_type: string;
+  sensitive: boolean;
+  created_at?: string | null;
+}
+
 export interface OnboardingPacketDetail extends OnboardingPacket {
   documents: OnboardingPacketDocumentSummary[];
+  /** Client-uploaded files (present on the GET /packets/{id} detail only). */
+  uploads?: OnboardingPacketUpload[];
 }
 
 export interface OnboardingPacketCreate {

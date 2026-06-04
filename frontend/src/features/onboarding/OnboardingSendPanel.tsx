@@ -2,113 +2,29 @@ import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import clsx from 'clsx';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  PaperAirplaneIcon,
-  NoSymbolIcon,
-  ArrowPathIcon,
-  EnvelopeIcon,
-  LinkIcon,
-} from '@heroicons/react/24/outline';
+import { PaperAirplaneIcon, LinkIcon } from '@heroicons/react/24/outline';
 import { CheckIcon } from '@heroicons/react/20/solid';
 import {
   Button,
   Input,
   Badge,
-  ConfirmDialog,
   SearchableSelect,
   CopyButton,
   type SearchableSelectOption,
 } from '../../components/ui';
 import { listContacts } from '../../api/contacts';
-import {
-  createOnboardingPacket,
-  listOnboardingPackets,
-  revokeOnboardingPacket,
-  retryOnboardingPacket,
-  resendOnboardingCompletionNotice,
-  resendOnboardingPacketInvite,
-  regenerateOnboardingPacketLink,
-} from '../../api/onboarding';
-import { formatDate } from '../../utils/formatters';
+import { createOnboardingPacket } from '../../api/onboarding';
 import { showSuccess, showError } from '../../utils/toast';
 import { extractApiErrorDetail } from '../../utils/errors';
 import { isGmailReconnectSendError } from '../../utils/gmailSendError';
 import { GMAIL_SETTINGS_PATH } from '../../utils/integrationLinks';
-import type {
-  OnboardingTemplate,
-  OnboardingPacket,
-  OnboardingPacketStatus,
-  OnboardingPacketDelivery,
-} from '../../types';
+import { OnboardingPacketList, PACKETS_KEY } from './OnboardingPacketList';
+import type { OnboardingTemplate } from '../../types';
 
 interface OnboardingSendPanelProps {
   /** Active templates available to send (retired ones are excluded upstream). */
   templates: OnboardingTemplate[];
 }
-
-const PACKETS_KEY = ['onboarding-packets'] as const;
-
-/** Status pill colour by packet lifecycle state (build-order note §2). */
-const STATUS_VARIANT: Record<OnboardingPacketStatus, 'gray' | 'blue' | 'green' | 'yellow' | 'red'> = {
-  active: 'blue',
-  opened: 'blue',
-  in_progress: 'yellow',
-  completing: 'yellow',
-  completed: 'green',
-  expired: 'gray',
-  revoked: 'red',
-  completion_failed: 'red',
-  abandoned: 'gray',
-};
-
-const STATUS_LABEL: Record<OnboardingPacketStatus, string> = {
-  active: 'Sent',
-  opened: 'Opened',
-  in_progress: 'In progress',
-  completing: 'Finishing',
-  completed: 'Completed',
-  expired: 'Expired',
-  revoked: 'Revoked',
-  completion_failed: 'Needs attention',
-  abandoned: 'Abandoned',
-};
-
-const DELIVERY_VARIANT: Record<OnboardingPacketDelivery, 'gray' | 'green' | 'red' | 'yellow'> = {
-  pending: 'gray',
-  sent: 'green',
-  failed: 'red',
-  retry: 'yellow',
-  throttled: 'yellow',
-};
-
-/** Non-terminal statuses can be revoked. */
-const REVOKABLE = new Set<OnboardingPacketStatus>([
-  'active',
-  'opened',
-  'in_progress',
-  'completion_failed',
-]);
-
-/** A stuck/failed packet can be re-finalized (salvages the client's data). */
-const RETRYABLE = new Set<OnboardingPacketStatus>([
-  'completion_failed',
-  'completing',
-]);
-
-/** A completed packet can have its download notice re-sent (fresh link). */
-const RESENDABLE = new Set<OnboardingPacketStatus>(['completed']);
-
-/**
- * A still-live (or expired) packet can have its *invite* re-minted — a fresh
- * access token + a re-queued invite email (distinct from the completion
- * notice). Terminal states (completed/revoked/completing/abandoned) are 409.
- */
-const INVITE_RESENDABLE = new Set<OnboardingPacketStatus>([
-  'active',
-  'opened',
-  'in_progress',
-  'expired',
-]);
 
 export function OnboardingSendPanel({ templates }: OnboardingSendPanelProps) {
   const queryClient = useQueryClient();
@@ -124,16 +40,12 @@ export function OnboardingSendPanel({ templates }: OnboardingSendPanelProps) {
   const [recipientEmail, setRecipientEmail] = useState('');
   const [recipientName, setRecipientName] = useState('');
   const [selectedTemplateIds, setSelectedTemplateIds] = useState<Set<number>>(() => new Set());
-  // The one-time access_url from a create OR regenerate — shown once, copied,
-  // then dropped on the next action (it is never re-served by the API §8).
+  // The one-time access_url from a create — shown once, copied, then dropped on
+  // the next action (it is never re-served by the API §8).
   const [copyLink, setCopyLink] = useState<string | null>(null);
   // Set when a send fails because the operator's Gmail isn't connected — drives
   // the inline Connect-Gmail prompt instead of a generic error toast (F4).
   const [gmailPrompt, setGmailPrompt] = useState<string | null>(null);
-  const [revokeTarget, setRevokeTarget] = useState<OnboardingPacket | null>(null);
-  // Regenerate rotates the token immediately (the old link dies), so it is
-  // confirmed first — a misclick must not strand a client on a dead link.
-  const [regenerateTarget, setRegenerateTarget] = useState<OnboardingPacket | null>(null);
 
   const activeTemplates = useMemo(() => templates.filter((t) => t.is_active), [templates]);
 
@@ -152,70 +64,11 @@ export function OnboardingSendPanel({ templates }: OnboardingSendPanelProps) {
     [contactList],
   );
 
-  const { data: packets = [], isLoading: packetsLoading } = useQuery({
-    queryKey: [...PACKETS_KEY, contactId],
-    queryFn: () => (contactId ? listOnboardingPackets(contactId) : Promise.resolve([])),
-    enabled: contactId != null,
-  });
-
   const createMutation = useMutation({
     mutationFn: createOnboardingPacket,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [...PACKETS_KEY, contactId] });
     },
-  });
-
-  const revokeMutation = useMutation({
-    mutationFn: (packetId: number) => revokeOnboardingPacket(packetId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: [...PACKETS_KEY, contactId] }),
-  });
-
-  const retryMutation = useMutation({
-    mutationFn: (packetId: number) => retryOnboardingPacket(packetId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [...PACKETS_KEY, contactId] });
-      showSuccess('Retrying finalization — refresh in a moment to see the result.');
-    },
-    onError: (err) => showError(extractApiErrorDetail(err) ?? 'Failed to retry finalization'),
-  });
-
-  const resendMutation = useMutation({
-    mutationFn: (packetId: number) => resendOnboardingCompletionNotice(packetId),
-    onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: [...PACKETS_KEY, contactId] });
-      showSuccess(
-        `Download link re-queued to ${result.resent.length} recipient(s) — check delivery status below.`,
-      );
-    },
-    onError: (err) => showError(extractApiErrorDetail(err) ?? 'Failed to resend the notice'),
-  });
-
-  const resendInviteMutation = useMutation({
-    mutationFn: (packetId: number) => resendOnboardingPacketInvite(packetId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [...PACKETS_KEY, contactId] });
-      showSuccess('Fresh invite link re-sent — check delivery status below.');
-    },
-    onError: (err) => {
-      const detail = extractApiErrorDetail(err);
-      if (isGmailReconnectSendError(detail)) {
-        setGmailPrompt(detail ?? 'Connect your Gmail to email onboarding invites.');
-        return;
-      }
-      showError(detail ?? 'Failed to resend the invite');
-    },
-  });
-
-  // Link recovery (F5): rotate the token + surface the NEW link to copy. The
-  // previously shared link dies; no email unless the operator also resends.
-  const regenerateMutation = useMutation({
-    mutationFn: (packetId: number) => regenerateOnboardingPacketLink(packetId),
-    onSuccess: (packet) => {
-      queryClient.invalidateQueries({ queryKey: [...PACKETS_KEY, contactId] });
-      setCopyLink(packet.access_url ?? null);
-      showSuccess('Fresh link generated — copy it below. The previous link no longer works.');
-    },
-    onError: (err) => showError(extractApiErrorDetail(err) ?? 'Failed to regenerate the link'),
   });
 
   const toggleTemplate = (id: number) => {
@@ -281,30 +134,6 @@ export function OnboardingSendPanel({ templates }: OnboardingSendPanelProps) {
       } else {
         showError(detail ?? 'Failed to create onboarding link');
       }
-    }
-  };
-
-  const handleRevokeConfirm = async () => {
-    if (!revokeTarget) return;
-    try {
-      await revokeMutation.mutateAsync(revokeTarget.id);
-      showSuccess('Onboarding link revoked.');
-      setRevokeTarget(null);
-    } catch (err) {
-      showError(extractApiErrorDetail(err) ?? 'Failed to revoke link');
-    }
-  };
-
-  const handleRegenerateConfirm = async () => {
-    if (!regenerateTarget) return;
-    try {
-      // Success/error toasts + copyLink are handled by the mutation callbacks.
-      await regenerateMutation.mutateAsync(regenerateTarget.id);
-    } catch {
-      // Already surfaced by the mutation's onError; swallow so the rejected
-      // promise (ConfirmDialog calls onConfirm un-awaited) isn't unhandled.
-    } finally {
-      setRegenerateTarget(null);
     }
   };
 
@@ -465,7 +294,7 @@ export function OnboardingSendPanel({ templates }: OnboardingSendPanelProps) {
             </Button>
           </div>
 
-          {/* One-time access URL (from a create or a regenerate) */}
+          {/* One-time access URL from a create. */}
           {copyLink && (
             <div className="rounded-md border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 p-3" role="status" aria-live="polite">
               <p className="text-sm font-medium text-green-900 dark:text-green-200">
@@ -480,179 +309,11 @@ export function OnboardingSendPanel({ templates }: OnboardingSendPanelProps) {
             </div>
           )}
 
-          {/* Packet list for the contact */}
-          <div>
-            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Existing packets</h3>
-            {packetsLoading ? (
-              <p className="mt-2 text-sm text-gray-400">Loading…</p>
-            ) : packets.length === 0 ? (
-              <p className="mt-2 text-sm text-gray-400 dark:text-gray-500">No onboarding packets yet for this contact.</p>
-            ) : (
-              <ul className="mt-2 divide-y divide-gray-200 dark:divide-gray-700 rounded-md border border-gray-200 dark:border-gray-700">
-                {packets.map((p) => (
-                  <PacketRow
-                    key={p.id}
-                    packet={p}
-                    onRetry={
-                      RETRYABLE.has(p.status) && !retryMutation.isPending
-                        ? () => retryMutation.mutate(p.id)
-                        : undefined
-                    }
-                    onResend={
-                      RESENDABLE.has(p.status) && !resendMutation.isPending
-                        ? () => resendMutation.mutate(p.id)
-                        : undefined
-                    }
-                    onResendInvite={
-                      INVITE_RESENDABLE.has(p.status) && !resendInviteMutation.isPending
-                        ? () => resendInviteMutation.mutate(p.id)
-                        : undefined
-                    }
-                    onRegenerate={
-                      INVITE_RESENDABLE.has(p.status) && !regenerateMutation.isPending
-                        ? () => setRegenerateTarget(p)
-                        : undefined
-                    }
-                    onRevoke={REVOKABLE.has(p.status) ? () => setRevokeTarget(p) : undefined}
-                  />
-                ))}
-              </ul>
-            )}
-          </div>
+          {/* Existing packets for the contact + their lifecycle actions + files. */}
+          <OnboardingPacketList contactId={contactId} heading="Existing packets" />
         </>
       )}
-
-      <ConfirmDialog
-        isOpen={revokeTarget !== null}
-        onClose={() => setRevokeTarget(null)}
-        onConfirm={handleRevokeConfirm}
-        title="Revoke onboarding link"
-        message="Revoking immediately disables the link and erases any data the client entered. This cannot be undone."
-        confirmLabel="Revoke"
-        cancelLabel="Cancel"
-        variant="danger"
-        isLoading={revokeMutation.isPending}
-      />
-
-      <ConfirmDialog
-        isOpen={regenerateTarget !== null}
-        onClose={() => setRegenerateTarget(null)}
-        onConfirm={handleRegenerateConfirm}
-        title="Generate a new link"
-        message="This immediately stops the current link from working — anyone who already has the old link will get an error. The new link is shown for you to copy; no email is sent unless you resend the invite."
-        confirmLabel="Generate new link"
-        cancelLabel="Cancel"
-        variant="danger"
-        isLoading={regenerateMutation.isPending}
-      />
     </section>
-  );
-}
-
-interface PacketRowProps {
-  packet: OnboardingPacket;
-  onRetry?: () => void;
-  onResend?: () => void;
-  onResendInvite?: () => void;
-  onRegenerate?: () => void;
-  onRevoke?: () => void;
-}
-
-function PacketRow({ packet, onRetry, onResend, onResendInvite, onRegenerate, onRevoke }: PacketRowProps) {
-  const emails = packet.emails ?? [];
-  return (
-    <li className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between">
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant={STATUS_VARIANT[packet.status]} size="sm">
-            {STATUS_LABEL[packet.status]}
-          </Badge>
-          <span className="text-sm text-gray-700 dark:text-gray-300" style={{ fontVariantNumeric: 'tabular-nums' }}>
-            {packet.document_count} document{packet.document_count === 1 ? '' : 's'}
-          </span>
-          {packet.recipient_email_masked && (
-            <span className="text-xs text-gray-400 dark:text-gray-500 truncate">{packet.recipient_email_masked}</span>
-          )}
-        </div>
-        <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500" style={{ fontVariantNumeric: 'tabular-nums' }}>
-          Created {formatDate(packet.created_at)} · expires {formatDate(packet.token_expires_at)}
-        </p>
-        {/* Live delivery status for any linked notice emails (staff-only). */}
-        {emails.length > 0 && (
-          <div className="mt-1 flex flex-wrap items-center gap-1.5">
-            {emails.map((m) => (
-              <Badge key={m.id} variant={DELIVERY_VARIANT[m.status]} size="sm">
-                {m.subject || 'Email'}: {m.status}
-              </Badge>
-            ))}
-          </div>
-        )}
-      </div>
-      {(onRetry || onResend || onResendInvite || onRegenerate || onRevoke) && (
-        <div className="flex flex-shrink-0 flex-wrap items-center gap-1">
-          {/* Retry comes first for a stuck/failed packet so the destructive
-              Revoke is never the only (or primary) action offered — revoke
-              would scrub the salvageable signature the retry needs. */}
-          {onRetry && (
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              leftIcon={<ArrowPathIcon className="h-4 w-4" aria-hidden="true" />}
-              onClick={onRetry}
-            >
-              Retry
-            </Button>
-          )}
-          {onResendInvite && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              leftIcon={<EnvelopeIcon className="h-4 w-4" aria-hidden="true" />}
-              onClick={onResendInvite}
-            >
-              Resend invite
-            </Button>
-          )}
-          {/* Recover a lost link: rotate + surface a fresh copyable URL (the old
-              one dies). Distinct from "Resend invite", which emails it. */}
-          {onRegenerate && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              leftIcon={<LinkIcon className="h-4 w-4" aria-hidden="true" />}
-              onClick={onRegenerate}
-            >
-              Copy new link
-            </Button>
-          )}
-          {onResend && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              leftIcon={<EnvelopeIcon className="h-4 w-4" aria-hidden="true" />}
-              onClick={onResend}
-            >
-              Resend link
-            </Button>
-          )}
-          {onRevoke && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              leftIcon={<NoSymbolIcon className="h-4 w-4" aria-hidden="true" />}
-              onClick={onRevoke}
-            >
-              Revoke
-            </Button>
-          )}
-        </div>
-      )}
-    </li>
   );
 }
 

@@ -72,6 +72,28 @@ class PacketDelivery(BaseModel):
     created_at: datetime | None = None
 
 
+class PacketUpload(BaseModel):
+    """One client-uploaded file on the packet (staff detail view, D5/F7).
+
+    Carries the packet/doc/field correlation an ``AttachmentResponse`` drops
+    (the contact-Attachments view exposes only filename/category). ``token_hash``
+    + ``content_sha256`` are internal and never surfaced. The file itself is a
+    ``contacts`` Attachment — download it via ``attachment_id``.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    packet_document_id: int
+    field_id: str
+    attachment_id: int | None
+    original_filename: str
+    byte_size: int
+    mime_type: str
+    sensitive: bool
+    created_at: datetime | None = None
+
+
 class PacketResponse(BaseModel):
     """Staff packet view. Tokens are never echoed; recipient_email is masked.
 
@@ -95,6 +117,9 @@ class PacketResponse(BaseModel):
     # Live EmailQueue delivery rows tagged to this packet (staff visibility);
     # named ``emails`` to match the frontend OnboardingPacketEmail[] contract.
     emails: list[PacketDelivery] = Field(default_factory=list)
+    # Client-uploaded files (D5) — populated ONLY on the single-packet detail
+    # (GET /packets/{id}); the list endpoint leaves it empty to avoid an N+1.
+    uploads: list[PacketUpload] = Field(default_factory=list)
     access_url: str | None = None
 
 

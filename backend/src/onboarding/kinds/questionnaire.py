@@ -116,6 +116,22 @@ def validate_questionnaire_definitions(defs: list[dict]) -> None:
                 f"{label}: unsupported questionnaire kind '{kind}'"
             )
 
+        # A non-empty label is required: the public fill page + the summary PDF
+        # render it, and a missing one silently falls back to the raw field id.
+        field_label = field.get("label")
+        if not isinstance(field_label, str) or not field_label.strip():
+            raise FieldDefinitionError(f"{label}: a non-empty label is required")
+
+        # Boolean flags must be REAL bools — a stringy ``"false"`` is truthy at
+        # fill time (``field.get("required")``) and would silently flip the
+        # field to required/sensitive/allow-other. ``isinstance(.., bool)``
+        # rejects ints/strings (bool is an int subclass, so 1/"true" are out).
+        for bool_key in ("required", "sensitive", "allow_other"):
+            if bool_key in field and not isinstance(field[bool_key], bool):
+                raise FieldDefinitionError(
+                    f"{label}: {bool_key} must be true or false"
+                )
+
         # ``sensitive`` encrypts a free-text answer (it is coerced to str before
         # ``crypto.encrypt_field``); a choice field's answer is an option value /
         # list, so a sensitive choice could never be filled — reject it at author

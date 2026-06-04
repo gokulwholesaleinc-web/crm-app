@@ -399,3 +399,21 @@ export function toTitleCase(text: string | null | undefined): string {
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ');
 }
+
+/**
+ * Human-readable file size: ``2048`` → ``"2.0 KB"``. Display only — never
+ * security-bearing. Caps at GB (large enough for any attachment).
+ */
+export function formatFileSize(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 1024) {
+    return `${Math.max(0, Math.round(bytes || 0))} B`;
+  }
+  const units = ['KB', 'MB', 'GB'];
+  let size = bytes / 1024;
+  let i = 0;
+  while (size >= 1024 && i < units.length - 1) {
+    size /= 1024;
+    i += 1;
+  }
+  return `${size.toFixed(1)} ${units[i]}`;
+}

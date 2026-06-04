@@ -157,7 +157,8 @@ async def get_packet(
     service, packet = await _load_packet_checked(
         db, packet_id, current_user, data_scope
     )
-    return await build_packet_response(db, service, packet)
+    # Detail view: include the client-uploaded files (D5).
+    return await build_packet_response(db, service, packet, with_uploads=True)
 
 
 @router.post("/packets/{packet_id}/revoke", response_model=PacketResponse)

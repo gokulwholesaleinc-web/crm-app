@@ -82,6 +82,18 @@ def validate_upload_definitions(defs: list[dict]) -> None:
                 f"{label}: upload_request only supports file_upload fields"
             )
 
+        # A non-empty label is required (rendered on the public upload slot).
+        field_label = field.get("label")
+        if not isinstance(field_label, str) or not field_label.strip():
+            raise FieldDefinitionError(f"{label}: a non-empty label is required")
+
+        # ``required`` must be a REAL bool — a stringy ``"false"`` is truthy at
+        # fill time and would silently force the upload.
+        if "required" in field and not isinstance(field["required"], bool):
+            raise FieldDefinitionError(
+                f"{label}: required must be true or false"
+            )
+
         if field.get("prefill") not in (None, *ALLOWED_PREFILL):
             raise FieldDefinitionError(
                 f"{label}: unsupported prefill '{field.get('prefill')}'"

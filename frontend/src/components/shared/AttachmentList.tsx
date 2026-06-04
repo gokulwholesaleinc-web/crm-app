@@ -6,8 +6,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { Spinner, ConfirmDialog } from '../ui';
 import { useAttachments, useUploadAttachment, useDeleteAttachment } from '../../hooks/useAttachments';
-import { getDownloadUrl } from '../../api/attachments';
-import { getToken } from '../../api/client';
+import { downloadAttachmentFile } from '../../api/attachments';
 import { showSuccess, showError } from '../../utils/toast';
 
 interface AttachmentListProps {
@@ -123,24 +122,7 @@ export function AttachmentList({ entityType, entityId }: AttachmentListProps) {
 
   const handleDownload = async (attachmentId: number, filename: string) => {
     try {
-      // Ask the backend for a presigned URL as JSON (?as_json=1) instead
-      // of letting fetch follow the default 307 to R2 — R2 returns no CORS
-      // headers, so the auto-followed redirect fails at the CORS layer.
-      // Anchor-click on the presigned URL is a top-level navigation, which
-      // bypasses CORS entirely.
-      const token = getToken();
-      const response = await fetch(`${getDownloadUrl(attachmentId)}?as_json=1`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (!response.ok) throw new Error('Download failed');
-      const { download_url: downloadUrl } = (await response.json()) as { download_url: string };
-      const link = document.createElement('a');
-      link.href = downloadUrl;
-      link.download = filename;
-      link.rel = 'noopener noreferrer';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      await downloadAttachmentFile(attachmentId, filename);
     } catch {
       showError('Failed to download the file.');
     }

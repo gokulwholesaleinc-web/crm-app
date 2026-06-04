@@ -20,7 +20,6 @@ import io
 import pytest
 from reportlab.lib.pagesizes import LETTER
 from reportlab.pdfgen import canvas
-
 from src.onboarding import storage
 
 pytestmark = pytest.mark.asyncio
@@ -250,3 +249,42 @@ async def test_create_questionnaire_requires_esign_true_422(client, auth_headers
         client, auth_headers, kind="questionnaire", requires_esign=True,
     )
     assert resp.status_code == 422, resp.text
+
+
+# --------------------------------------------------------------------------
+# Form-kind field hardening — non-empty label + real-bool flags
+# --------------------------------------------------------------------------
+
+
+async def test_questionnaire_field_requires_label(client, auth_headers):
+    """A questionnaire field with no label is rejected (would fall back to id)."""
+    no_label = {"id": "q_x", "kind": "short_text", "required": True}
+    resp = await _create(
+        client, auth_headers, kind="questionnaire", field_definitions=[no_label],
+    )
+    assert resp.status_code == 422, resp.text
+
+
+async def test_questionnaire_field_rejects_stringy_bool(client, auth_headers):
+    """A stringy ``"required": "false"`` is truthy at fill time — reject it."""
+    bad = {"id": "q_x", "kind": "short_text", "label": "X", "required": "false"}
+    resp = await _create(
+        client, auth_headers, kind="questionnaire", field_definitions=[bad],
+    )
+    assert resp.status_code == 422, resp.text
+
+
+async def test_upload_field_requires_label_and_real_bool(client, auth_headers):
+    """An upload field needs a non-empty label and a real-bool ``required``."""
+    no_label = {"id": "u_x", "kind": "file_upload", "maxFiles": 1, "maxMB": 5}
+    r1 = await _create(
+        client, auth_headers, kind="upload_request", field_definitions=[no_label],
+    )
+    assert r1.status_code == 422, r1.text
+
+    stringy = {"id": "u_x", "kind": "file_upload", "label": "ID",
+               "required": "false", "maxFiles": 1, "maxMB": 5}
+    r2 = await _create(
+        client, auth_headers, kind="upload_request", field_definitions=[stringy],
+    )
+    assert r2.status_code == 422, r2.text
