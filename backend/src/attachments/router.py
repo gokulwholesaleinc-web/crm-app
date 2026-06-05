@@ -9,7 +9,7 @@ from sqlalchemy import select
 
 from src.attachments.models import Attachment
 from src.attachments.schemas import AttachmentListResponse, AttachmentResponse
-from src.attachments.service import AttachmentService
+from src.attachments.service import INLINE_SAFE_MIME_TYPES, AttachmentService
 from src.core.constants import HTTPStatus
 from src.core.data_scope import DataScope, get_data_scope
 from src.core.entity_access import require_entity_access
@@ -120,6 +120,7 @@ async def download_attachment(
     db: DBSession,
     data_scope: Annotated[DataScope, Depends(get_data_scope)],
     as_json: bool = Query(False, alias="as_json"),
+    inline: bool = Query(False, alias="inline"),
 ):
     """Download an attachment file.
 
@@ -134,6 +135,11 @@ async def download_attachment(
     and R2 doesn't return CORS headers, so the redirect path 502s in the
     browser console even though the underlying request would have worked
     via navigation.
+
+    ``?inline=1`` (the "View" action) serves the file with an INLINE
+    disposition so the browser renders it in a tab — but ONLY for a vetted
+    content type (PDF / raster image); any other type ignores the flag and
+    is still forced as an ``attachment`` download (anti-sniff, §D.4 / PF3).
     """
     service = AttachmentService(db)
     attachment = await service.get_attachment(attachment_id)
@@ -147,8 +153,12 @@ async def download_attachment(
     # ELEVATION on top of the contact-access check above (§D.4).
     await _assert_sensitive_read_allowed(db, attachment, data_scope)
 
+    # Honour inline only for the safe allowlist — a renamed HTML/SVG payload
+    # must never be coaxed into an inline render via this flag.
+    inline_ok = inline and attachment.mime_type in INLINE_SAFE_MIME_TYPES
+
     try:
-        download_url = await service.get_download_url(attachment)
+        download_url = await service.get_download_url(attachment, inline=inline_ok)
     except Exception:
         # logger.exception so Sentry / log aggregator see the stack — R2
         # outages, expired creds, or unexpected boto3 errors otherwise
@@ -182,15 +192,15 @@ async def download_attachment(
     if not file_path or not file_path.exists():
         raise_not_found("File", attachment_id)
 
-    # nosniff + attachment disposition: never let a renamed active-content file
-    # (e.g. an HTML/SVG payload) be content-sniffed and rendered inline by the
-    # browser. ``FileResponse(filename=...)`` already sets ``Content-Disposition:
-    # attachment; filename=...`` — pass it via ``headers`` so the explicit
-    # ``attachment`` token + nosniff are both present (§D.4).
+    # nosniff is ALWAYS set so a mislabeled payload can't be content-sniffed into
+    # active content. Disposition defaults to ``attachment`` (forced download);
+    # only an allowlisted safe type requested with ``inline=1`` renders in-tab —
+    # the same gate the presigned-URL branch applies (§D.4).
     return FileResponse(
         path=str(file_path),
         filename=attachment.original_filename,
         media_type=attachment.mime_type,
+        content_disposition_type="inline" if inline_ok else "attachment",
         headers={"X-Content-Type-Options": "nosniff"},
     )
 

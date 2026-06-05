@@ -77,23 +77,30 @@ async def get_download_url(
     *,
     filename: str | None = None,
     content_type: str = "application/octet-stream",
+    disposition: str = "attachment",
 ) -> str:
-    """Presign a GET. When ``filename`` is given, force an ATTACHMENT download
-    (never an inline render) by baking ``response-content-disposition`` +
-    ``response-content-type`` into the signed URL.
+    """Presign a GET. When ``filename`` is given, bake
+    ``response-content-disposition`` + ``response-content-type`` into the signed
+    URL so the browser handles the file as ``disposition`` dictates.
+
+    ``disposition`` defaults to ``"attachment"`` — a forced download that never
+    inline-renders, the only safe default for arbitrary uploads. A caller may
+    pass ``"inline"`` ONLY for a vetted-safe content type (PDF / raster image);
+    the service layer gates that allowlist (it must never be reached for an
+    HTML/SVG payload a sniffing browser would execute).
 
     R2/S3 only honour these as *signed* query params (an unsigned override is
     ignored), so they must be part of the presign ``Params`` — they cannot be
     added to the redirect afterward. Without them a renamed active-content file
     (e.g. an HTML/SVG payload, or PII a sniffing browser would render inline)
     could open in the browser tab; the local-disk ``FileResponse`` branch sets
-    the equivalent ``attachment`` + nosniff headers, and this closes the same
-    gap on the object-storage redirect branch (§D.4 / PF3).
+    the equivalent headers, and this closes the same gap on the object-storage
+    redirect branch (§D.4 / PF3).
     """
     params: dict[str, str] = {"Bucket": _get_bucket_name(), "Key": object_key}
     if filename is not None:
         params["ResponseContentDisposition"] = (
-            f'attachment; filename="{_safe_disposition_filename(filename)}"'
+            f'{disposition}; filename="{_safe_disposition_filename(filename)}"'
         )
         params["ResponseContentType"] = content_type
     client = _get_r2_client()

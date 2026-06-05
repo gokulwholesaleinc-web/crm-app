@@ -31,6 +31,23 @@ ALLOWED_EXTENSIONS = {
     "txt", "webp",
 }
 
+# MIME types we will serve with an INLINE disposition (open in a browser tab via
+# the "View" action) instead of forcing a download. Deliberately narrow: PDFs
+# and raster images render but can't execute. Anything else — notably HTML and
+# SVG (script-capable) and the office/text types a browser may sniff — is NEVER
+# inline; it stays a forced ``attachment`` download (the §D.4 / PF3 anti-sniff
+# guarantee). Both the R2 presign and the local-disk FileResponse paths gate on
+# this set, so the two stay in lock-step.
+INLINE_SAFE_MIME_TYPES = frozenset(
+    {
+        "application/pdf",
+        "image/png",
+        "image/jpeg",
+        "image/gif",
+        "image/webp",
+    }
+)
+
 # Per-entity-type narrowing of ALLOWED_EXTENSIONS. Defense in depth so a
 # future caller invoking upload_file directly (script, new route, AI tool)
 # can't bypass the route-level PDF guard and silently land a non-PDF on a
@@ -325,14 +342,27 @@ class AttachmentService:
             return None
         return UPLOAD_DIR / attachment.file_path
 
-    async def get_download_url(self, attachment: Attachment) -> str | None:
+    async def get_download_url(
+        self, attachment: Attachment, *, inline: bool = False
+    ) -> str | None:
         if attachment.file_path.startswith("obj://"):
             object_key = attachment.file_path[6:]
-            # Force an ATTACHMENT download with the original filename and a
-            # generic octet-stream type so a renamed active-content file (or
-            # PII) can't be sniffed + rendered inline on the presigned-URL
-            # branch — matching the nosniff+attachment headers the local-disk
-            # FileResponse branch already sets (PF3).
+            if inline and attachment.mime_type in INLINE_SAFE_MIME_TYPES:
+                # "View" path: a vetted-safe type (PDF / raster image) is signed
+                # with an INLINE disposition + its real content-type so the
+                # browser renders it in a tab. The allowlist keeps active-content
+                # uploads (HTML/SVG) on the forced-download branch below.
+                return await get_download_url(
+                    object_key,
+                    filename=attachment.original_filename,
+                    content_type=attachment.mime_type,
+                    disposition="inline",
+                )
+            # Default: force an ATTACHMENT download with the original filename and
+            # a generic octet-stream type so a renamed active-content file (or
+            # PII) can't be sniffed + rendered inline on the presigned-URL branch
+            # — matching the nosniff+attachment headers the local-disk
+            # FileResponse branch sets (PF3).
             return await get_download_url(
                 object_key, filename=attachment.original_filename
             )

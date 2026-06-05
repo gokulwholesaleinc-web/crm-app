@@ -6,7 +6,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { Spinner, ConfirmDialog } from '../ui';
 import { useAttachments, useUploadAttachment, useDeleteAttachment } from '../../hooks/useAttachments';
-import { downloadAttachmentFile } from '../../api/attachments';
+import { downloadAttachmentFile, viewAttachmentFile } from '../../api/attachments';
 import { showSuccess, showError } from '../../utils/toast';
 
 interface AttachmentListProps {
@@ -28,6 +28,17 @@ const FILE_TYPE_ICONS: Record<string, string> = {
 function getFileTypeLabel(mimeType: string): string {
   return FILE_TYPE_ICONS[mimeType] || 'FILE';
 }
+
+// Types the browser renders in a tab. Mirrors the backend's INLINE_SAFE_MIME_TYPES
+// allowlist (PDF / raster images) — the only types the "View" endpoint will serve
+// inline; everything else only downloads, so no View button is shown for it.
+const VIEWABLE_MIME_TYPES = new Set([
+  'application/pdf',
+  'image/png',
+  'image/jpeg',
+  'image/gif',
+  'image/webp',
+]);
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -125,6 +136,14 @@ export function AttachmentList({ entityType, entityId }: AttachmentListProps) {
       await downloadAttachmentFile(attachmentId, filename);
     } catch {
       showError('Failed to download the file.');
+    }
+  };
+
+  const handleView = async (attachmentId: number) => {
+    try {
+      await viewAttachmentFile(attachmentId);
+    } catch {
+      showError('Failed to open the file.');
     }
   };
 
@@ -226,6 +245,22 @@ export function AttachmentList({ entityType, entityId }: AttachmentListProps) {
                     </div>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0 ml-4">
+                    {VIEWABLE_MIME_TYPES.has(attachment.mime_type) && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleView(attachment.id);
+                        }}
+                        className="p-1.5 text-gray-400 hover:text-primary-600 transition-colors"
+                        title="View"
+                        aria-label={`View ${attachment.original_filename}`}
+                      >
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                      </button>
+                    )}
                     <button
                       onClick={(e) => {
                         e.stopPropagation();

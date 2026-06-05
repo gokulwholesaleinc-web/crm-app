@@ -253,6 +253,62 @@ class TestAttachmentDownload:
         assert response.content == file_content
 
     @pytest.mark.asyncio
+    async def test_view_inline_pdf_serves_inline_disposition(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_contact: Contact,
+    ):
+        """``?inline=1`` on a PDF serves an INLINE disposition (View renders it)
+        while still setting nosniff."""
+        upload = await client.post(
+            "/api/attachments/upload",
+            headers=auth_headers,
+            files={"file": ("viewable.pdf", b"%PDF-1.4 fake", "application/pdf")},
+            data={"entity_type": "contacts", "entity_id": str(test_contact.id)},
+        )
+        assert upload.status_code == 201, upload.text
+        attachment_id = upload.json()["id"]
+
+        response = await client.get(
+            f"/api/attachments/{attachment_id}/download",
+            params={"inline": "1"},
+            headers=auth_headers,
+        )
+        assert response.status_code == 200, response.text
+        assert response.headers.get("content-disposition", "").startswith("inline")
+        assert response.headers.get("x-content-type-options") == "nosniff"
+
+    @pytest.mark.asyncio
+    async def test_view_inline_refused_for_unsafe_type(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_contact: Contact,
+    ):
+        """``?inline=1`` is IGNORED for a non-allowlisted type (e.g. text/plain) —
+        it stays a forced ``attachment`` download so an active-content/sniffable
+        payload can never be coaxed into an inline render."""
+        upload = await client.post(
+            "/api/attachments/upload",
+            headers=auth_headers,
+            files={"file": ("note.txt", b"plain text", "text/plain")},
+            data={"entity_type": "contacts", "entity_id": str(test_contact.id)},
+        )
+        assert upload.status_code == 201, upload.text
+        attachment_id = upload.json()["id"]
+
+        response = await client.get(
+            f"/api/attachments/{attachment_id}/download",
+            params={"inline": "1"},
+            headers=auth_headers,
+        )
+        assert response.status_code == 200, response.text
+        assert response.headers.get("content-disposition", "").startswith("attachment")
+
+    @pytest.mark.asyncio
     async def test_download_attachment_not_found(
         self,
         client: AsyncClient,
