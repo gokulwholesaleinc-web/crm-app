@@ -38,7 +38,7 @@ const OnboardingLinkGenerator = lazy(() =>
 // The onboarding tab pulls in the packet API + uploads — code-split it.
 const ContactOnboardingTab = lazy(() => import('../onboarding/ContactOnboardingTab'));
 
-type TabType = 'details' | 'activities' | 'notes' | 'emails' | 'proposals' | 'payments' | 'documents' | 'attachments' | 'onboarding' | 'history' | 'sharing';
+type TabType = 'details' | 'activities' | 'notes' | 'emails' | 'proposals' | 'payments' | 'documents' | 'attachments' | 'history' | 'sharing';
 
 const TABS: { id: TabType; name: string }[] = [
   { id: 'details', name: 'Details' },
@@ -51,7 +51,6 @@ const TABS: { id: TabType; name: string }[] = [
   { id: 'payments', name: 'Payments' },
   { id: 'documents', name: 'Documents' },
   { id: 'attachments', name: 'Attachments' },
-  { id: 'onboarding', name: 'Onboarding' },
   { id: 'history', name: 'History' },
   { id: 'sharing', name: 'Sharing' },
 ];
@@ -548,12 +547,6 @@ function ContactDetailPage() {
         </div>
       )}
 
-      {activeTab === 'onboarding' && contactId && (
-        <Suspense fallback={<SuspenseFallback />}>
-          <ContactOnboardingTab contactId={contactId} />
-        </Suspense>
-      )}
-
       {contactId && (
         <CommonTabContent
           activeTab={activeTab}
@@ -562,6 +555,16 @@ function ContactDetailPage() {
           enabledTabs={['notes', 'attachments', 'history', 'sharing']}
           canManage={canManageSharing}
         />
+      )}
+
+      {/* Onboarding now lives as a section under the Attachments tab (merged
+          from its own tab) — uploaded files + sent packets next to attachments. */}
+      {activeTab === 'attachments' && contactId && (
+        <div className="mt-6">
+          <Suspense fallback={<SuspenseFallback />}>
+            <ContactOnboardingTab contactId={contactId} />
+          </Suspense>
+        </div>
       )}
 
       <EmailComposeModal
