@@ -8,18 +8,23 @@ import {
   Button,
   Input,
   Badge,
+  Select,
   SearchableSelect,
   CopyButton,
   type SearchableSelectOption,
 } from '../../components/ui';
 import { listContacts } from '../../api/contacts';
-import { createOnboardingPacket } from '../../api/onboarding';
+import {
+  createOnboardingPacket,
+  listOnboardingBundles,
+  getOnboardingBundle,
+} from '../../api/onboarding';
 import { showSuccess, showError } from '../../utils/toast';
 import { extractApiErrorDetail } from '../../utils/errors';
 import { isGmailReconnectSendError } from '../../utils/gmailSendError';
 import { GMAIL_SETTINGS_PATH } from '../../utils/integrationLinks';
 import { OnboardingPacketList, PACKETS_KEY } from './OnboardingPacketList';
-import type { OnboardingTemplate } from '../../types';
+import type { OnboardingBundleDetail, OnboardingTemplate } from '../../types';
 
 interface OnboardingSendPanelProps {
   /** Active templates available to send (retired ones are excluded upstream). */
@@ -39,7 +44,15 @@ export function OnboardingSendPanel({ templates }: OnboardingSendPanelProps) {
   const [contactSearch, setContactSearch] = useState('');
   const [recipientEmail, setRecipientEmail] = useState('');
   const [recipientName, setRecipientName] = useState('');
-  const [selectedTemplateIds, setSelectedTemplateIds] = useState<Set<number>>(() => new Set());
+  // Ordered selection (NOT a Set): a saved-packet preselect must honour its
+  // saved document order, and JS Set iteration order is an implementation
+  // detail we don't rely on (audit B5).
+  const [selectedTemplateIds, setSelectedTemplateIds] = useState<number[]>([]);
+  // The saved packet (bundle) the selection was started from, if any — its
+  // loaded detail carries the backend-computed send_ready we READ (never
+  // re-derive). Stored from the pick handler (no second fetch / no effect).
+  const [packetId, setPacketId] = useState<number | null>(null);
+  const [packetDetail, setPacketDetail] = useState<OnboardingBundleDetail | null>(null);
   // The one-time access_url from a create — shown once, copied, then dropped on
   // the next action (it is never re-served by the API §8).
   const [copyLink, setCopyLink] = useState<string | null>(null);
@@ -48,6 +61,12 @@ export function OnboardingSendPanel({ templates }: OnboardingSendPanelProps) {
   const [gmailPrompt, setGmailPrompt] = useState<string | null>(null);
 
   const activeTemplates = useMemo(() => templates.filter((t) => t.is_active), [templates]);
+
+  // Saved packets, for the "start from a saved packet" preselect.
+  const { data: bundles = [] } = useQuery({
+    queryKey: ['onboarding-bundles', { includeInactive: false }],
+    queryFn: () => listOnboardingBundles(false),
+  });
 
   // Contact picker options — debounced via the searchable select's own query.
   const { data: contactList } = useQuery({
@@ -71,13 +90,63 @@ export function OnboardingSendPanel({ templates }: OnboardingSendPanelProps) {
     },
   });
 
+  // Readiness per template id: the saved packet's members are authoritative
+  // (their send_ready encodes needs_pdf_copy, a backend-only property); any
+  // other selected template falls back to the kind rule (esign needs a PDF).
+  const readinessById = useMemo(() => {
+    const map = new Map<number, { ready: boolean; reason?: string }>();
+    for (const m of packetDetail?.members ?? []) {
+      map.set(m.template_id, { ready: m.send_ready, reason: m.send_reason ?? undefined });
+    }
+    for (const t of activeTemplates) {
+      if (!map.has(t.id)) {
+        const isEsignPdf = (t.kind ?? 'esign_pdf') === 'esign_pdf';
+        const ready = !(isEsignPdf && !t.has_pdf);
+        map.set(t.id, { ready, reason: ready ? undefined : 'No PDF uploaded yet' });
+      }
+    }
+    return map;
+  }, [packetDetail, activeTemplates]);
+
+  const templateName = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const t of templates) map.set(t.id, t.name);
+    for (const m of packetDetail?.members ?? []) map.set(m.template_id, m.name);
+    return map;
+  }, [templates, packetDetail]);
+
+  const unreadySelected = useMemo(
+    () => selectedTemplateIds.filter((id) => readinessById.get(id)?.ready === false),
+    [selectedTemplateIds, readinessById],
+  );
+
   const toggleTemplate = (id: number) => {
-    setSelectedTemplateIds((curr) => {
-      const next = new Set(curr);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+    // A manual change means the selection no longer mirrors the saved packet.
+    setPacketId(null);
+    setPacketDetail(null);
+    setSelectedTemplateIds((curr) =>
+      curr.includes(id) ? curr.filter((x) => x !== id) : [...curr, id],
+    );
+  };
+
+  const handlePickPacket = async (id: number | null) => {
+    setPacketId(id);
+    setCopyLink(null);
+    if (id == null) {
+      setPacketDetail(null);
+      setSelectedTemplateIds([]);
+      return;
+    }
+    try {
+      const detail = await getOnboardingBundle(id);
+      setPacketDetail(detail);
+      // Preselect the members in their SAVED order (explicit array, not a Set).
+      setSelectedTemplateIds(detail.members.map((m) => m.template_id));
+    } catch (err) {
+      showError(extractApiErrorDetail(err) ?? 'Failed to load saved packet');
+      setPacketId(null);
+      setPacketDetail(null);
+    }
   };
 
   const handleContactChange = (id: number | null) => {
@@ -102,7 +171,8 @@ export function OnboardingSendPanel({ templates }: OnboardingSendPanelProps) {
   const canSend =
     contactId != null &&
     recipientEmail.trim().length > 0 &&
-    selectedTemplateIds.size > 0 &&
+    selectedTemplateIds.length > 0 &&
+    unreadySelected.length === 0 &&
     !createMutation.isPending;
 
   const handleSend = async (sendEmail: boolean) => {
@@ -113,10 +183,12 @@ export function OnboardingSendPanel({ templates }: OnboardingSendPanelProps) {
         contact_id: contactId,
         recipient_email: recipientEmail.trim(),
         recipient_name: recipientName.trim() || null,
-        template_ids: [...selectedTemplateIds],
+        // Explicit ordered array — honours the saved packet's document order.
+        template_ids: selectedTemplateIds,
         send_email: sendEmail,
       });
-      setSelectedTemplateIds(new Set());
+      setSelectedTemplateIds([]);
+      setPacketId(null);
       setCopyLink(packet.access_url ?? null);
       showSuccess(
         sendEmail
@@ -196,6 +268,25 @@ export function OnboardingSendPanel({ templates }: OnboardingSendPanelProps) {
             />
           </div>
 
+          {/* Start from a saved packet (optional) */}
+          {bundles.length > 0 && (
+            <Select
+              label="Start from a saved packet (optional)"
+              value={packetId ?? ''}
+              onChange={(e) =>
+                void handlePickPacket(e.target.value ? Number(e.target.value) : null)
+              }
+              name="onboarding-saved-packet"
+              options={[
+                { value: '', label: 'None — choose documents manually' },
+                ...bundles.map((b) => ({
+                  value: String(b.id),
+                  label: b.send_ready ? b.name : `${b.name} (needs setup)`,
+                })),
+              ]}
+            />
+          )}
+
           {/* Template multi-select */}
           <fieldset>
             <legend className="text-sm font-medium text-gray-700 dark:text-gray-300">Documents to include</legend>
@@ -206,14 +297,12 @@ export function OnboardingSendPanel({ templates }: OnboardingSendPanelProps) {
             ) : (
               <div className="mt-2 space-y-1.5">
                 {activeTemplates.map((t) => {
-                  // Only esign_pdf templates need an uploaded PDF before they
-                  // can be sent. questionnaire / upload_request templates carry
-                  // no PDF by design and are sendable as-is (the backend mints
-                  // them with pdf_path=None), so gating on has_pdf alone would
-                  // wrongly lock them out with a misleading "No PDF" reason.
-                  const isEsignPdf = (t.kind ?? 'esign_pdf') === 'esign_pdf';
-                  const disabled = isEsignPdf && !t.has_pdf;
-                  const selected = selectedTemplateIds.has(t.id);
+                  // Readiness comes from the saved-packet member when present
+                  // (authoritative send_ready), else the kind rule. esign needs
+                  // a PDF; questionnaire/upload carry none and are sendable as-is.
+                  const ready = readinessById.get(t.id)?.ready ?? true;
+                  const disabled = !ready;
+                  const selected = selectedTemplateIds.includes(t.id);
                   return (
                     <button
                       key={t.id}
@@ -245,13 +334,36 @@ export function OnboardingSendPanel({ templates }: OnboardingSendPanelProps) {
                       </span>
                       <span className="min-w-0 flex-1 truncate text-gray-900 dark:text-gray-100">{t.name}</span>
                       {t.requires_esign && <Badge variant="yellow" size="sm">E-sign</Badge>}
-                      {disabled && <span className="text-xs text-gray-400">No PDF</span>}
+                      {disabled && <span className="text-xs text-gray-400">Setup required</span>}
                     </button>
                   );
                 })}
               </div>
             )}
           </fieldset>
+
+          {/* Setup-required block: a saved packet (or selection) with a
+              not-ready document can't be sent until that document is set up. */}
+          {unreadySelected.length > 0 && (
+            <div
+              role="alert"
+              aria-live="polite"
+              className="rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-3"
+            >
+              <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
+                {unreadySelected.length} document{unreadySelected.length === 1 ? '' : 's'} need
+                {unreadySelected.length === 1 ? 's' : ''} setup before this packet can be sent:
+              </p>
+              <ul className="mt-1 list-disc pl-5 text-sm text-amber-800 dark:text-amber-300">
+                {unreadySelected.map((id) => (
+                  <li key={id}>
+                    {templateName.get(id) ?? `Template #${id}`}
+                    {readinessById.get(id)?.reason ? ` — ${readinessById.get(id)?.reason}` : ''}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {/* Connect-Gmail prompt — only after a send failed on a missing Gmail. */}
           {gmailPrompt && (
