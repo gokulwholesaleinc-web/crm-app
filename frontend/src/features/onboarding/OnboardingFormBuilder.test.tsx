@@ -94,6 +94,38 @@ describe('OnboardingFormBuilder', () => {
     ]);
   });
 
+  it('emits sensitive: true when an upload field is marked sensitive', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(
+      <OnboardingFormBuilder
+        isOpen
+        onClose={noop}
+        templateName="Assets"
+        kind="upload_request"
+        currentFields={[]}
+        onSave={onSave}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Add file field' }));
+    await user.type(screen.getByLabelText('File label'), 'Gov ID');
+    await user.click(screen.getByRole('switch', { name: 'Sensitive (restricted access)' }));
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(onSave).toHaveBeenCalledWith([
+      {
+        id: 'f1',
+        kind: 'file_upload',
+        label: 'Gov ID',
+        required: false,
+        maxFiles: 1,
+        maxMB: 10,
+        sensitive: true,
+      },
+    ]);
+  });
+
   it('blocks save until every field has a label', async () => {
     const user = userEvent.setup();
     const onSave = vi.fn();

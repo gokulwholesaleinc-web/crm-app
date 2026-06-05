@@ -33,12 +33,19 @@ async def build_packet_response(
     *,
     raw_token: str | None = None,
     with_uploads: bool = False,
+    include_sensitive_uploads: bool = True,
 ) -> PacketResponse:
     documents = await service.load_documents(packet.id)
     deliveries = await _load_deliveries(db, packet.id)
     # Client-uploaded files (D5) are loaded ONLY for the single-packet detail
     # view — the list endpoint passes with_uploads=False to avoid an N+1.
-    uploads = await _load_uploads(db, packet.id) if with_uploads else []
+    # ``include_sensitive_uploads=False`` (a shared-list, non-owner reader) drops
+    # the gov-ID rows entirely — their filename/size metadata is itself PII.
+    uploads = (
+        await _load_uploads(db, packet.id, include_sensitive=include_sensitive_uploads)
+        if with_uploads
+        else []
+    )
     access_url = None
     if raw_token is not None:
         base_url = settings.FRONTEND_BASE_URL or "http://localhost:3000"
@@ -64,12 +71,15 @@ async def build_packet_response(
 
 
 async def _load_uploads(
-    db: AsyncSession, packet_id: int
+    db: AsyncSession, packet_id: int, *, include_sensitive: bool = True
 ) -> list[PacketUpload]:
     """Load the packet's client-uploaded files (joined via its documents).
 
     Ordered by document then upload time so the staff detail groups files under
-    the question that collected them. Never exposes ``token_hash``/sha256.
+    the question that collected them. Never exposes ``token_hash``/sha256. When
+    ``include_sensitive`` is False (a non-owner/non-admin reader) the sensitive
+    (gov-ID) rows are omitted — the filename/size is PII the attachments list
+    already hides from the same readers.
     """
     rows = await db.execute(
         select(OnboardingPacketUpload)
@@ -85,7 +95,11 @@ async def _load_uploads(
             OnboardingPacketUpload.id,
         )
     )
-    return [PacketUpload.model_validate(r) for r in rows.scalars().all()]
+    return [
+        PacketUpload.model_validate(r)
+        for r in rows.scalars().all()
+        if include_sensitive or not r.sensitive
+    ]
 
 
 async def _load_deliveries(db: AsyncSession, packet_id: int) -> list[PacketDelivery]:

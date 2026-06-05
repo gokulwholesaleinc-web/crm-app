@@ -87,12 +87,16 @@ def validate_upload_definitions(defs: list[dict]) -> None:
         if not isinstance(field_label, str) or not field_label.strip():
             raise FieldDefinitionError(f"{label}: a non-empty label is required")
 
-        # ``required`` must be a REAL bool — a stringy ``"false"`` is truthy at
-        # fill time and would silently force the upload.
-        if "required" in field and not isinstance(field["required"], bool):
-            raise FieldDefinitionError(
-                f"{label}: required must be true or false"
-            )
+        # ``required`` and ``sensitive`` must be REAL bools — at fill time a
+        # stringy ``"false"`` is truthy (``bool("false") is True``) and a ``1``
+        # passes too, so a non-sensitive gov-ID could be silently marked
+        # sensitive (or a required field force-set). The questionnaire kind
+        # already enforces this; upload_request must match.
+        for bool_key in ("required", "sensitive"):
+            if bool_key in field and not isinstance(field[bool_key], bool):
+                raise FieldDefinitionError(
+                    f"{label}: {bool_key} must be true or false"
+                )
 
         if field.get("prefill") not in (None, *ALLOWED_PREFILL):
             raise FieldDefinitionError(

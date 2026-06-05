@@ -93,6 +93,22 @@ def test_validate_definitions_rejects_duplicate_ids():
         validate_upload_definitions([_upload_field("a"), _upload_field("a")])
 
 
+@pytest.mark.parametrize("bad", ["false", "true", 1, 0, "yes", None])
+def test_validate_definitions_rejects_non_bool_sensitive(bad):
+    """``sensitive`` must be a REAL bool — a stringy "false" is truthy at fill
+    time (bool("false") is True) so it would silently mark the upload sensitive
+    (or downgrade a gov-ID). Reject non-bools at author time."""
+    with pytest.raises(FieldDefinitionError):
+        validate_upload_definitions([_upload_field(sensitive=bad)])
+
+
+@pytest.mark.parametrize("ok", [True, False])
+def test_validate_definitions_accepts_bool_sensitive(ok):
+    """A real bool ``sensitive`` (or its absence) is accepted."""
+    validate_upload_definitions([_upload_field(sensitive=ok)])
+    validate_upload_definitions([_upload_field()])  # absent is fine too
+
+
 def test_validate_definitions_rejects_pii_prefill():
     """prefill='contact.email' is rejected via the shared ALLOWED_PREFILL."""
     with pytest.raises(FieldDefinitionError):

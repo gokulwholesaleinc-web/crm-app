@@ -113,6 +113,10 @@ function cleanField(field: OnboardingQuestionnaireField): OnboardingQuestionnair
   if (field.kind === 'file_upload') {
     out.maxFiles = field.maxFiles ?? 1;
     out.maxMB = field.maxMB ?? 10;
+    // A sensitive upload (gov-ID) lands in the onboarding_sensitive category so
+    // its bytes AND metadata stay owner/admin-only. Without this the flag is
+    // dropped and a "Gov ID" field collects into the normal attachment surface.
+    if (field.sensitive) out.sensitive = true;
     return out;
   }
   if (CHOICE_KINDS.has(field.kind)) {
@@ -441,6 +445,14 @@ function FieldCard({
             checked={Boolean(field.sensitive)}
             onChange={(v) => onChange({ sensitive: v })}
             label="Sensitive (encrypted)"
+            size="sm"
+          />
+        )}
+        {isUpload && (
+          <Switch
+            checked={Boolean(field.sensitive)}
+            onChange={(v) => onChange({ sensitive: v })}
+            label="Sensitive (restricted access)"
             size="sm"
           />
         )}
