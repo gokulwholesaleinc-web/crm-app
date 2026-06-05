@@ -297,15 +297,21 @@ class PacketService:
             template = by_id.get(tid)
             if template is None:
                 raise PacketValidationError(f"Template {tid} not found")
-            # Shared readiness check (retired / unknown-kind / esign-without-PDF).
-            # A questionnaire/upload template with no PDF is selectable (P0-5).
+            # Shared readiness check (retired / unknown-kind / esign-without-PDF
+            # / empty form). A questionnaire/upload template with no PDF is
+            # selectable (P0-5) as long as it has fields.
             ready, reason = template_send_status(
                 is_active=template.is_active,
                 kind=template.kind,
                 pdf_path=template.pdf_path,
+                field_count=len(template.field_definitions or []),
             )
             if not ready:
-                raise PacketValidationError(f"Template {tid}: {reason}")
+                # Name the member (not just its id) so staff know which saved-
+                # packet document broke between preselect and send (TOCTOU).
+                raise PacketValidationError(
+                    f"Template '{template.name}' (#{tid}): {reason}"
+                )
             ordered.append(template)
         return ordered
 

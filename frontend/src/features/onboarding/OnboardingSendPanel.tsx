@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import clsx from 'clsx';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -53,6 +53,10 @@ export function OnboardingSendPanel({ templates }: OnboardingSendPanelProps) {
   // re-derive). Stored from the pick handler (no second fetch / no effect).
   const [packetId, setPacketId] = useState<number | null>(null);
   const [packetDetail, setPacketDetail] = useState<OnboardingBundleDetail | null>(null);
+  const [packetLoading, setPacketLoading] = useState(false);
+  // Monotonic pick id so a slow getOnboardingBundle response from an earlier
+  // pick can't clobber the selection a later pick already applied (race guard).
+  const latestPickRef = useRef(0);
   // The one-time access_url from a create — shown once, copied, then dropped on
   // the next action (it is never re-served by the API §8).
   const [copyLink, setCopyLink] = useState<string | null>(null);
@@ -100,9 +104,19 @@ export function OnboardingSendPanel({ templates }: OnboardingSendPanelProps) {
     }
     for (const t of activeTemplates) {
       if (!map.has(t.id)) {
+        // Mirror the backend's template_send_status gate so a standalone
+        // (not-in-a-saved-packet) selection shows the same readiness the server
+        // will enforce at create — otherwise canSend lies and Send 422s late.
+        // esign_pdf needs a PDF; a form kind (questionnaire/upload_request)
+        // needs at least one authored field (the D2 empty-form guard).
         const isEsignPdf = (t.kind ?? 'esign_pdf') === 'esign_pdf';
-        const ready = !(isEsignPdf && !t.has_pdf);
-        map.set(t.id, { ready, reason: ready ? undefined : 'No PDF uploaded yet' });
+        const ready = isEsignPdf ? t.has_pdf : t.field_definitions.length > 0;
+        const reason = ready
+          ? undefined
+          : isEsignPdf
+            ? 'No PDF uploaded yet'
+            : 'No questions or fields yet';
+        map.set(t.id, { ready, reason });
       }
     }
     return map;
@@ -122,30 +136,45 @@ export function OnboardingSendPanel({ templates }: OnboardingSendPanelProps) {
 
   const toggleTemplate = (id: number) => {
     // A manual change means the selection no longer mirrors the saved packet.
+    // Invalidate any in-flight pick so its late response can't reapply.
+    latestPickRef.current += 1;
     setPacketId(null);
     setPacketDetail(null);
-    setSelectedTemplateIds((curr) =>
-      curr.includes(id) ? curr.filter((x) => x !== id) : [...curr, id],
-    );
+    setPacketLoading(false);
+    setSelectedTemplateIds((curr) => {
+      const next = curr.includes(id)
+        ? curr.filter((x) => x !== id)
+        : [...curr, id];
+      // Drop any id that is no longer a visible/active template (e.g. a member
+      // retired since the packet was picked) so it can't ride along invisibly.
+      const activeIds = new Set(activeTemplates.map((t) => t.id));
+      return next.filter((x) => activeIds.has(x));
+    });
   };
 
   const handlePickPacket = async (id: number | null) => {
+    const reqId = (latestPickRef.current += 1);
+    // Clear the old selection immediately so a stale one is never shown/sent
+    // while the new detail loads.
     setPacketId(id);
+    setPacketDetail(null);
+    setSelectedTemplateIds([]);
     setCopyLink(null);
-    if (id == null) {
-      setPacketDetail(null);
-      setSelectedTemplateIds([]);
-      return;
-    }
+    if (id == null) return;
+    setPacketLoading(true);
     try {
       const detail = await getOnboardingBundle(id);
+      if (latestPickRef.current !== reqId) return; // superseded by a newer pick
       setPacketDetail(detail);
       // Preselect the members in their SAVED order (explicit array, not a Set).
       setSelectedTemplateIds(detail.members.map((m) => m.template_id));
     } catch (err) {
-      showError(extractApiErrorDetail(err) ?? 'Failed to load saved packet');
-      setPacketId(null);
-      setPacketDetail(null);
+      if (latestPickRef.current === reqId) {
+        showError(extractApiErrorDetail(err) ?? 'Failed to load saved packet');
+        setPacketId(null);
+      }
+    } finally {
+      if (latestPickRef.current === reqId) setPacketLoading(false);
     }
   };
 
@@ -168,11 +197,17 @@ export function OnboardingSendPanel({ templates }: OnboardingSendPanelProps) {
     setRecipientName(picked?.full_name ?? '');
   };
 
+  // A saved packet retired after the dropdown was fetched still loads (its
+  // detail carries is_active=false) — never send from a retired packet.
+  const packetRetired = packetDetail != null && !packetDetail.is_active;
+
   const canSend =
     contactId != null &&
     recipientEmail.trim().length > 0 &&
     selectedTemplateIds.length > 0 &&
     unreadySelected.length === 0 &&
+    !packetRetired &&
+    !packetLoading &&
     !createMutation.isPending;
 
   const handleSend = async (sendEmail: boolean) => {
@@ -299,7 +334,7 @@ export function OnboardingSendPanel({ templates }: OnboardingSendPanelProps) {
                 {activeTemplates.map((t) => {
                   // Readiness comes from the saved-packet member when present
                   // (authoritative send_ready), else the kind rule. esign needs
-                  // a PDF; questionnaire/upload carry none and are sendable as-is.
+                  // a PDF; a form kind needs at least one authored field.
                   const ready = readinessById.get(t.id)?.ready ?? true;
                   const disabled = !ready;
                   const selected = selectedTemplateIds.includes(t.id);
@@ -362,6 +397,20 @@ export function OnboardingSendPanel({ templates }: OnboardingSendPanelProps) {
                   </li>
                 ))}
               </ul>
+            </div>
+          )}
+
+          {/* The picked saved packet was retired (e.g. since the list loaded). */}
+          {packetRetired && (
+            <div
+              role="alert"
+              aria-live="polite"
+              className="rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-3"
+            >
+              <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
+                This saved packet has been retired and can’t be sent. Restore it
+                or choose another.
+              </p>
             </div>
           )}
 

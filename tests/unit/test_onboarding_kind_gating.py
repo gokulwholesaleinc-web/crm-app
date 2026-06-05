@@ -57,10 +57,15 @@ async def _questionnaire_template(db) -> OnboardingTemplate:
 
     pdf_path=None is legitimate for a non-esign kind (P0-5), so when the handler
     is de-registered the rejection is the unknown-kind guard, not the no-PDF one.
+    Carries one field — an EMPTY form is now "needs setup" (zero-field guard), so
+    a realistic sendable questionnaire must have at least one question.
     """
     template = OnboardingTemplate(
         name="Questionnaire template",
-        field_definitions=[],
+        field_definitions=[
+            {"id": "q1", "kind": "short_text", "label": "Q1", "required": True,
+             "order": 1}
+        ],
         requires_esign=False,
         is_active=True,
         pdf_path=None,

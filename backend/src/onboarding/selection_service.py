@@ -204,15 +204,19 @@ class SelectionService:
                 OnboardingTemplate.is_active,
                 OnboardingTemplate.pdf_path,
                 OnboardingTemplate.kind,
+                OnboardingTemplate.field_definitions,
             ).where(OnboardingTemplate.id.in_(template_ids))
         )
-        by_id = {row[0]: (row[1], row[2], row[3]) for row in result.all()}
+        by_id = {row[0]: (row[1], row[2], row[3], row[4]) for row in result.all()}
         for tid in template_ids:
             if tid not in by_id:
                 raise PacketValidationError(f"Template {tid} not found.")
-            is_active, pdf_path, kind = by_id[tid]
+            is_active, pdf_path, kind, field_definitions = by_id[tid]
             ready, reason = template_send_status(
-                is_active=is_active, kind=kind, pdf_path=pdf_path
+                is_active=is_active,
+                kind=kind,
+                pdf_path=pdf_path,
+                field_count=len(field_definitions or []),
             )
             if not ready:
                 raise PacketValidationError(f"Template {tid}: {reason}")

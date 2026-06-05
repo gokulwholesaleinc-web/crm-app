@@ -141,4 +141,23 @@ describe('OnboardingSendPanel saved-packet preselect', () => {
     expect(screen.getByRole('button', { name: 'Send onboarding email' })).toBeDisabled();
     expect(apiMock.createOnboardingPacket).not.toHaveBeenCalled();
   });
+
+  it('gates a standalone form template with no fields as "Setup required" (mirrors the backend D2 empty-form guard)', async () => {
+    apiMock.listOnboardingBundles.mockResolvedValue([]);
+    const emptyForm = tmpl({ id: 20, name: 'Empty Intake', kind: 'questionnaire', field_definitions: [] });
+    const filledForm = tmpl({
+      id: 21,
+      name: 'Real Intake',
+      kind: 'questionnaire',
+      field_definitions: [{ id: 'q1', kind: 'short_text', label: 'Your name', required: true }],
+    });
+    renderPanel([emptyForm, filledForm]);
+
+    // The empty form can't be selected — it mirrors template_send_status' D2
+    // guard client-side instead of enabling Send and 422-ing on create.
+    const emptyBtn = await screen.findByRole('checkbox', { name: /Empty Intake/ });
+    expect(emptyBtn).toBeDisabled();
+    // A form with at least one authored field stays selectable.
+    expect(screen.getByRole('checkbox', { name: /Real Intake/ })).not.toBeDisabled();
+  });
 });

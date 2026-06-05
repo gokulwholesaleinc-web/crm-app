@@ -13,6 +13,7 @@ import {
   ArchiveBoxXMarkIcon,
   ArrowUturnLeftIcon,
   TrashIcon,
+  PencilSquareIcon,
   ClipboardDocumentListIcon,
 } from '@heroicons/react/24/outline';
 import { Button, Badge, Switch, ConfirmDialog } from '../../components/ui';
@@ -27,6 +28,7 @@ import {
 } from '../../api/onboarding';
 import type { OnboardingBundleSummary } from '../../types';
 import { OnboardingPacketWizard } from './OnboardingPacketWizard';
+import { OnboardingPacketEditor } from './OnboardingPacketEditor';
 
 const BUNDLES_KEY = ['onboarding-bundles'] as const;
 
@@ -34,6 +36,7 @@ export function SavedPacketsPanel() {
   const queryClient = useQueryClient();
   const [showWizard, setShowWizard] = useState(false);
   const [includeInactive, setIncludeInactive] = useState(false);
+  const [editTargetId, setEditTargetId] = useState<number | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<OnboardingBundleSummary | null>(null);
 
   const {
@@ -143,6 +146,17 @@ export function SavedPacketsPanel() {
                 </p>
               </div>
               <div className="flex flex-shrink-0 flex-wrap gap-2">
+                {bundle.is_active && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    leftIcon={<PencilSquareIcon className="h-4 w-4" aria-hidden="true" />}
+                    onClick={() => setEditTargetId(bundle.id)}
+                  >
+                    Edit
+                  </Button>
+                )}
                 {bundle.is_active ? (
                   <Button
                     type="button"
@@ -184,6 +198,13 @@ export function SavedPacketsPanel() {
       )}
 
       <OnboardingPacketWizard isOpen={showWizard} onClose={() => setShowWizard(false)} />
+
+      {editTargetId != null && (
+        <OnboardingPacketEditor
+          bundleId={editTargetId}
+          onClose={() => setEditTargetId(null)}
+        />
+      )}
 
       <ConfirmDialog
         isOpen={deleteTarget !== null}

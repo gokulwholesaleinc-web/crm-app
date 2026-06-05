@@ -82,7 +82,7 @@ class StorageWriteError(Exception):
 
 
 def template_send_status(
-    *, is_active: bool, kind: str, pdf_path: str | None
+    *, is_active: bool, kind: str, pdf_path: str | None, field_count: int
 ) -> tuple[bool, str | None]:
     """Single source of truth for "can this template become a packet document
     right now?" — the readiness check every send/select site shares (audit B2 +
@@ -93,6 +93,12 @@ def template_send_status(
     user-facing sentence when not ready, else ``None``. The missing-template
     check (the row doesn't exist at all) stays caller-side — this function only
     judges a row that was found.
+
+    Not-ready when: retired / unknown-kind / an e-sign template without a PDF /
+    a FORM kind (questionnaire, upload_request) with zero fields. The last guard
+    (D2) stops the wizard's "blank document" shells — and any empty form — from
+    being sent to a client as an empty form/manifest; a blank form is surfaced as
+    "needs setup" exactly like a blank e-sign (§4.7).
 
     Reused at all three readiness sites:
       * ``packet_service._load_active_templates`` — RAISES on ``not ready``.
@@ -105,6 +111,10 @@ def template_send_status(
         return False, "This template has an unknown kind and cannot be sent."
     if KIND_HANDLERS[kind].needs_pdf_copy and not pdf_path:
         return False, "This e-sign template has no PDF uploaded yet."
+    # Form kinds (no PDF copy) need at least one authored field, else the client
+    # would receive an empty form / blank upload manifest.
+    if not KIND_HANDLERS[kind].needs_pdf_copy and field_count == 0:
+        return False, "This form has no questions or fields yet."
     return True, None
 
 
@@ -330,11 +340,18 @@ class OnboardingTemplateService:
         §3/B3 — a real race isn't reproduced on the single-threaded harness).
         """
         base = base_name[:_COPY_BASE_MAX_LEN]
+        # Escape LIKE wildcards in the base so a source named e.g. "50% off" or
+        # "Form_1" doesn't over-match unrelated rows (cosmetic — the unique
+        # constraint + SAVEPOINT backstop are the real guards, but over-matching
+        # would pick a higher suffix than necessary).
+        like_base = (
+            base.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        )
         taken = set(
             (
                 await self.db.execute(
                     select(OnboardingTemplate.name).where(
-                        OnboardingTemplate.name.like(f"{base} (copy%")
+                        OnboardingTemplate.name.like(f"{like_base} (copy%", escape="\\")
                     )
                 )
             )

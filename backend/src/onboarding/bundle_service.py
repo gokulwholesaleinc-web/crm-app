@@ -225,6 +225,7 @@ class BundleService:
                     OnboardingTemplate.is_active,
                     OnboardingTemplate.kind,
                     OnboardingTemplate.pdf_path,
+                    OnboardingTemplate.field_definitions,
                 )
                 .join(
                     OnboardingTemplate,
@@ -236,10 +237,13 @@ class BundleService:
         ).all()
         counts = dict.fromkeys(bundle_ids, 0)
         ready = dict.fromkeys(bundle_ids, True)
-        for bundle_id, is_active, kind, pdf_path in rows:
+        for bundle_id, is_active, kind, pdf_path, field_definitions in rows:
             counts[bundle_id] += 1
             member_ready, _ = template_send_status(
-                is_active=is_active, kind=kind, pdf_path=pdf_path
+                is_active=is_active,
+                kind=kind,
+                pdf_path=pdf_path,
+                field_count=len(field_definitions or []),
             )
             if not member_ready:
                 ready[bundle_id] = False
@@ -251,8 +255,9 @@ class BundleService:
                 description=b.description,
                 is_active=b.is_active,
                 item_count=counts[b.id],
-                # A packet with zero members or any not-ready member can't be sent.
-                send_ready=counts[b.id] > 0 and ready[b.id],
+                # A retired packet, an empty one, or one with any not-ready
+                # member can't be sent.
+                send_ready=b.is_active and counts[b.id] > 0 and ready[b.id],
                 created_at=b.created_at,
                 updated_at=b.updated_at,
             )
@@ -293,6 +298,7 @@ class BundleService:
                 is_active=template.is_active,
                 kind=template.kind,
                 pdf_path=template.pdf_path,
+                field_count=len(template.field_definitions or []),
             )
             if not member_ready:
                 all_ready = False
@@ -310,7 +316,11 @@ class BundleService:
                     send_reason=reason,
                 )
             )
-        return bundle, members, (len(members) > 0 and all_ready)
+        # A retired bundle, an empty one, or one with any not-ready member can't
+        # be sent (the bundle's own is_active gates it too — a packet retired
+        # after the list was fetched must not read as ready).
+        send_ready = bundle.is_active and len(members) > 0 and all_ready
+        return bundle, members, send_ready
 
     # ----------------------------------------------------------------------
     # Mutations — rename/retire + order ops (the latter behind a FOR UPDATE lock).

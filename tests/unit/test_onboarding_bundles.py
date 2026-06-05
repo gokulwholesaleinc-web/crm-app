@@ -13,15 +13,13 @@ import uuid
 
 import pytest
 from sqlalchemy import func, select
-from src.auth.models import User
-from src.onboarding.bundle_schemas import BundleWizardItem
 from src.onboarding.bundle_service import BundleService
 from src.onboarding.models import (
     OnboardingTemplate,
     OnboardingTemplateBundle,
     OnboardingTemplateBundleItem,
 )
-from src.onboarding.packet_errors import PacketNotFoundError, PacketValidationError
+from src.onboarding.packet_errors import PacketValidationError
 from src.onboarding.packet_service import PacketService
 from src.onboarding.selection_service import SelectionService
 from src.onboarding.service import (
@@ -403,6 +401,27 @@ async def test_wizard_blank_esign_item_not_send_ready(
     assert "PDF" in (member["send_reason"] or "")
 
 
+async def test_wizard_blank_questionnaire_item_not_send_ready(
+    client, admin_auth_headers
+):
+    """A blank questionnaire has zero fields, so the packet "needs setup" too —
+    the client must never receive an empty form (D2 / M1)."""
+    resp = await client.post(
+        "/api/onboarding/template-bundles",
+        headers=admin_auth_headers,
+        json=_wizard_payload(
+            "Empty Form Packet",
+            [{"source": "blank", "kind": "questionnaire", "name": "Empty Intake"}],
+        ),
+    )
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["send_ready"] is False
+    member = body["members"][0]
+    assert member["send_ready"] is False
+    assert member["send_reason"]  # a non-empty "no questions/fields yet" reason
+
+
 # ===========================================================================
 # Bundle CRUD (§4.6)
 # ===========================================================================
@@ -644,7 +663,8 @@ async def test_send_blocked_when_member_not_ready_and_named(
     good = await make_template(db_session, name="GoodSend")
     retired = await make_template(db_session, name="RetiredSend", is_active=False)
     svc = PacketService(db_session)
-    with pytest.raises(PacketValidationError, match=f"Template {retired.id}"):
+    # The 422 names the offending member (its template name), not just its id.
+    with pytest.raises(PacketValidationError, match="RetiredSend"):
         await svc.create_packet(
             created_by_id=None, contact_id=test_contact.id,
             recipient_email="client@example.com",
