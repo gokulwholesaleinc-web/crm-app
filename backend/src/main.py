@@ -49,6 +49,7 @@ from src.leads.router import router as leads_router
 from src.meta.router import router as meta_router
 from src.notes.router import router as notes_router
 from src.notifications.router import router as notifications_router
+from src.onboarding.bundle_router import router as onboarding_bundle_router
 from src.onboarding.download_router import (
     download_router as onboarding_download_router,
 )
@@ -234,6 +235,7 @@ app.include_router(sharing_router)
 app.include_router(payments_router)
 app.include_router(proposals_router)
 app.include_router(onboarding_router)
+app.include_router(onboarding_bundle_router)
 app.include_router(onboarding_selection_router)
 app.include_router(onboarding_packet_router)
 app.include_router(onboarding_public_router)

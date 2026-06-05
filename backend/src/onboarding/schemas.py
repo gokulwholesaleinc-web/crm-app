@@ -165,6 +165,35 @@ class TemplateUpdate(BaseModel):
         return _normalized_service_tag(value)
 
 
+class TemplateCloneRequest(BaseModel):
+    """Body for ``POST /templates/{id}/clone``.
+
+    ``name`` omitted → the service auto-suffixes ``"{source} (copy[, N])"``; an
+    explicit ``name`` that collides is a hard 422 (no silent rename, C1).
+    """
+
+    name: str | None = Field(default=None, max_length=255)
+
+    @field_validator("name")
+    @classmethod
+    def _validate_name(cls, value: str | None) -> str | None:
+        return None if value is None else _stripped_required_name(value)
+
+
+class TemplateFromStarterRequest(BaseModel):
+    """Body for ``POST /templates/from-starter``: instantiate a built-in starter
+    into a fresh template. ``name`` omitted → auto-suffix off the starter name
+    (the seeded starter usually already owns the bare name)."""
+
+    starter_key: str = Field(min_length=1, max_length=100)
+    name: str | None = Field(default=None, max_length=255)
+
+    @field_validator("name")
+    @classmethod
+    def _validate_name(cls, value: str | None) -> str | None:
+        return None if value is None else _stripped_required_name(value)
+
+
 class StarterResponse(BaseModel):
     """A built-in starter template (``starter_definitions.STARTERS``).
 

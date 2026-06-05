@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import io
 import uuid
+from typing import TYPE_CHECKING
 
 from pypdf import PdfReader
 from sqlalchemy import select
@@ -23,6 +24,17 @@ from src.auth.models import User
 from src.onboarding import storage
 from src.onboarding.kinds import KIND_HANDLERS, get_handler
 from src.onboarding.models import OnboardingTemplate
+from src.onboarding.schemas import _normalized_service_tag
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterator
+
+# Bounded backstop for the auto-suffix savepoint loop (V3-2) — far above any
+# realistic number of same-named copies; a higher count means a misconfigured
+# caller, not a legitimate collision, so fail loudly rather than spin.
+_MAX_COPY_SUFFIX_TRIES = 50
+# Leave headroom under the name's 255-char cap for the " (copy NNN)" suffix.
+_COPY_BASE_MAX_LEN = 240
 
 
 class FieldDefinitionError(Exception):
@@ -181,6 +193,188 @@ class OnboardingTemplateService:
             ) from exc
         await self.db.refresh(template)
         return template
+
+    # ----------------------------------------------------------------------
+    # Clone + from-starter (§4.3) — build-then-persist, reusing _build_template.
+    # ----------------------------------------------------------------------
+    @staticmethod
+    def clone_build_kwargs(source: OnboardingTemplate) -> dict:
+        """``_build_template`` kwargs (sans ``name``/``current_user``) that clone
+        a source template's definition. Cloning is questionnaire/upload ONLY,
+        from an ACTIVE source (§4.3); e-sign is refused (its PDF + placed coords
+        are template-specific) and a retired source is refused.
+
+        Copies ``description``, ``kind``, ``requires_esign``, the deep-copied
+        ``field_definitions``, and the ``service_tag`` re-run through the slug
+        validator (D4). Raises ``FieldDefinitionError`` (→ 422) on refusal.
+        """
+        if not source.is_active:
+            raise FieldDefinitionError(
+                "Cannot clone a retired template; restore it first."
+            )
+        if source.kind == "esign_pdf":
+            raise FieldDefinitionError(
+                "E-sign templates can't be cloned — their PDF and placed fields "
+                "are template-specific. Create a new e-sign template instead."
+            )
+        return {
+            "description": source.description,
+            "service_tag": _normalized_service_tag(source.service_tag),
+            "requires_esign": source.requires_esign,
+            "kind": source.kind,
+            "field_definitions": list(source.field_definitions or []),
+        }
+
+    @staticmethod
+    def starter_build_kwargs(spec: dict) -> dict:
+        """``_build_template`` kwargs (sans ``name``/``current_user``) for a
+        built-in starter spec. service_tag re-run through the slug validator (D4);
+        field_definitions deep-copied so the module-level STARTERS stay pristine.
+        """
+        return {
+            "description": spec["description"],
+            "service_tag": _normalized_service_tag(spec["service_tag"]),
+            "requires_esign": False,
+            "kind": spec["kind"],
+            "field_definitions": list(spec["field_definitions"]),
+        }
+
+    async def clone_template(
+        self,
+        source: OnboardingTemplate,
+        *,
+        current_user: User,
+        name: str | None = None,
+    ) -> OnboardingTemplate:
+        """Clone an active questionnaire/upload template into a fresh one.
+
+        Explicit ``name`` collision → 422 (no silent rename); omitted ``name`` →
+        auto-suffix ``"{source} (copy[, N])"``.
+        """
+        kwargs = self.clone_build_kwargs(source)
+
+        def build(target_name: str) -> OnboardingTemplate:
+            return self._build_template(
+                current_user=current_user, name=target_name, **kwargs
+            )
+
+        return await self._persist_with_name_policy(
+            build, explicit_name=name, base_name=source.name
+        )
+
+    async def create_from_starter(
+        self,
+        spec: dict,
+        *,
+        current_user: User,
+        name: str | None = None,
+    ) -> OnboardingTemplate:
+        """Instantiate a built-in starter (resolved spec) into a fresh template.
+
+        Explicit ``name`` collision → 422; omitted ``name`` → auto-suffix off the
+        starter name (the seeded starter usually already owns the bare name).
+        """
+        kwargs = self.starter_build_kwargs(spec)
+
+        def build(target_name: str) -> OnboardingTemplate:
+            return self._build_template(
+                current_user=current_user, name=target_name, **kwargs
+            )
+
+        return await self._persist_with_name_policy(
+            build, explicit_name=name, base_name=spec["name"]
+        )
+
+    async def _persist_with_name_policy(
+        self,
+        build: Callable[[str], OnboardingTemplate],
+        *,
+        explicit_name: str | None,
+        base_name: str,
+    ) -> OnboardingTemplate:
+        """Persist a built template under the clone/from-starter name policy.
+
+        Explicit name → ``create()``'s plain rollback-and-give-up (a collision is
+        a hard 422). Omitted name → ``_insert_with_auto_suffix`` (pre-query +
+        SAVEPOINT backstop, V3-2).
+        """
+        if explicit_name is not None:
+            template = build(explicit_name)
+            self.db.add(template)
+            try:
+                await self.db.flush()
+            except IntegrityError as exc:
+                await self.db.rollback()
+                raise DuplicateTemplateNameError(
+                    "A template with this name already exists."
+                ) from exc
+            await self.db.refresh(template)
+            return template
+        return await self._insert_with_auto_suffix(build, base_name=base_name)
+
+    async def _insert_with_auto_suffix(
+        self,
+        build: Callable[[str], OnboardingTemplate],
+        *,
+        base_name: str,
+    ) -> OnboardingTemplate:
+        """Insert with an auto-suffixed ``"{base} (copy[, N])"`` name (V3-2).
+
+        A failed ``flush()`` aborts the whole Postgres transaction, so a naive
+        bump-and-re-flush is impossible. Instead: pre-query the existing
+        ``"{base} (copy%"`` names and pick the first free suffix in one shot, then
+        insert inside a ``SAVEPOINT`` (``begin_nested``) as a BOUNDED terminal
+        backstop — a same-instant collision rolls back only that savepoint and
+        bumps once more (bounded, never infinite). The savepoint's race-safety is
+        review-asserted; tests cover the same-session pre-query path (honest per
+        §3/B3 — a real race isn't reproduced on the single-threaded harness).
+        """
+        base = base_name[:_COPY_BASE_MAX_LEN]
+        taken = set(
+            (
+                await self.db.execute(
+                    select(OnboardingTemplate.name).where(
+                        OnboardingTemplate.name.like(f"{base} (copy%")
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        tries = 0
+        for candidate in self._copy_name_candidates(base):
+            if candidate in taken:
+                continue
+            tries += 1
+            if tries > _MAX_COPY_SUFFIX_TRIES:
+                raise DuplicateTemplateNameError(
+                    "Could not find a free copy name; rename the source first."
+                )
+            template = build(candidate)
+            try:
+                async with self.db.begin_nested():
+                    self.db.add(template)
+                    await self.db.flush()
+            except IntegrityError:
+                # A same-instant insert took this exact name: only the savepoint
+                # rolled back (the outer transaction is intact), so record it and
+                # bump to the next candidate.
+                taken.add(candidate)
+                continue
+            await self.db.refresh(template)
+            return template
+        # The candidate generator is infinite, so this is unreachable; kept so
+        # the function has a definite return for type-checkers.
+        raise DuplicateTemplateNameError("Could not generate a copy name.")
+
+    @staticmethod
+    def _copy_name_candidates(base: str) -> Iterator[str]:
+        """Yield ``"{base} (copy)"``, ``"{base} (copy 2)"``, … indefinitely."""
+        yield f"{base} (copy)"
+        n = 2
+        while True:
+            yield f"{base} (copy {n})"
+            n += 1
 
     async def list(
         self,

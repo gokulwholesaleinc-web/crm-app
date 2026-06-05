@@ -18,12 +18,14 @@ from src.core.permissions import require_permission
 from src.core.router_utils import DBSession, check_ownership, raise_not_found
 from src.onboarding.schemas import (
     StarterResponse,
+    TemplateCloneRequest,
     TemplateCreate,
+    TemplateFromStarterRequest,
     TemplateResponse,
     TemplateUpdate,
 )
 from src.onboarding.service import OnboardingTemplateService
-from src.onboarding.starter_definitions import onboarding_template_specs
+from src.onboarding.starter_definitions import get_starter, onboarding_template_specs
 from src.onboarding.validation import (
     field_definition_error_as_422,
     upload_errors_mapped,
@@ -182,6 +184,60 @@ async def get_template_pdf(
             detail="PDF storage is unavailable.",
         ) from exc
     return Response(content=content, media_type="application/pdf")
+
+
+@router.post(
+    "/templates/from-starter",
+    response_model=TemplateResponse,
+    status_code=HTTPStatus.CREATED,
+)
+async def create_template_from_starter(
+    data: TemplateFromStarterRequest,
+    current_user: OnbCreateUser,
+    db: DBSession,
+):
+    """Instantiate a built-in starter into a fresh team-library template.
+
+    Unknown ``starter_key`` → 404. Explicit ``name`` collision → 422; omitted →
+    auto-suffix off the starter name.
+    """
+    spec = get_starter(data.starter_key)
+    if spec is None:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND,
+            detail=f"Unknown onboarding starter '{data.starter_key}'.",
+        )
+    service = OnboardingTemplateService(db)
+    with field_definition_error_as_422():
+        template = await service.create_from_starter(
+            spec, current_user=current_user, name=data.name
+        )
+    return TemplateResponse.from_template(template)
+
+
+@router.post(
+    "/templates/{template_id}/clone",
+    response_model=TemplateResponse,
+    status_code=HTTPStatus.CREATED,
+)
+async def clone_template(
+    template_id: int,
+    data: TemplateCloneRequest,
+    current_user: OnbCreateUser,
+    db: DBSession,
+):
+    """Clone an active questionnaire/upload template into a fresh one.
+
+    Missing source → 404; e-sign or retired source → 422; explicit ``name``
+    collision → 422; omitted ``name`` → auto-suffix ``"{source} (copy[, N])"``.
+    """
+    service = OnboardingTemplateService(db)
+    source = await _get_template_or_404(service, template_id)
+    with field_definition_error_as_422():
+        template = await service.clone_template(
+            source, current_user=current_user, name=data.name
+        )
+    return TemplateResponse.from_template(template)
 
 
 @router.post("/templates/{template_id}/retire", response_model=TemplateResponse)
