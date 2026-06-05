@@ -56,15 +56,24 @@ export function ProposalOnboardingSelectionsCard({
     queryFn: () => listProposalOnboardingSelections(proposalId),
   });
 
-  // Active, PDF-backed templates only — a retired/PDF-less one is a 422 on
-  // set, so never offer it (matches the OnboardingSendPanel rule).
+  // Selectable templates must mirror the backend's _assert_templates_active /
+  // template_send_status gate (and OnboardingSendPanel) so the picker never
+  // offers a template that 422s on set. esign_pdf needs an uploaded PDF; a form
+  // kind (questionnaire/upload_request) carries no PDF by design but needs at
+  // least one authored field (the D2 empty-form guard) — an empty form is
+  // "needs setup", not sendable. Keep the two surfaces in lock-step.
   const { data: templates, isLoading: templatesLoading } = useQuery({
     queryKey: ['onboarding-templates', 'selectable'],
     queryFn: () => listOnboardingTemplates(),
   });
 
   const selectableTemplates = useMemo<OnboardingTemplate[]>(
-    () => (templates ?? []).filter((t) => t.is_active && t.has_pdf),
+    () =>
+      (templates ?? []).filter((t) => {
+        if (!t.is_active) return false;
+        const isEsignPdf = (t.kind ?? 'esign_pdf') === 'esign_pdf';
+        return isEsignPdf ? t.has_pdf : t.field_definitions.length > 0;
+      }),
     [templates],
   );
 
@@ -246,7 +255,8 @@ export function ProposalOnboardingSelectionsCard({
             </p>
           ) : selectableTemplates.length === 0 ? (
             <p className="mt-2 text-sm text-gray-400 dark:text-gray-500">
-              No active templates with an uploaded PDF are available.
+              No active templates are available. Create one — or upload a PDF to
+              an e-sign template — to add it here.
             </p>
           ) : (
             <ul className="mt-2 space-y-1.5">
