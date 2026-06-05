@@ -165,6 +165,22 @@ class TemplateUpdate(BaseModel):
         return _normalized_service_tag(value)
 
 
+class StarterResponse(BaseModel):
+    """A built-in starter template (``starter_definitions.STARTERS``).
+
+    Surfaced by ``GET /templates/starters`` for the wizard's example picker and
+    cloned into a real template by ``POST /templates/from-starter`` (keyed on
+    ``key``). ``field_definitions`` are deliberately omitted — the picker only
+    needs the identity + kind, and the clone reads the definition server-side.
+    """
+
+    key: str
+    name: str
+    description: str | None
+    kind: DocumentKind
+    service_tag: str | None
+
+
 class TemplateResponse(BaseModel):
     """API view of a template.
 

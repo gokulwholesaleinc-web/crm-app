@@ -17,11 +17,13 @@ from src.core.constants import HTTPStatus
 from src.core.permissions import require_permission
 from src.core.router_utils import DBSession, check_ownership, raise_not_found
 from src.onboarding.schemas import (
+    StarterResponse,
     TemplateCreate,
     TemplateResponse,
     TemplateUpdate,
 )
 from src.onboarding.service import OnboardingTemplateService
+from src.onboarding.starter_definitions import onboarding_template_specs
 from src.onboarding.validation import (
     field_definition_error_as_422,
     upload_errors_mapped,
@@ -78,6 +80,26 @@ async def list_templates(
         service_tag=service_tag, include_inactive=include_inactive
     )
     return [TemplateResponse.from_template(t) for t in templates]
+
+
+@router.get("/templates/starters", response_model=list[StarterResponse])
+async def list_starters(current_user: OnbReadUser):
+    """List the built-in starter templates (read-gated).
+
+    Declared BEFORE ``/templates/{template_id}`` so the literal ``starters`` path
+    isn't swallowed by the int path param. The wizard offers these first; the
+    from-starter route clones one by ``key``.
+    """
+    return [
+        StarterResponse(
+            key=s["key"],
+            name=s["name"],
+            description=s["description"],
+            kind=s["kind"],
+            service_tag=s["service_tag"],
+        )
+        for s in onboarding_template_specs()
+    ]
 
 
 @router.get("/templates/{template_id}", response_model=TemplateResponse)
