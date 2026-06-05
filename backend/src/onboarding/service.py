@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth.models import User
 from src.onboarding import storage
-from src.onboarding.kinds import get_handler
+from src.onboarding.kinds import KIND_HANDLERS, get_handler
 from src.onboarding.models import OnboardingTemplate
 
 
@@ -69,25 +69,60 @@ class StorageWriteError(Exception):
     """
 
 
+def template_send_status(
+    *, is_active: bool, kind: str, pdf_path: str | None
+) -> tuple[bool, str | None]:
+    """Single source of truth for "can this template become a packet document
+    right now?" — the readiness check every send/select site shares (audit B2 +
+    V3-3).
+
+    Takes the MINIMAL fields (not a full ORM row) so a column-projection query
+    can reuse it. Returns ``(ready, reason)`` where ``reason`` is a standalone,
+    user-facing sentence when not ready, else ``None``. The missing-template
+    check (the row doesn't exist at all) stays caller-side — this function only
+    judges a row that was found.
+
+    Reused at all three readiness sites:
+      * ``packet_service._load_active_templates`` — RAISES on ``not ready``.
+      * ``selection_service._assert_templates_active`` — RAISES on ``not ready``.
+      * the bundle detail serializer — RETURNS the flag + reason per member.
+    """
+    if not is_active:
+        return False, "This template has been retired and can no longer be sent."
+    if kind not in KIND_HANDLERS:
+        return False, "This template has an unknown kind and cannot be sent."
+    if KIND_HANDLERS[kind].needs_pdf_copy and not pdf_path:
+        return False, "This e-sign template has no PDF uploaded yet."
+    return True, None
+
+
 class OnboardingTemplateService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def create(
-        self,
+    @staticmethod
+    def _build_template(
         *,
         current_user: User,
         name: str,
-        description: str | None = None,
-        service_tag: str | None = None,
-        requires_esign: bool = False,
-        kind: str = "esign_pdf",
-        field_definitions: list[dict] | None = None,
+        description: str | None,
+        service_tag: str | None,
+        requires_esign: bool,
+        kind: str,
+        field_definitions: list[dict] | None,
     ) -> OnboardingTemplate:
-        # esign_pdf places coordinate fields only AFTER a PDF is uploaded (coords
-        # bounds-check against it), so it cannot carry initial field_definitions;
-        # questionnaire/upload_request author their fields up front and validate
-        # them now via the per-kind handler (no PDF needed — P0-9).
+        """Construct (but do NOT persist) a validated ``OnboardingTemplate``.
+
+        Everything ``create()`` does BEFORE the flush — with NO DB I/O — so the
+        batch wizard and clone paths reuse 100% of the validation + owner-setting
+        instead of hand-constructing ORM rows (audit B1). The caller owns
+        ``add``/``flush``/IntegrityError mapping.
+
+        esign_pdf places coordinate fields only AFTER a PDF is uploaded (coords
+        bounds-check against it), so it cannot carry initial field_definitions;
+        questionnaire/upload_request author their fields up front and validate
+        them now via the per-kind handler (no PDF needed — P0-9).
+        """
         defs = field_definitions or []
         if kind == "esign_pdf":
             if defs:
@@ -102,7 +137,7 @@ class OnboardingTemplateService:
             defs = list(get_handler(kind).validate_definitions(defs, pdf_bytes=None))
         # AuditableMixin does NOT auto-populate created_by_id; set it (and
         # owner_id) explicitly so check_ownership and the audit trail work.
-        template = OnboardingTemplate(
+        return OnboardingTemplate(
             name=name,
             description=description,
             service_tag=service_tag,
@@ -111,6 +146,27 @@ class OnboardingTemplateService:
             owner_id=current_user.id,
             created_by_id=current_user.id,
             field_definitions=defs,
+        )
+
+    async def create(
+        self,
+        *,
+        current_user: User,
+        name: str,
+        description: str | None = None,
+        service_tag: str | None = None,
+        requires_esign: bool = False,
+        kind: str = "esign_pdf",
+        field_definitions: list[dict] | None = None,
+    ) -> OnboardingTemplate:
+        template = self._build_template(
+            current_user=current_user,
+            name=name,
+            description=description,
+            service_tag=service_tag,
+            requires_esign=requires_esign,
+            kind=kind,
+            field_definitions=field_definitions,
         )
         self.db.add(template)
         try:

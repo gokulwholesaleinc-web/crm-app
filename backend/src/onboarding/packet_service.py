@@ -28,7 +28,7 @@ from src.onboarding.disclosure import (
     ONBOARDING_ESIGN_DISCLOSURE_VERSION,
     onboarding_esign_disclosure,
 )
-from src.onboarding.kinds import KIND_HANDLERS, get_handler
+from src.onboarding.kinds import get_handler
 from src.onboarding.limits import MAX_FIELD_COUNT
 from src.onboarding.models import (
     OnboardingPacket,
@@ -41,6 +41,7 @@ from src.onboarding.packet_errors import (
     PacketRaceError,
     PacketValidationError,
 )
+from src.onboarding.service import template_send_status
 
 # Statuses a recipient may still write to (view/patch/signature/complete).
 WRITABLE_STATUSES = ("active", "opened", "in_progress")
@@ -296,20 +297,15 @@ class PacketService:
             template = by_id.get(tid)
             if template is None:
                 raise PacketValidationError(f"Template {tid} not found")
-            if not template.is_active:
-                raise PacketValidationError(
-                    f"Template {tid} is retired and cannot be sent"
-                )
-            if template.kind not in KIND_HANDLERS:
-                raise PacketValidationError(
-                    f"Template {tid} has an unknown kind '{template.kind}'"
-                )
-            # Only PDF-copy kinds (esign) require an uploaded PDF; a
-            # questionnaire/upload template with no PDF is selectable (P0-5).
-            if KIND_HANDLERS[template.kind].needs_pdf_copy and not template.pdf_path:
-                raise PacketValidationError(
-                    f"Template {tid} has no PDF uploaded yet"
-                )
+            # Shared readiness check (retired / unknown-kind / esign-without-PDF).
+            # A questionnaire/upload template with no PDF is selectable (P0-5).
+            ready, reason = template_send_status(
+                is_active=template.is_active,
+                kind=template.kind,
+                pdf_path=template.pdf_path,
+            )
+            if not ready:
+                raise PacketValidationError(f"Template {tid}: {reason}")
             ordered.append(template)
         return ordered
 
