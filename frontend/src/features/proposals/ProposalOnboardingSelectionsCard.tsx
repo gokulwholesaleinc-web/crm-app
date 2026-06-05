@@ -56,12 +56,12 @@ export function ProposalOnboardingSelectionsCard({
     queryFn: () => listProposalOnboardingSelections(proposalId),
   });
 
-  // Selectable templates: active, and — only for esign_pdf — PDF-backed. A
-  // questionnaire/upload_request template carries no PDF by design (the
-  // backend's _assert_templates_active gates the PDF requirement on
-  // needs_pdf_copy, i.e. esign only), so the old `has_pdf` filter wrongly hid
-  // every form template from proposal auto-send. Mirror the OnboardingSendPanel
-  // rule so the two stay in lock-step.
+  // Selectable templates must mirror the backend's _assert_templates_active /
+  // template_send_status gate (and OnboardingSendPanel) so the picker never
+  // offers a template that 422s on set. esign_pdf needs an uploaded PDF; a form
+  // kind (questionnaire/upload_request) carries no PDF by design but needs at
+  // least one authored field (the D2 empty-form guard) — an empty form is
+  // "needs setup", not sendable. Keep the two surfaces in lock-step.
   const { data: templates, isLoading: templatesLoading } = useQuery({
     queryKey: ['onboarding-templates', 'selectable'],
     queryFn: () => listOnboardingTemplates(),
@@ -69,9 +69,11 @@ export function ProposalOnboardingSelectionsCard({
 
   const selectableTemplates = useMemo<OnboardingTemplate[]>(
     () =>
-      (templates ?? []).filter(
-        (t) => t.is_active && (t.kind !== 'esign_pdf' || t.has_pdf),
-      ),
+      (templates ?? []).filter((t) => {
+        if (!t.is_active) return false;
+        const isEsignPdf = (t.kind ?? 'esign_pdf') === 'esign_pdf';
+        return isEsignPdf ? t.has_pdf : t.field_definitions.length > 0;
+      }),
     [templates],
   );
 

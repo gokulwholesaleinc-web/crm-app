@@ -5,9 +5,11 @@
  * The card used to filter the available templates on ``t.is_active && t.has_pdf``
  * for ALL kinds, which hid every questionnaire / upload_request template (they
  * carry no PDF by design) from proposal auto-send — even though the backend's
- * ``_assert_templates_active`` only requires a PDF for esign_pdf. The fix gates
- * the PDF requirement on the kind: ``t.is_active && (t.kind !== 'esign_pdf' ||
- * t.has_pdf)``. This pins that behaviour.
+ * ``_assert_templates_active`` only requires a PDF for esign_pdf. The fix mirrors
+ * the backend ``template_send_status`` gate: esign_pdf needs a PDF, a form kind
+ * needs at least one authored field (the D2 empty-form guard) — so an empty form
+ * is "needs setup", not offered. This pins that behaviour and keeps the picker in
+ * lock-step with OnboardingSendPanel.
  *
  * The network boundary is the ``api/onboarding`` wrappers; they're mocked so the
  * card's real query/filter logic runs against controlled template fixtures.
@@ -67,12 +69,23 @@ describe('ProposalOnboardingSelectionsCard "Add a document" picker', () => {
       name: 'Intake Questionnaire',
       kind: 'questionnaire',
       has_pdf: false,
+      field_definitions: [{ id: 'q1', kind: 'short_text', label: 'Your name', required: true }],
     });
     const upload = makeTemplate({
       id: 11,
       name: 'Document Upload',
       kind: 'upload_request',
       has_pdf: false,
+      field_definitions: [{ id: 'f1', kind: 'file_upload', label: 'Upload your ID', required: true }],
+    });
+    // An empty form (no fields) must NOT be offered — the backend's D2 guard
+    // 422s it, so the picker hides it just like a PDF-less esign template.
+    const emptyForm = makeTemplate({
+      id: 15,
+      name: 'Empty Questionnaire',
+      kind: 'questionnaire',
+      has_pdf: false,
+      field_definitions: [],
     });
     const esignReady = makeTemplate({
       id: 12,
@@ -99,6 +112,7 @@ describe('ProposalOnboardingSelectionsCard "Add a document" picker', () => {
       esignReady,
       esignNoPdf,
       retired,
+      emptyForm,
     ]);
 
     renderWithProviders(
@@ -118,13 +132,18 @@ describe('ProposalOnboardingSelectionsCard "Add a document" picker', () => {
       screen.getByRole('button', { name: 'Add Signed Agreement to onboarding' }),
     ).toBeInTheDocument();
 
-    // …but the PDF-less esign template and the retired template are not.
+    // …but the PDF-less esign, the retired, and the empty (field-less) form are not.
     expect(
       screen.queryByRole('button', { name: 'Add Draft Agreement to onboarding' }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole('button', {
         name: 'Add Retired Questionnaire to onboarding',
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', {
+        name: 'Add Empty Questionnaire to onboarding',
       }),
     ).not.toBeInTheDocument();
   });
