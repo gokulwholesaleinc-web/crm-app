@@ -56,15 +56,22 @@ export function ProposalOnboardingSelectionsCard({
     queryFn: () => listProposalOnboardingSelections(proposalId),
   });
 
-  // Active, PDF-backed templates only — a retired/PDF-less one is a 422 on
-  // set, so never offer it (matches the OnboardingSendPanel rule).
+  // Selectable templates: active, and — only for esign_pdf — PDF-backed. A
+  // questionnaire/upload_request template carries no PDF by design (the
+  // backend's _assert_templates_active gates the PDF requirement on
+  // needs_pdf_copy, i.e. esign only), so the old `has_pdf` filter wrongly hid
+  // every form template from proposal auto-send. Mirror the OnboardingSendPanel
+  // rule so the two stay in lock-step.
   const { data: templates, isLoading: templatesLoading } = useQuery({
     queryKey: ['onboarding-templates', 'selectable'],
     queryFn: () => listOnboardingTemplates(),
   });
 
   const selectableTemplates = useMemo<OnboardingTemplate[]>(
-    () => (templates ?? []).filter((t) => t.is_active && t.has_pdf),
+    () =>
+      (templates ?? []).filter(
+        (t) => t.is_active && (t.kind !== 'esign_pdf' || t.has_pdf),
+      ),
     [templates],
   );
 
@@ -246,7 +253,8 @@ export function ProposalOnboardingSelectionsCard({
             </p>
           ) : selectableTemplates.length === 0 ? (
             <p className="mt-2 text-sm text-gray-400 dark:text-gray-500">
-              No active templates with an uploaded PDF are available.
+              No active templates are available. Create one — or upload a PDF to
+              an e-sign template — to add it here.
             </p>
           ) : (
             <ul className="mt-2 space-y-1.5">
