@@ -262,6 +262,99 @@ export interface OnboardingSelectionReorder {
   ordered_ids: number[];
 }
 
+// ---------------------------------------------------------------------------
+// "Saved packet" bundles + starters + clone/from-starter (wizard feature)
+// ---------------------------------------------------------------------------
+
+/** A built-in starter template (the wizard's example picker; cloned by key). */
+export interface OnboardingStarter {
+  key: string;
+  name: string;
+  description?: string | null;
+  kind: OnboardingDocumentKind;
+  service_tag?: string | null;
+}
+
+/** Body for cloning a template (omit name → backend auto-suffixes "(copy)"). */
+export interface OnboardingTemplateCloneRequest {
+  name?: string | null;
+}
+
+/** Body for instantiating a starter into a fresh template. */
+export interface OnboardingTemplateFromStarterRequest {
+  starter_key: string;
+  name?: string | null;
+}
+
+/** Where a wizard document comes from: clone an existing template, a starter,
+ * or a blank new spec. */
+export type OnboardingBundleItemSource = 'clone' | 'starter' | 'blank';
+
+/** One document in the wizard's ordered list — mints a NEW template. */
+export interface OnboardingBundleWizardItem {
+  source: OnboardingBundleItemSource;
+  /** Per-item template name (required). */
+  name: string;
+  /** clone: */
+  source_template_id?: number | null;
+  /** starter: */
+  starter_key?: string | null;
+  /** blank: */
+  kind?: OnboardingDocumentKind | null;
+  description?: string | null;
+  service_tag?: string | null;
+  field_definitions?: OnboardingTemplateFieldDef[] | null;
+}
+
+/** Wizard create body: a named, ordered set of ≥1 documents. */
+export interface OnboardingBundleCreate {
+  name: string;
+  description?: string | null;
+  items: OnboardingBundleWizardItem[];
+}
+
+/** Partial bundle update: rename / re-describe / retire-restore. */
+export interface OnboardingBundleUpdate {
+  name?: string | null;
+  description?: string | null;
+  is_active?: boolean | null;
+}
+
+/**
+ * One template reference inside a bundle (detail view). ``send_ready`` +
+ * ``send_reason`` are computed by the backend — the UI READS the flag and never
+ * re-derives readiness (it can't: ``needs_pdf_copy`` is server-side only).
+ */
+export interface OnboardingBundleMember {
+  item_id: number;
+  template_id: number;
+  display_order: number;
+  name: string;
+  kind: OnboardingDocumentKind;
+  requires_esign: boolean;
+  is_active: boolean;
+  has_pdf: boolean;
+  send_ready: boolean;
+  send_reason?: string | null;
+}
+
+/** A saved packet in the library list (no members). */
+export interface OnboardingBundleSummary {
+  id: number;
+  name: string;
+  description?: string | null;
+  is_active: boolean;
+  item_count: number;
+  send_ready: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+/** A saved packet with its ordered members + per-member readiness. */
+export interface OnboardingBundleDetail extends OnboardingBundleSummary {
+  members: OnboardingBundleMember[];
+}
+
 // --- Public client-fill flow (bare axios client, X-Onboarding-Session) ---
 
 export interface OnboardingPublicBranding {

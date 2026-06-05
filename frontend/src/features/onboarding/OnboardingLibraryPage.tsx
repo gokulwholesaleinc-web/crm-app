@@ -9,6 +9,7 @@ import {
   ArrowUturnLeftIcon,
   ClipboardDocumentCheckIcon,
   Cog6ToothIcon,
+  DocumentDuplicateIcon,
 } from '@heroicons/react/24/outline';
 import { Button, Modal, ModalFooter, Input, ConfirmDialog, Badge, Switch } from '../../components/ui';
 import { SkeletonTable } from '../../components/ui/Skeleton';
@@ -25,6 +26,7 @@ import {
   updateOnboardingTemplate,
   retireOnboardingTemplate,
   restoreOnboardingTemplate,
+  cloneOnboardingTemplate,
   ONBOARDING_PDF_MAX_BYTES,
 } from '../../api/onboarding';
 import type {
@@ -40,6 +42,8 @@ import type {
 const OnboardingTemplateEditor = lazy(() => import('./OnboardingTemplateEditor'));
 // The send panel pulls in the contacts query + packet API — code-split too.
 const OnboardingSendPanel = lazy(() => import('./OnboardingSendPanel'));
+// The saved-packets section pulls in the wizard + bundle API — code-split too.
+const SavedPacketsPanel = lazy(() => import('./SavedPacketsPanel'));
 // The questionnaire/upload builder — only loaded when authoring a form kind.
 const OnboardingFormBuilder = lazy(() => import('./OnboardingFormBuilder'));
 
@@ -69,7 +73,7 @@ function isEditConflict(err: unknown): boolean {
 function OnboardingLibraryPage() {
   usePageTitle('Onboarding');
   const queryClient = useQueryClient();
-  const [view, setView] = useState<'templates' | 'send'>('templates');
+  const [view, setView] = useState<'templates' | 'packets' | 'send'>('templates');
   const [includeInactive, setIncludeInactive] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [metaTarget, setMetaTarget] = useState<OnboardingTemplate | null>(null);
@@ -294,6 +298,17 @@ function OnboardingLibraryPage() {
     }
   };
 
+  const cloneMutation = useMutation({
+    mutationFn: (templateId: number) => cloneOnboardingTemplate(templateId),
+    onSuccess: (clone) => {
+      invalidate();
+      showSuccess(`Copied to “${clone.name}”.`);
+    },
+    onError: (err) => showError(extractApiErrorDetail(err) ?? 'Failed to copy template'),
+  });
+
+  const handleCopy = (template: OnboardingTemplate) => cloneMutation.mutate(template.id);
+
   return (
     <div className="space-y-6" data-guide="onboarding-page">
       {/* Hidden file input shared by every row's Upload button. */}
@@ -333,6 +348,7 @@ function OnboardingLibraryPage() {
       >
         {([
           ['templates', 'Templates'],
+          ['packets', 'Saved packets'],
           ['send', 'Send to client'],
         ] as const).map(([key, label]) => (
           <button
@@ -353,6 +369,12 @@ function OnboardingLibraryPage() {
           </button>
         ))}
       </div>
+
+      {view === 'packets' && (
+        <Suspense fallback={<SkeletonTable rows={3} cols={3} />}>
+          <SavedPacketsPanel />
+        </Suspense>
+      )}
 
       {view === 'send' && (
         <Suspense fallback={<SkeletonTable rows={3} cols={2} />}>
@@ -407,6 +429,7 @@ function OnboardingLibraryPage() {
             onEditMeta={setMetaTarget}
             onRetire={setRetireTarget}
             onRestore={handleRestore}
+            onCopy={handleCopy}
           />
           <TemplateSection
             heading="Per-service templates"
@@ -420,6 +443,7 @@ function OnboardingLibraryPage() {
             onEditMeta={setMetaTarget}
             onRetire={setRetireTarget}
             onRestore={handleRestore}
+            onCopy={handleCopy}
           />
         </div>
       )}
@@ -514,6 +538,7 @@ interface TemplateSectionProps {
   onEditMeta: (template: OnboardingTemplate) => void;
   onRetire: (template: OnboardingTemplate) => void;
   onRestore: (template: OnboardingTemplate) => void;
+  onCopy: (template: OnboardingTemplate) => void;
 }
 
 function TemplateSection({
@@ -528,6 +553,7 @@ function TemplateSection({
   onEditMeta,
   onRetire,
   onRestore,
+  onCopy,
 }: TemplateSectionProps) {
   return (
     <section>
@@ -550,6 +576,7 @@ function TemplateSection({
               onEditMeta={onEditMeta}
               onRetire={onRetire}
               onRestore={onRestore}
+              onCopy={onCopy}
             />
           ))}
         </div>
@@ -567,6 +594,7 @@ interface TemplateRowProps {
   onEditMeta: (template: OnboardingTemplate) => void;
   onRetire: (template: OnboardingTemplate) => void;
   onRestore: (template: OnboardingTemplate) => void;
+  onCopy: (template: OnboardingTemplate) => void;
 }
 
 // esign_pdf rows are PDF-driven (place coordinate fields); questionnaire /
@@ -597,6 +625,7 @@ function TemplateRow({
   onEditMeta,
   onRetire,
   onRestore,
+  onCopy,
 }: TemplateRowProps) {
   const hasPdf = template.has_pdf;
   const isActive = template.is_active;
@@ -699,6 +728,21 @@ function TemplateRow({
             >
               Edit details
             </Button>
+            {/* Copy clones the definition into a new template. Only questionnaire/
+                upload kinds are cloneable — e-sign templates carry a
+                template-specific PDF + placed fields the backend refuses to copy
+                (422), so the action is hidden for them (and for retired rows). */}
+            {!isEsignPdf && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                leftIcon={<DocumentDuplicateIcon className="h-4 w-4" aria-hidden="true" />}
+                onClick={() => onCopy(template)}
+              >
+                Copy
+              </Button>
+            )}
             <Button
               type="button"
               variant="ghost"

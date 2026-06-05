@@ -414,6 +414,99 @@ class ProposalOnboardingSelection(Base, AuditableMixin):
     )
 
 
+class OnboardingTemplateBundle(Base, AuditableMixin):
+    """A named, ordered "saved packet" — a reusable list of template references
+    staff assemble once (the wizard's output) and send to many clients.
+
+    ``name`` is UNIQUE (matches the template name's case-sensitivity choice, D3).
+    ``AuditableMixin`` supplies the created/updated audit columns. The ordered
+    members live in ``OnboardingTemplateBundleItem``; deleting a bundle CASCADEs
+    its items (the only cascade in this pair — see the item model).
+    """
+
+    __tablename__ = "onboarding_template_bundles"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=sa.true(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("name", name="uq_onboarding_template_bundles_name"),
+    )
+
+
+class OnboardingTemplateBundleItem(Base, AuditableMixin):
+    """One template reference inside a bundle, at a given ``display_order``.
+
+    ``bundle_id`` FK CASCADEs: deleting a bundle removes its items (this delete
+    *does* happen). ``template_id`` FK has NO cascade — templates are only
+    soft-retired (``service.retire`` sets ``is_active=false``), so a
+    ``template_id`` cascade would be decorative and misleading (audit B4). A
+    retired member is handled in-app: BLOCKED (never silently skipped) at send,
+    and surfaced as "needs attention" in the bundle detail.
+
+    The two unique constraints make the ordering gap-free and collision-free;
+    the shared ``ordering.reorder_by_display_order`` bumps rows to a temporary
+    high offset before writing the final ``0..N-1`` so a per-row UPDATE can't
+    trip ``uq_onboarding_template_bundle_items_order`` mid-reorder.
+    """
+
+    __tablename__ = "onboarding_template_bundle_items"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # The bundle_id index is declared ONCE in __table_args__ below
+    # (``ix_onboarding_template_bundle_items_bundle``) to match the migration
+    # exactly — do NOT add ``index=True`` here too, or create_all (test/dev DBs)
+    # would build a second, migration-less index and drift from prod.
+    # FK names are pinned EXPLICITLY (not left to naming_convention): the
+    # convention name (fk_<table>_<col>_<reftable>) would be 67–72 chars and
+    # silently truncate past Postgres' 63-char identifier cap, so create_all
+    # (SQLite) and the migration (Postgres) would disagree. The pinned short
+    # names are identical in both and fit the cap. The migration MUST use these
+    # exact names; tests/unit/test_onboarding_bundle_migration.py enforces it.
+    bundle_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey(
+            "onboarding_template_bundles.id",
+            ondelete="CASCADE",
+            name="fk_onboarding_template_bundle_items_bundle_id",
+        ),
+        nullable=False,
+    )
+    # No ondelete: templates are soft-retired, never hard-deleted, so a cascade
+    # here would be dead code (audit B4). Retired members are handled in-app.
+    template_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey(
+            "onboarding_templates.id",
+            name="fk_onboarding_template_bundle_items_template_id",
+        ),
+        nullable=False,
+    )
+    display_order: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "bundle_id",
+            "template_id",
+            name="uq_onboarding_template_bundle_items_template",
+        ),
+        UniqueConstraint(
+            "bundle_id",
+            "display_order",
+            name="uq_onboarding_template_bundle_items_order",
+        ),
+        Index(
+            "ix_onboarding_template_bundle_items_bundle", "bundle_id"
+        ),
+    )
+
+
 class OnboardingPacketDocumentView(Base):
     """Per-token view row for a packet document (read-before-sign ledger).
 

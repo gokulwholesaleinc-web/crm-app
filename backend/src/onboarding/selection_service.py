@@ -16,21 +16,18 @@ from __future__ import annotations
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.onboarding.kinds import KIND_HANDLERS
 from src.onboarding.models import (
     OnboardingTemplate,
     ProposalOnboardingSelection,
 )
+from src.onboarding.ordering import reorder_by_display_order
 from src.onboarding.packet_errors import (
     PacketNotFoundError,
     PacketRaceError,
     PacketValidationError,
 )
+from src.onboarding.service import template_send_status
 from src.proposals.models import Proposal
-
-# A temporary offset larger than any realistic selection count, so the
-# first pass of a reorder can't collide with a row's eventual final order.
-_TEMP_ORDER_OFFSET = 1_000_000
 
 # Proposal statuses at/after acceptance: the auto-send trigger has already
 # read these selections and minted (or attempted) the onboarding packet, so the
@@ -112,8 +109,10 @@ class SelectionService:
 
         ``ordered_ids`` must be exactly the current selection ids (a strict
         permutation). The ``(proposal_id, display_order)`` unique constraint
-        collides under a naive per-row UPDATE, so this bumps every row to a
-        temporary high offset first (flush), then writes the final 0..N-1.
+        collides under a naive per-row UPDATE, so the shared
+        ``reorder_by_display_order`` two-pass (bump to a temp offset, flush,
+        write the final 0..N-1) does the rewrite (B6). The ``FOR UPDATE`` lock,
+        permutation check, and ``updated_by_id`` stamping stay here (V3-4).
         """
         await self._lock_proposal(proposal_id)
         existing = await self.list_selections(proposal_id)
@@ -122,17 +121,20 @@ class SelectionService:
             raise PacketValidationError(
                 "ordered_ids must be exactly the current selection ids."
             )
-        # Pass 1: move every row out of the final range to avoid a transient
-        # duplicate (proposal_id, display_order) during the rewrite.
+        # ordered_ids is a strict permutation of every row, so stamp the actor
+        # on all of them (caller-side per V3-4) before the shared rewrite.
         for sel in existing:
-            sel.display_order = _TEMP_ORDER_OFFSET + sel.id
-        await self.db.flush()
-        # Pass 2: write the final contiguous order.
-        for order, sel_id in enumerate(ordered_ids):
-            sel = by_id[sel_id]
-            sel.display_order = order
             sel.updated_by_id = actor_id
-        await self.db.flush()
+
+        def _set_order(sel: ProposalOnboardingSelection, order: int) -> None:
+            sel.display_order = order
+
+        await reorder_by_display_order(
+            existing,
+            ordered_ids,
+            set_order=_set_order,
+            flush=self.db.flush,
+        )
         return await self.list_selections(proposal_id)
 
     async def remove(
@@ -188,11 +190,13 @@ class SelectionService:
         """422 if any template is missing, retired, unknown-kind, or (for a
         PDF-copy kind) has no PDF.
 
-        A no-PDF esign template would pass this guard but blow up later in the
-        trigger's ``create_packet`` (which copies a PDF), turning a clean
-        SET-time 422 into a silent acceptance-time failure — so reject it here.
-        A questionnaire/upload template legitimately has no PDF (P0-5), so the
-        PDF requirement is gated on the kind's ``needs_pdf_copy``.
+        A no-PDF esign template would pass a bare is_active check but blow up
+        later in the trigger's ``create_packet`` (which copies a PDF), turning a
+        clean SET-time 422 into a silent acceptance-time failure — so the shared
+        ``template_send_status`` rejects it here (V3-3: the identical readiness
+        logic the packet loader and bundle detail use). A questionnaire/upload
+        template legitimately has no PDF (P0-5); ``template_send_status`` gates
+        the PDF requirement on the kind's ``needs_pdf_copy``.
         """
         result = await self.db.execute(
             select(
@@ -200,26 +204,22 @@ class SelectionService:
                 OnboardingTemplate.is_active,
                 OnboardingTemplate.pdf_path,
                 OnboardingTemplate.kind,
+                OnboardingTemplate.field_definitions,
             ).where(OnboardingTemplate.id.in_(template_ids))
         )
-        by_id = {row[0]: (row[1], row[2], row[3]) for row in result.all()}
+        by_id = {row[0]: (row[1], row[2], row[3], row[4]) for row in result.all()}
         for tid in template_ids:
             if tid not in by_id:
                 raise PacketValidationError(f"Template {tid} not found.")
-            is_active, pdf_path, kind = by_id[tid]
-            if not is_active:
-                raise PacketValidationError(
-                    f"Template {tid} is retired and cannot be selected."
-                )
-            if kind not in KIND_HANDLERS:
-                raise PacketValidationError(
-                    f"Template {tid} has an unknown kind '{kind}'."
-                )
-            if KIND_HANDLERS[kind].needs_pdf_copy and not pdf_path:
-                raise PacketValidationError(
-                    f"Template {tid} has no PDF uploaded yet and cannot be "
-                    "selected."
-                )
+            is_active, pdf_path, kind, field_definitions = by_id[tid]
+            ready, reason = template_send_status(
+                is_active=is_active,
+                kind=kind,
+                pdf_path=pdf_path,
+                field_count=len(field_definitions or []),
+            )
+            if not ready:
+                raise PacketValidationError(f"Template {tid}: {reason}")
 
 
 async def active_selection_template_ids(

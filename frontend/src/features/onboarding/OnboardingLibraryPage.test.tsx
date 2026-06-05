@@ -263,3 +263,33 @@ describe('OnboardingLibraryPage — #11 restore retired template', () => {
     await waitFor(() => expect(apiClientMock.get.mock.calls.length).toBeGreaterThan(1));
   });
 });
+
+describe('OnboardingLibraryPage — Copy action (clone)', () => {
+  it('shows Copy only on active questionnaire/upload rows, never e-sign or retired', async () => {
+    // A mixed list: an active questionnaire (copyable), an active e-sign (not —
+    // its PDF + fields are template-specific), and a retired questionnaire (not —
+    // retired rows offer only Restore).
+    apiClientMock.get.mockResolvedValue({
+      data: [
+        makeTemplate({ id: 7, name: 'Intake Questionnaire', kind: 'questionnaire', has_pdf: false }),
+        makeTemplate({ id: 8, name: 'Signed Agreement', kind: 'esign_pdf', has_pdf: true }),
+        makeTemplate({ id: 9, name: 'Old Questionnaire', kind: 'questionnaire', has_pdf: false, is_active: false }),
+      ],
+    });
+
+    renderWithProviders(<OnboardingLibraryPage />);
+    await screen.findByText('Intake Questionnaire');
+
+    // Exactly one Copy button — the active questionnaire's.
+    const copyButtons = screen.getAllByRole('button', { name: 'Copy' });
+    expect(copyButtons).toHaveLength(1);
+
+    // Clicking it clones via the clone endpoint.
+    apiClientMock.post.mockResolvedValue({
+      data: makeTemplate({ id: 12, name: 'Intake Questionnaire (copy)' }),
+    });
+    fireEvent.click(copyButtons[0]!);
+    await waitFor(() => expect(apiClientMock.post).toHaveBeenCalledTimes(1));
+    expect(apiClientMock.post.mock.calls[0]![0]).toBe('/api/onboarding/templates/7/clone');
+  });
+});

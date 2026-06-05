@@ -17,9 +17,17 @@ import type {
   OnboardingPacketDetail,
   OnboardingPacketCreate,
   OnboardingProposalSelection,
+  OnboardingStarter,
+  OnboardingTemplateCloneRequest,
+  OnboardingTemplateFromStarterRequest,
+  OnboardingBundleSummary,
+  OnboardingBundleDetail,
+  OnboardingBundleCreate,
+  OnboardingBundleUpdate,
 } from '../types';
 
 const ONBOARDING_BASE = '/api/onboarding/templates';
+const BUNDLES_BASE = '/api/onboarding/template-bundles';
 
 /** Matches the backend cap (``_MAX_SIGNING_PDF_BYTES``, 25 MB). */
 export const ONBOARDING_PDF_MAX_BYTES = 25 * 1024 * 1024;
@@ -294,4 +302,120 @@ export const removeProposalOnboardingSelection = async (
   await apiClient.delete(
     `${proposalSelectionsBase(proposalId)}/${selectionId}`,
   );
+};
+
+// ---------------------------------------------------------------------------
+// "Saved packet" bundles + starters + clone/from-starter (wizard feature)
+// ---------------------------------------------------------------------------
+
+/** List the built-in starter templates (the wizard's example picker). */
+export const listOnboardingStarters = async (): Promise<OnboardingStarter[]> => {
+  const response = await apiClient.get<OnboardingStarter[]>(
+    `${ONBOARDING_BASE}/starters`,
+  );
+  return response.data;
+};
+
+/**
+ * Clone an active questionnaire/upload template into a fresh one. Omit ``name``
+ * to let the backend auto-suffix ``"{source} (copy[, N])"``; an e-sign or
+ * retired source, or an explicit-name collision, is a 422.
+ */
+export const cloneOnboardingTemplate = async (
+  templateId: number,
+  data: OnboardingTemplateCloneRequest = {},
+): Promise<OnboardingTemplate> => {
+  const response = await apiClient.post<OnboardingTemplate>(
+    `${ONBOARDING_BASE}/${templateId}/clone`,
+    data,
+  );
+  return response.data;
+};
+
+/** Instantiate a built-in starter into a fresh template. */
+export const createOnboardingTemplateFromStarter = async (
+  data: OnboardingTemplateFromStarterRequest,
+): Promise<OnboardingTemplate> => {
+  const response = await apiClient.post<OnboardingTemplate>(
+    `${ONBOARDING_BASE}/from-starter`,
+    data,
+  );
+  return response.data;
+};
+
+/** List saved packets (team library). ``includeInactive`` surfaces retired ones. */
+export const listOnboardingBundles = async (
+  includeInactive = false,
+): Promise<OnboardingBundleSummary[]> => {
+  const response = await apiClient.get<OnboardingBundleSummary[]>(BUNDLES_BASE, {
+    params: { include_inactive: includeInactive },
+  });
+  return response.data;
+};
+
+/** One saved packet with its ordered members + per-member send-readiness. */
+export const getOnboardingBundle = async (
+  bundleId: number,
+): Promise<OnboardingBundleDetail> => {
+  const response = await apiClient.get<OnboardingBundleDetail>(
+    `${BUNDLES_BASE}/${bundleId}`,
+  );
+  return response.data;
+};
+
+/** Create a saved packet from the wizard (mints a template per item). */
+export const createOnboardingBundle = async (
+  data: OnboardingBundleCreate,
+): Promise<OnboardingBundleDetail> => {
+  const response = await apiClient.post<OnboardingBundleDetail>(BUNDLES_BASE, data);
+  return response.data;
+};
+
+/** Rename / re-describe / retire-restore a saved packet. */
+export const updateOnboardingBundle = async (
+  bundleId: number,
+  data: OnboardingBundleUpdate,
+): Promise<OnboardingBundleDetail> => {
+  const response = await apiClient.patch<OnboardingBundleDetail>(
+    `${BUNDLES_BASE}/${bundleId}`,
+    data,
+  );
+  return response.data;
+};
+
+/** Reorder a saved packet's members by a permutation of their item ids. */
+export const reorderOnboardingBundle = async (
+  bundleId: number,
+  orderedItemIds: number[],
+): Promise<OnboardingBundleDetail> => {
+  const response = await apiClient.post<OnboardingBundleDetail>(
+    `${BUNDLES_BASE}/${bundleId}/reorder`,
+    { ordered_item_ids: orderedItemIds },
+  );
+  return response.data;
+};
+
+/** Append an existing template to a saved packet. */
+export const addOnboardingBundleItem = async (
+  bundleId: number,
+  templateId: number,
+): Promise<OnboardingBundleDetail> => {
+  const response = await apiClient.post<OnboardingBundleDetail>(
+    `${BUNDLES_BASE}/${bundleId}/items`,
+    { template_id: templateId },
+  );
+  return response.data;
+};
+
+/** Remove one member from a saved packet (refuses the last one → 422). */
+export const removeOnboardingBundleItem = async (
+  bundleId: number,
+  itemId: number,
+): Promise<void> => {
+  await apiClient.delete(`${BUNDLES_BASE}/${bundleId}/items/${itemId}`);
+};
+
+/** Hard-delete a saved packet (its items cascade; minted templates remain). */
+export const deleteOnboardingBundle = async (bundleId: number): Promise<void> => {
+  await apiClient.delete(`${BUNDLES_BASE}/${bundleId}`);
 };
