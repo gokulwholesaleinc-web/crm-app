@@ -97,6 +97,33 @@ export const downloadAttachmentFile = async (
   document.body.removeChild(link);
 };
 
+/**
+ * Open an attachment for in-browser viewing in a new tab. Asks the backend for
+ * an INLINE-disposition presigned URL (``?as_json=1&inline=1``) — the backend
+ * only honours ``inline`` for vetted-safe types (PDF / image), forcing a
+ * download otherwise — then anchor-opens it in a new tab (a top-level
+ * navigation that needs no CORS, mirroring downloadAttachmentFile). Throws on a
+ * non-OK response so callers can surface a failure toast.
+ */
+export const viewAttachmentFile = async (attachmentId: number): Promise<void> => {
+  const token = getToken();
+  const response = await fetch(`${getDownloadUrl(attachmentId)}?as_json=1&inline=1`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!response.ok) throw new Error('View failed');
+  const { download_url: viewUrl } = (await response.json()) as {
+    download_url: string;
+  };
+  if (!viewUrl) throw new Error('View failed');
+  const link = document.createElement('a');
+  link.href = viewUrl;
+  link.target = '_blank';
+  link.rel = 'noopener noreferrer';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
+
 export const attachmentsApi = {
   upload: uploadAttachment,
   list: listAttachments,
