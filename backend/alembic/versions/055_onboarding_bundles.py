@@ -17,10 +17,18 @@ Two tables behind the "saved packet" / wizard feature:
 
 Additive + safe (new tables only); run on real Postgres as part of the deploy.
 The revision id is 21 chars (≤32, respects the ``alembic_version VARCHAR(32)``
-cap that bit migration 054). FK / unique names mirror migration 051's
-column-based style. The ``TimestampMixin`` ``created_at`` index is intentionally
-omitted to match the existing onboarding tables (migrations 050/051): create_all
-builds it for the SQLite test DB, but prod has never carried it on this family.
+cap that bit migration 054).
+
+Every constraint / index name here MATCHES what ``Base.metadata.create_all``
+produces, so a migrated DB is byte-identical to the SQLite test schema and a
+future autogenerate sees no spurious diff (``tests/unit/
+test_onboarding_bundle_migration.py`` runs this migration on SQLite and diffs it
+against create_all). Two FK names (bundle_id, template_id) are pinned SHORT in
+the model too — the convention name (``…_<reftable>``) would be 67–72 chars and
+truncate past Postgres' 63-char cap; the audit FKs keep the convention's
+``…_users`` suffix (they fit). The ``TimestampMixin.created_at`` index IS created
+here (unlike the older 050/051 migrations, which carry a latent create_all drift
+this one deliberately does not propagate).
 """
 
 import sqlalchemy as sa
@@ -60,17 +68,22 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["created_by_id"],
             ["users.id"],
-            name="fk_onboarding_template_bundles_created_by_id",
+            name="fk_onboarding_template_bundles_created_by_id_users",
             ondelete="SET NULL",
         ),
         sa.ForeignKeyConstraint(
             ["updated_by_id"],
             ["users.id"],
-            name="fk_onboarding_template_bundles_updated_by_id",
+            name="fk_onboarding_template_bundles_updated_by_id_users",
             ondelete="SET NULL",
         ),
-        sa.PrimaryKeyConstraint("id"),
+        sa.PrimaryKeyConstraint("id", name="pk_onboarding_template_bundles"),
         sa.UniqueConstraint("name", name="uq_onboarding_template_bundles_name"),
+    )
+    op.create_index(
+        "ix_onboarding_template_bundles_created_at",
+        "onboarding_template_bundles",
+        ["created_at"],
     )
     op.create_table(
         "onboarding_template_bundle_items",
@@ -110,16 +123,18 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["created_by_id"],
             ["users.id"],
-            name="fk_onboarding_template_bundle_items_created_by_id",
+            name="fk_onboarding_template_bundle_items_created_by_id_users",
             ondelete="SET NULL",
         ),
         sa.ForeignKeyConstraint(
             ["updated_by_id"],
             ["users.id"],
-            name="fk_onboarding_template_bundle_items_updated_by_id",
+            name="fk_onboarding_template_bundle_items_updated_by_id_users",
             ondelete="SET NULL",
         ),
-        sa.PrimaryKeyConstraint("id"),
+        sa.PrimaryKeyConstraint(
+            "id", name="pk_onboarding_template_bundle_items"
+        ),
         sa.UniqueConstraint(
             "bundle_id",
             "template_id",
@@ -136,12 +151,25 @@ def upgrade() -> None:
         "onboarding_template_bundle_items",
         ["bundle_id"],
     )
+    op.create_index(
+        "ix_onboarding_template_bundle_items_created_at",
+        "onboarding_template_bundle_items",
+        ["created_at"],
+    )
 
 
 def downgrade() -> None:
+    op.drop_index(
+        "ix_onboarding_template_bundle_items_created_at",
+        table_name="onboarding_template_bundle_items",
+    )
     op.drop_index(
         "ix_onboarding_template_bundle_items_bundle",
         table_name="onboarding_template_bundle_items",
     )
     op.drop_table("onboarding_template_bundle_items")
+    op.drop_index(
+        "ix_onboarding_template_bundles_created_at",
+        table_name="onboarding_template_bundles",
+    )
     op.drop_table("onboarding_template_bundles")

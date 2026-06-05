@@ -461,16 +461,29 @@ class OnboardingTemplateBundleItem(Base, AuditableMixin):
     # (``ix_onboarding_template_bundle_items_bundle``) to match the migration
     # exactly — do NOT add ``index=True`` here too, or create_all (test/dev DBs)
     # would build a second, migration-less index and drift from prod.
+    # FK names are pinned EXPLICITLY (not left to naming_convention): the
+    # convention name (fk_<table>_<col>_<reftable>) would be 67–72 chars and
+    # silently truncate past Postgres' 63-char identifier cap, so create_all
+    # (SQLite) and the migration (Postgres) would disagree. The pinned short
+    # names are identical in both and fit the cap. The migration MUST use these
+    # exact names; tests/unit/test_onboarding_bundle_migration.py enforces it.
     bundle_id: Mapped[int] = mapped_column(
         Integer,
-        ForeignKey("onboarding_template_bundles.id", ondelete="CASCADE"),
+        ForeignKey(
+            "onboarding_template_bundles.id",
+            ondelete="CASCADE",
+            name="fk_onboarding_template_bundle_items_bundle_id",
+        ),
         nullable=False,
     )
     # No ondelete: templates are soft-retired, never hard-deleted, so a cascade
     # here would be dead code (audit B4). Retired members are handled in-app.
     template_id: Mapped[int] = mapped_column(
         Integer,
-        ForeignKey("onboarding_templates.id"),
+        ForeignKey(
+            "onboarding_templates.id",
+            name="fk_onboarding_template_bundle_items_template_id",
+        ),
         nullable=False,
     )
     display_order: Mapped[int] = mapped_column(
