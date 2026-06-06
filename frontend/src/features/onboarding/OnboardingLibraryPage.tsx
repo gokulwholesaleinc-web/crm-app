@@ -435,11 +435,9 @@ function OnboardingLibraryPage() {
       {/* Create-template wizard (Kind → Basics → Build → Review/Create) */}
       {showCreate && (
         <Suspense fallback={null}>
-          <OnboardingTemplateWizard
-            isOpen
-            onClose={() => setShowCreate(false)}
-            onCreated={invalidate}
-          />
+          {/* The wizard self-invalidates the onboarding-templates query, so no
+              onCreated handler is needed (it would double-invalidate). */}
+          <OnboardingTemplateWizard isOpen onClose={() => setShowCreate(false)} />
         </Suspense>
       )}
 

@@ -61,6 +61,18 @@ const STEPS: { key: Step; label: string }[] = [
   { key: 'review', label: 'Review' },
 ];
 
+/** Step-indicator pill classes by state (avoids a nested ternary in render). */
+const STEP_PILL_CLASS: Record<'current' | 'done' | 'todo', string> = {
+  current: 'rounded-full bg-primary-600 px-2.5 py-1 text-white',
+  done: 'rounded-full bg-primary-100 px-2.5 py-1 text-primary-700 dark:bg-primary-950/40 dark:text-primary-300',
+  todo: 'rounded-full bg-gray-100 px-2.5 py-1 text-gray-500 dark:bg-gray-700 dark:text-gray-300',
+};
+function stepState(isCurrent: boolean, isDone: boolean): 'current' | 'done' | 'todo' {
+  if (isCurrent) return 'current';
+  if (isDone) return 'done';
+  return 'todo';
+}
+
 interface KindOption {
   value: OnboardingDocumentKind;
   label: string;
@@ -119,9 +131,26 @@ async function precheckPdf(file: File): Promise<string | null> {
       }
     }
     return null;
+  } catch {
+    // pdf.js parses pages LAZILY, so a damaged page stream rejects here (not at
+    // getDocument). Return a user-facing string rather than letting precheckPdf
+    // reject — the caller would otherwise hang on the spinner with no message.
+    return 'This PDF could not be read; it may be damaged. Please re-export it and try again.';
   } finally {
     void doc.destroy();
   }
+}
+
+/** Whether a retired template is worth offering to restore — i.e. it is a real,
+ *  send-ready template, not an abandoned husk (an esign shell with a PDF but no
+ *  signature field, or an empty form). Restoring a husk would toast success yet
+ *  hand back something the library refuses to send (matches the §A guard). */
+function isRestorableTemplate(t: OnboardingTemplate): boolean {
+  const fields = t.field_definitions ?? [];
+  if ((t.kind ?? 'esign_pdf') === 'esign_pdf') {
+    return t.has_pdf && fields.some((f) => f.kind === 'signature');
+  }
+  return fields.length > 0;
 }
 
 export function OnboardingTemplateWizard({
@@ -150,6 +179,10 @@ export function OnboardingTemplateWizard({
   const [submitting, setSubmitting] = useState(false);
   const [createdTemplateId, setCreatedTemplateId] = useState<number | null>(null);
   const [uploaded, setUploaded] = useState(false);
+  // The pdf_version returned by the last successful upload — the optimistic-lock
+  // token the final PATCH must carry. 1 on a first upload, 2+ after a replace
+  // (a re-upload bumps it server-side), so a resumed commit locks correctly.
+  const [uploadedVersion, setUploadedVersion] = useState<number | null>(null);
   const [commitError, setCommitError] = useState<string | null>(null);
   const [nameError, setNameError] = useState<string | null>(null);
   const [restoreCandidate, setRestoreCandidate] = useState<OnboardingTemplate | null>(null);
@@ -186,6 +219,7 @@ export function OnboardingTemplateWizard({
     setSubmitting(false);
     setCreatedTemplateId(null);
     setUploaded(false);
+    setUploadedVersion(null);
     setCommitError(null);
     setNameError(null);
     setRestoreCandidate(null);
@@ -193,8 +227,39 @@ export function OnboardingTemplateWizard({
 
   const close = () => {
     if (submitting) return; // don't abandon a commit in flight
+    // Best-effort retire a stranded e-sign shell (created, but the commit failed
+    // before it became a usable template): the §A guard already makes it
+    // un-sendable, this just hides the husk and frees the name from the library.
+    if (createdTemplateId != null) {
+      void retireOnboardingTemplate(createdTemplateId).catch(() => {});
+      queryClient.invalidateQueries({ queryKey: ['onboarding-templates'] });
+    }
     reset();
     onClose();
+  };
+
+  // Switching the document kind discards the now kind-mismatched build draft — a
+  // questionnaire field list can't be saved on an upload/e-sign template (the
+  // server would 422), and an e-sign PDF + placements are meaningless for a form.
+  const handleKindChange = (next: OnboardingDocumentKind) => {
+    if (next === kind) return;
+    // A different kind abandons any e-sign shell created by a prior failed commit.
+    if (createdTemplateId != null) {
+      void retireOnboardingTemplate(createdTemplateId).catch(() => {});
+      queryClient.invalidateQueries({ queryKey: ['onboarding-templates'] });
+    }
+    setKind(next);
+    setFormFields([]);
+    setEsignFile(null);
+    revokeObjectUrl();
+    setEsignPdfUrl(null);
+    setEsignFields([]);
+    setPdfCheckError(null);
+    setCommitError(null);
+    setNameError(null);
+    setCreatedTemplateId(null);
+    setUploaded(false);
+    setUploadedVersion(null);
   };
 
   const isEsign = kind === 'esign_pdf';
@@ -218,6 +283,7 @@ export function OnboardingTemplateWizard({
     ? Boolean(esignFile) &&
       Boolean(esignPdfUrl) &&
       pdfCheckError === null &&
+      !checkingPdf &&
       esignSignatureCount >= 1 &&
       esignFieldsValid &&
       !overFieldCap
@@ -238,12 +304,6 @@ export function OnboardingTemplateWizard({
     }
   }, [step, isOpen]);
 
-  const goToBuildOrReview = () => {
-    // Switching to a different kind mid-build would orphan kind-specific drafts;
-    // the Kind step disables Next once any build content exists (see canLeaveKind).
-    setStep(step === 'basics' ? 'build' : 'review');
-  };
-
   // --- PDF pick + pre-check ------------------------------------------------
   const handlePickPdf = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -259,22 +319,35 @@ export function OnboardingTemplateWizard({
     }
     setCheckingPdf(true);
     setPdfCheckError(null);
-    const error = await precheckPdf(file);
-    setCheckingPdf(false);
+    let error: string | null;
+    try {
+      error = await precheckPdf(file);
+    } catch {
+      // precheckPdf is total (never rejects), but guard the await too so a future
+      // change can't leave the button stuck on its spinner with no message.
+      error = 'This PDF could not be read; it may be damaged. Please re-export it and try again.';
+    } finally {
+      setCheckingPdf(false);
+    }
     if (error) {
       setPdfCheckError(error);
       return;
     }
-    // Accepted: swap in a fresh local preview and CLEAR any prior placements
-    // (old coords are meaningless against a new PDF) + reset the commit machine.
+    // Accepted: swap in a fresh local preview and CLEAR any prior placements (old
+    // coords are meaningless against a new PDF). A new PDF must be RE-uploaded, so
+    // reset the upload state — but KEEP createdTemplateId so a commit that already
+    // created the shell re-uploads onto the SAME template (re-creating would
+    // collide on its unique name). Clear any stale commit/name error too.
     revokeObjectUrl();
     const url = URL.createObjectURL(file);
     objectUrlRef.current = url;
     setEsignPdfUrl(url);
     setEsignFile(file);
     setEsignFields([]);
-    setCreatedTemplateId(null);
     setUploaded(false);
+    setUploadedVersion(null);
+    setCommitError(null);
+    setNameError(null);
   };
 
   // --- Commit --------------------------------------------------------------
@@ -288,8 +361,11 @@ export function OnboardingTemplateWizard({
       setStep('basics');
       try {
         const retired = await listOnboardingTemplates({ include_inactive: true });
+        // The name unique constraint is case-SENSITIVE, so match exactly — a
+        // different-cased retired row isn't what collided. Only offer a restorable
+        // (send-ready) template, never an abandoned husk.
         const match = retired.find(
-          (t) => !t.is_active && t.name.trim().toLowerCase() === trimmedName.toLowerCase(),
+          (t) => !t.is_active && t.name.trim() === trimmedName && isRestorableTemplate(t),
         );
         setRestoreCandidate(match ?? null);
       } catch {
@@ -336,16 +412,23 @@ export function OnboardingTemplateWizard({
         id = tmpl.id;
         setCreatedTemplateId(id);
       }
-      if (!uploaded) {
-        // First upload stays pdf_version 1 and does NOT clear fields.
-        await uploadOnboardingTemplatePdf(id, esignFile as File);
+      let version = uploadedVersion;
+      if (!uploaded || version == null) {
+        // First upload stays pdf_version 1; a re-upload (after Replace PDF) bumps
+        // it server-side. Capture the REAL version for the PATCH's optimistic lock
+        // so a resumed/replaced commit locks against the right document.
+        const uploadedTmpl = await uploadOnboardingTemplatePdf(id, esignFile as File);
+        version = uploadedTmpl.pdf_version;
         setUploaded(true);
+        setUploadedVersion(version);
       }
-      // Combined PATCH: fields (≥1 signature) + requires_esign, optimistic-locked
-      // on pdf_version 1 (the happy path never 409s).
+      // Combined PATCH: re-send name/desc/service_tag (so a rename made AFTER a
+      // partial failure is applied — the create call used the OLD name) + fields
+      // (≥1 signature) + requires_esign, optimistic-locked on the captured version.
       const finalTmpl = await updateOnboardingTemplate(id, {
+        ...createCommon,
         field_definitions: esignFields,
-        pdf_version: 1,
+        pdf_version: version,
         requires_esign: true,
       });
       finishSuccess(finalTmpl.name);
@@ -364,20 +447,6 @@ export function OnboardingTemplateWizard({
     onClose();
   };
 
-  // Best-effort retire of a stranded e-sign shell when the user gives up on a
-  // partial failure (the server-side signature guard already makes it
-  // un-sendable; this just hides it from the library).
-  const handleDiscardShell = async () => {
-    if (createdTemplateId == null) return;
-    try {
-      await retireOnboardingTemplate(createdTemplateId);
-    } catch {
-      /* best-effort — the §A guard keeps the shell un-sendable regardless */
-    }
-    queryClient.invalidateQueries({ queryKey: ['onboarding-templates'] });
-    close();
-  };
-
   const handleRestore = async () => {
     if (!restoreCandidate) return;
     try {
@@ -391,8 +460,8 @@ export function OnboardingTemplateWizard({
     }
   };
 
-  // Switching kind is only offered before any build content exists, so kind +
-  // build drafts can't desync. Once on Build with content, Back to Kind warns.
+  // Authored content in the current kind's build draft (drives the dirty-close
+  // confirm). Changing kind clears it (handleKindChange), so it never desyncs.
   const hasBuildContent = isEsign
     ? Boolean(esignFile) || esignFields.length > 0
     : formFields.length > 0;
@@ -416,13 +485,7 @@ export function OnboardingTemplateWizard({
           <li key={s.key} className="flex items-center gap-2">
             <span
               aria-current={step === s.key ? 'step' : undefined}
-              className={
-                step === s.key
-                  ? 'rounded-full bg-primary-600 px-2.5 py-1 text-white'
-                  : i < stepIndex
-                    ? 'rounded-full bg-primary-100 px-2.5 py-1 text-primary-700 dark:bg-primary-950/40 dark:text-primary-300'
-                    : 'rounded-full bg-gray-100 px-2.5 py-1 text-gray-500 dark:bg-gray-700 dark:text-gray-300'
-              }
+              className={STEP_PILL_CLASS[stepState(step === s.key, i < stepIndex)]}
             >
               {i + 1}. {s.label}
             </span>
@@ -445,7 +508,7 @@ export function OnboardingTemplateWizard({
           >
             What kind of document is this?
           </h2>
-          <KindRadioGroup value={kind} onChange={setKind} />
+          <KindRadioGroup value={kind} onChange={handleKindChange} />
         </div>
       )}
 
@@ -662,7 +725,7 @@ export function OnboardingTemplateWizard({
                 {createdTemplateId != null && ' — “Create template” retries the remaining steps.'}
               </p>
               {createdTemplateId != null && (
-                <Button type="button" variant="ghost" size="sm" onClick={handleDiscardShell}>
+                <Button type="button" variant="ghost" size="sm" onClick={close}>
                   Discard and close
                 </Button>
               )}
@@ -685,7 +748,7 @@ export function OnboardingTemplateWizard({
             <Button variant="secondary" onClick={() => setStep('kind')}>
               Back
             </Button>
-            <Button onClick={goToBuildOrReview} disabled={trimmedName.length === 0}>
+            <Button onClick={() => setStep('build')} disabled={trimmedName.length === 0}>
               Next: build
             </Button>
           </>

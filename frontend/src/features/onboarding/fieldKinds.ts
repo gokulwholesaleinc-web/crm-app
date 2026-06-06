@@ -59,7 +59,7 @@ export const ESIGN_PREFILL_OPTIONS: { value: string; label: string }[] = [
 ];
 
 /** A field id must be a lowercase slug (letters, numbers, underscores). */
-export const SLUG_RE = /^[a-z0-9_]+$/;
+const SLUG_RE = /^[a-z0-9_]+$/;
 
 /** A field is saveable only when it has a non-empty label and a unique slug id. */
 export function fieldErrors(
