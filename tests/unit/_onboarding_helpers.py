@@ -89,23 +89,91 @@ def signature_field(fid: str = "client_sig", **overrides) -> dict:
     return field
 
 
+def questionnaire_field(
+    fid: str = "full_name", *, kind: str = "short_text", required: bool = True, **overrides
+) -> dict:
+    """A questionnaire field definition (no PDF coords; ``short_text`` by default).
+
+    The questionnaire kind accepts ``short_text/paragraph/email/url/date`` and the
+    choice kinds — NOT the esign-shaped ``text``/``signature`` fields — so it has
+    its own minimal builder.
+    """
+    field = {
+        "id": fid,
+        "kind": kind,
+        "label": fid.replace("_", " ").title(),
+        "required": required,
+        "prefill": None,
+    }
+    field.update(overrides)
+    return field
+
+
+async def make_questionnaire_template(
+    db,
+    *,
+    name: str | None = None,
+    field_definitions: list[dict] | None = None,
+    is_active: bool = True,
+    owner_id: int | None = None,
+) -> OnboardingTemplate:
+    """A send-ready ``questionnaire`` template — no PDF, no signature ceremony.
+
+    The simplest valid send-ready template for tests that exercise generic packet
+    mechanics (lifecycle, scrub, view-ledger) or specifically a NON-e-sign
+    document. ``template_send_status`` treats a questionnaire as ready once it has
+    ≥1 field (it needs no PDF and no signature field), so it sidesteps the
+    signature-aware e-sign guard entirely.
+    """
+    if field_definitions is None:
+        field_definitions = [questionnaire_field()]
+    name = name or f"Questionnaire {uuid.uuid4().hex[:8]}"
+    template = OnboardingTemplate(
+        name=name,
+        field_definitions=field_definitions,
+        requires_esign=False,
+        is_active=is_active,
+        kind="questionnaire",
+        pdf_path=None,
+        owner_id=owner_id,
+    )
+    db.add(template)
+    await db.flush()
+    await db.refresh(template)
+    return template
+
+
 async def make_template(
     db,
     *,
     name: str | None = None,
     field_definitions: list[dict] | None = None,
-    requires_esign: bool = False,
+    requires_esign: bool | None = None,
     is_active: bool = True,
     pdf: bytes | None = None,
     owner_id: int | None = None,
 ) -> OnboardingTemplate:
-    """Create a template with a REAL PDF written to storage and return it.
+    """Create an ``esign_pdf`` template with a REAL PDF written to storage.
+
+    Defaults to a **send-ready** e-sign template — a text field AND a signature
+    field — because the signature-aware send guard (``template_send_status``)
+    now rejects an e-sign template that has a PDF but no signature field (the H1
+    hole). ``requires_esign`` is derived from the presence of a signature field
+    when not given explicitly (an e-sign doc with a signature field must require
+    e-sign, and one without must not — both directions are enforced at send),
+    so a bare ``make_template(db)`` yields a template that can actually be sent.
+    Pass an explicit ``requires_esign`` / signature-less ``field_definitions``
+    to construct the H1 shape on purpose (the guard tests do).
 
     The caller is responsible for deleting ``template.pdf_path`` if it cares
     about disk cleanup (the per-packet copy is a separate object).
     """
     if field_definitions is None:
-        field_definitions = [text_field()]
+        field_definitions = [text_field(), signature_field()]
+    if requires_esign is None:
+        requires_esign = any(
+            f.get("kind") == "signature" for f in field_definitions
+        )
     name = name or f"Template {uuid.uuid4().hex[:8]}"
     key = f"onboarding_templates/test/{uuid.uuid4().hex}.pdf"
     pdf_path = await storage.write(key, pdf or one_page_pdf(), "application/pdf")

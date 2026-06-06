@@ -46,10 +46,19 @@ async def _make_packet(
     requires_esign=False,
     created_by_id=None,
 ):
-    """Create a real packet and return (service, packet, raw_access_token)."""
+    """Create a real packet and return (service, packet, raw_access_token).
+
+    Defaults to a send-ready PROPER e-sign template (text + signature, e-sign
+    required): a bare text-only e-sign template is no longer send-ready under the
+    signature-aware H1 guard, and these public tests exercise the e-sign /pdf +
+    stamp path, so the default must carry a signature field.
+    """
+    if field_definitions is None:
+        field_definitions = [text_field("full_name"), signature_field()]
+        requires_esign = True
     template = await make_template(
         db,
-        field_definitions=field_definitions or [text_field("full_name")],
+        field_definitions=field_definitions,
         requires_esign=requires_esign,
     )
     service = PacketService(db)
@@ -514,16 +523,29 @@ def test_signature_valid_png_decodes():
 
 
 async def test_complete_requires_viewed_documents(client, db_session, test_contact):
-    """/complete is blocked (422) until every document has been opened."""
+    """/complete is blocked (422) until every document has been opened.
+
+    Everything else (fill + signature + consent) is satisfied so the ONLY
+    remaining gate is read-before-sign — the document is never opened (no /pdf
+    GET), and completion must still 422.
+    """
     service, packet, raw = await _make_packet(db_session, test_contact.id)
     doc = (await service.load_documents(packet.id))[0]
     pdf_path = doc.pdf_path  # capture before the route rolls back the session
     headers = await _session_headers(client, raw)
-    # Fill the required field but DON'T view the document.
+    # Fill + sign + consent, but DON'T view the document.
     await client.patch(
         f"/api/onboarding/public/{raw}/documents/{doc.id}",
         headers=headers,
         json={"field_values": {"full_name": "Acme"}, "base_version": 0},
+    )
+    await client.post(
+        f"/api/onboarding/public/{raw}/signature",
+        headers=headers,
+        json={"signature_png_base64": _b64png(), "base_signature_version": 0},
+    )
+    await client.post(
+        f"/api/onboarding/public/{raw}/consent", headers=headers, json={}
     )
     resp = await client.post(
         f"/api/onboarding/public/{raw}/complete", headers=headers
@@ -750,7 +772,18 @@ async def test_complete_overflow_value_is_422_not_completion_failed(
             json={"field_values": {"full_name": long_value}, "base_version": 0},
         )
         assert patched.status_code == 200
-        # Satisfy read-before-sign.
+        # Satisfy every OTHER gate (signature + consent + read-before-sign) so the
+        # only failure left is the stamp-box overflow in Phase A's stampable
+        # dry-run — proving an oversized value is a signer-fixable 422, not a
+        # post-claim ``completion_failed`` strand.
+        await client.post(
+            f"/api/onboarding/public/{raw}/signature",
+            headers=headers,
+            json={"signature_png_base64": _b64png(), "base_signature_version": 0},
+        )
+        await client.post(
+            f"/api/onboarding/public/{raw}/consent", headers=headers, json={}
+        )
         await client.get(
             f"/api/onboarding/public/{raw}/documents/{doc.id}/pdf", headers=headers
         )

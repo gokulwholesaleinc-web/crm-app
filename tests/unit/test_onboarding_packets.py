@@ -7,6 +7,7 @@ list/get access-checked (403 for a contact the caller can't see), revoke
 templates + real PDFs; nothing mocked.
 """
 
+import base64
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -18,7 +19,10 @@ from src.onboarding.packet_service import PacketService
 
 from ._onboarding_helpers import (
     cleanup_packet_storage,
+    make_questionnaire_template,
     make_template,
+    png_bytes,
+    questionnaire_field,
     signature_field,
     text_field,
 )
@@ -35,7 +39,12 @@ async def test_create_packet_freezes_documents_and_returns_raw_token(
     db_session, test_contact
 ):
     """Should create one frozen doc per active template + return a raw token."""
-    t1 = await make_template(db_session, field_definitions=[text_field("full_name")])
+    # t1 is a NON-e-sign questionnaire doc; t2 is a proper e-sign doc — a mixed
+    # packet. (A bare text-only e-sign template is no longer send-ready under the
+    # signature-aware H1 guard, so a generic "simple doc" is now a questionnaire.)
+    t1 = await make_questionnaire_template(
+        db_session, field_definitions=[questionnaire_field("full_name")]
+    )
     t2 = await make_template(
         db_session,
         field_definitions=[text_field("ein"), signature_field()],
@@ -71,9 +80,9 @@ async def test_create_packet_freezes_documents_and_returns_raw_token(
 
 async def test_create_packet_seeds_prefill_from_contact(db_session, test_contact):
     """Should pre-populate a field carrying prefill='contact.name'."""
-    template = await make_template(
+    template = await make_questionnaire_template(
         db_session,
-        field_definitions=[text_field("name", prefill="contact.name")],
+        field_definitions=[questionnaire_field("name", prefill="contact.name")],
     )
     service = PacketService(db_session)
     packet, _ = await service.create_packet(
@@ -111,8 +120,8 @@ async def test_create_packet_rejects_retired_template(db_session, test_contact):
 
 
 async def _packet_with_values(db_session, contact_id):
-    template = await make_template(
-        db_session, field_definitions=[text_field("name", prefill="contact.name")]
+    template = await make_questionnaire_template(
+        db_session, field_definitions=[questionnaire_field("name", prefill="contact.name")]
     )
     service = PacketService(db_session)
     packet, raw = await service.create_packet(
@@ -421,6 +430,209 @@ async def test_create_packet_esign_with_signature_field_succeeds(
     try:
         doc = (await service.load_documents(packet.id))[0]
         assert doc.requires_esign is True
+    finally:
+        await cleanup_packet_storage(db_session, service, packet.id)
+
+
+# --------------------------------------------------------------------------
+# H1 (signature-aware e-sign integrity): an esign_pdf template with a PDF but
+# ZERO signature fields must be un-sendable AND un-completable. Shipped today it
+# is send-ready and COMPLETES into a flattened, attached, UNSIGNED "completed"
+# PDF (no signature is ever collected) — a live legal/e-sign-integrity hole.
+# --------------------------------------------------------------------------
+
+
+async def test_create_packet_esign_pdf_without_signature_field_rejected(
+    db_session, test_contact
+):
+    """H1 send guard: an esign_pdf + PDF + 0 signature fields is NOT send-ready.
+
+    ``template_send_status`` is now signature-aware, so ``_load_active_templates``
+    rejects the H1 shell at packet creation (it could only ever produce an
+    unsigned 'signed' PDF). ``requires_esign`` is False here — exactly the state
+    the library 'upload a PDF' path leaves a fresh e-sign template in, which never
+    sets ``requires_esign`` and never requires a signature field.
+    """
+    template = await make_template(
+        db_session,
+        field_definitions=[text_field("full_name")],  # esign_pdf, 0 signature
+        requires_esign=False,
+    )
+    assert template.kind == "esign_pdf" and template.pdf_path  # the H1 shape
+    service = PacketService(db_session)
+    with pytest.raises(PacketValidationError):
+        await service.create_packet(
+            created_by_id=None,
+            contact_id=test_contact.id,
+            recipient_email="client@example.com",
+            template_ids=[template.id],
+        )
+
+
+async def test_completion_guard_blocks_esign_pdf_without_signature_field(
+    db_session, test_contact
+):
+    """H1 completion guard: an in-flight esign_pdf packet whose doc carries a PDF
+    but ZERO signature fields cannot complete — EVEN with a captured signature —
+    because no signature field is bound to the document, so the stamper would
+    flatten an unsigned PDF.
+
+    The send guard now blocks creating such a packet, so we build the document
+    directly to simulate one snapshotted BEFORE the guard shipped. A captured
+    ``signer_signature_image`` is planted to prove it's the missing FIELD (not a
+    missing PNG) that the new clause catches.
+    """
+    from src.onboarding.completion import _assert_signature_present
+    from src.onboarding.models import OnboardingPacket, OnboardingPacketDocument
+
+    service = PacketService(db_session)
+    # A real PDF on storage (authentic pdf_path) but no signature field.
+    template = await make_template(
+        db_session,
+        field_definitions=[text_field("full_name")],
+        requires_esign=False,
+    )
+    raw_token = tokens.mint_token()
+    packet = OnboardingPacket(
+        contact_id=test_contact.id,
+        recipient_email="client@example.com",
+        token_hash=tokens.hash_token(raw_token),
+        token_expires_at=datetime.now(UTC) + timedelta(days=30),
+        status="in_progress",
+        signer_signature_image=png_bytes(),  # a signature WAS drawn
+    )
+    db_session.add(packet)
+    await db_session.flush()
+    doc = OnboardingPacketDocument(
+        packet_id=packet.id,
+        display_order=0,
+        source_template_id=template.id,
+        original_filename=f"{template.name}.pdf",
+        kind="esign_pdf",
+        pdf_path=template.pdf_path,
+        field_definitions=[text_field("full_name")],  # 0 signature fields
+        field_values={},
+        requires_esign=False,
+    )
+    db_session.add(doc)
+    await db_session.flush()
+
+    try:
+        with pytest.raises(PacketValidationError):
+            _assert_signature_present(packet, [doc])
+    finally:
+        await cleanup_packet_storage(db_session, service, packet.id)
+
+
+async def test_retry_completion_refuses_h1_esign_without_signature_field(
+    db_session, test_contact
+):
+    """H1 retry choke point: ``retry_completion`` skips Phase A (it drives Phase B
+    directly), so the signature-field guard is enforced again inside
+    ``_phase_b_stamp``. A completion_failed packet whose esign_pdf doc carries a
+    PDF but NO signature field must be REFUSED (stays completion_failed, no
+    attachment) rather than stamped into an unsigned 'completed' PDF — even though
+    a signature PNG was captured. Simulates a packet snapshotted before the guard.
+    """
+    from src.onboarding.completion import retry_completion
+    from src.onboarding.models import OnboardingPacket, OnboardingPacketDocument
+
+    service = PacketService(db_session)
+    template = await make_template(
+        db_session,
+        field_definitions=[text_field("full_name")],  # esign_pdf, 0 signature
+        requires_esign=False,
+    )
+    packet = OnboardingPacket(
+        contact_id=test_contact.id,
+        recipient_email="client@example.com",
+        token_hash=tokens.hash_token(tokens.mint_token()),
+        token_expires_at=datetime.now(UTC) + timedelta(days=30),
+        status="completion_failed",
+        completing_since=datetime.now(UTC) - timedelta(hours=1),
+        signer_signature_image=png_bytes(),  # a signature PNG WAS captured
+    )
+    db_session.add(packet)
+    await db_session.flush()
+    doc = OnboardingPacketDocument(
+        packet_id=packet.id,
+        display_order=0,
+        source_template_id=template.id,
+        original_filename=f"{template.name}.pdf",
+        kind="esign_pdf",
+        pdf_path=template.pdf_path,
+        field_definitions=[text_field("full_name")],  # 0 signature fields
+        field_values={"full_name": "Jane Client"},
+        requires_esign=False,
+    )
+    db_session.add(doc)
+    await db_session.flush()
+    packet_id = packet.id  # retry_completion commits → expires the ORM packet
+
+    try:
+        result = await retry_completion(db_session, packet=packet)
+        assert result["status"] == "completion_failed"
+        # The unsigned PDF was never stamped/attached.
+        refreshed_doc = (await service.load_documents(packet_id))[0]
+        assert refreshed_doc.attachment_id is None
+    finally:
+        await cleanup_packet_storage(db_session, service, packet_id)
+
+
+async def test_proper_esign_with_signature_sends_and_completes(
+    client, db_session, test_contact
+):
+    """Regression: a proper signed e-sign (PDF + signature field, requires_esign)
+    is still send-ready AND completes end-to-end through the public flow — the H1
+    guards reject only the no-signature-field state, never the real ceremony.
+    """
+    tokens._clear_all_throttle()
+    template = await make_template(
+        db_session,
+        field_definitions=[text_field("full_name"), signature_field()],
+        requires_esign=True,
+    )
+    service = PacketService(db_session)
+    # Send-ready: the signature-aware guard lets a proper e-sign create cleanly.
+    packet, raw = await service.create_packet(
+        created_by_id=test_contact.owner_id,
+        contact_id=test_contact.id,
+        recipient_email="client@example.com",
+        template_ids=[template.id],
+    )
+    await db_session.commit()
+    try:
+        verify = await client.post(
+            f"/api/onboarding/public/{raw}/verify",
+            json={"email": "client@example.com"},
+        )
+        assert verify.status_code == 200, verify.text
+        headers = {"X-Onboarding-Session": verify.json()["session_token"]}
+        doc = (await service.load_documents(packet.id))[0]
+        await client.patch(
+            f"/api/onboarding/public/{raw}/documents/{doc.id}",
+            headers=headers,
+            json={"field_values": {"full_name": "Jane Client"}, "base_version": 0},
+        )
+        await client.post(
+            f"/api/onboarding/public/{raw}/signature",
+            headers=headers,
+            json={
+                "signature_png_base64": base64.b64encode(png_bytes()).decode("ascii"),
+                "base_signature_version": 0,
+            },
+        )
+        await client.post(
+            f"/api/onboarding/public/{raw}/consent", headers=headers, json={}
+        )
+        await client.get(
+            f"/api/onboarding/public/{raw}/documents/{doc.id}/pdf", headers=headers
+        )
+        done = await client.post(
+            f"/api/onboarding/public/{raw}/complete", headers=headers
+        )
+        assert done.status_code == 200, done.text
+        assert done.json()["status"] == "completed"
     finally:
         await cleanup_packet_storage(db_session, service, packet.id)
 

@@ -81,8 +81,40 @@ class StorageWriteError(Exception):
     """
 
 
+def count_signature_fields(field_definitions: list | None) -> int:
+    """Number of ``signature``-kind fields in a field_definitions list.
+
+    The single predicate the signature-aware H1 guards share. Tolerates both the
+    JSONB ``dict`` shape and ORM/model objects so every readiness call site —
+    column-projection rows and full ORM rows alike — counts identically (mirrors
+    the dict/attr-tolerant probe in ``_assert_esign_signature_consistency``).
+    """
+    return sum(
+        1
+        for f in (field_definitions or [])
+        if (f.get("kind") if isinstance(f, dict) else getattr(f, "kind", None))
+        == "signature"
+    )
+
+
+def has_signature_field(field_definitions: list | None) -> bool:
+    """Whether a field_definitions list carries ≥1 ``signature``-kind field.
+
+    The single boolean predicate the e-sign ⇄ signature-field invariants share
+    (the H1 send/completion guards and both ``_assert_esign_signature_consistency``
+    sites), so the "what counts as a signature field" rule lives in exactly one
+    place and can't drift between copies.
+    """
+    return count_signature_fields(field_definitions) > 0
+
+
 def template_send_status(
-    *, is_active: bool, kind: str, pdf_path: str | None, field_count: int
+    *,
+    is_active: bool,
+    kind: str,
+    pdf_path: str | None,
+    field_count: int,
+    signature_field_count: int,
 ) -> tuple[bool, str | None]:
     """Single source of truth for "can this template become a packet document
     right now?" — the readiness check every send/select site shares (audit B2 +
@@ -95,10 +127,15 @@ def template_send_status(
     judges a row that was found.
 
     Not-ready when: retired / unknown-kind / an e-sign template without a PDF /
-    a FORM kind (questionnaire, upload_request) with zero fields. The last guard
+    an e-sign template **with a PDF but zero signature fields** (H1) / a FORM
+    kind (questionnaire, upload_request) with zero fields. The empty-form guard
     (D2) stops the wizard's "blank document" shells — and any empty form — from
     being sent to a client as an empty form/manifest; a blank form is surfaced as
-    "needs setup" exactly like a blank e-sign (§4.7).
+    "needs setup" exactly like a blank e-sign (§4.7). The signature guard (H1)
+    closes a live legal hole: an ``esign_pdf`` with a PDF but no signature field
+    is send-ready in shipped code today and COMPLETES into a flattened, attached,
+    UNSIGNED "completed" PDF (no signature is ever collected). Making readiness
+    signature-aware keeps the send gate in lock-step with the completion guard.
 
     Reused at all three readiness sites:
       * ``packet_service._load_active_templates`` — RAISES on ``not ready``.
@@ -111,6 +148,12 @@ def template_send_status(
         return False, "This template has an unknown kind and cannot be sent."
     if KIND_HANDLERS[kind].needs_pdf_copy and not pdf_path:
         return False, "This e-sign template has no PDF uploaded yet."
+    # H1 (signature-aware): an e-sign template with a PDF but ZERO signature
+    # fields can never collect a signature — sending it lets the recipient
+    # "complete" it into a flattened, UNSIGNED PDF. Gated on ``needs_pdf_copy``
+    # so the signature requirement only applies to the PDF-stamp kind.
+    if KIND_HANDLERS[kind].needs_pdf_copy and signature_field_count == 0:
+        return False, "This e-sign document has no signature field yet."
     # Form kinds (no PDF copy) need at least one authored field, else the client
     # would receive an empty form / blank upload manifest.
     if not KIND_HANDLERS[kind].needs_pdf_copy and field_count == 0:
@@ -497,12 +540,7 @@ class OnboardingTemplateService:
         """
         if not template.requires_esign:
             return
-        fields = template.field_definitions or []
-        if not any(
-            (f.get("kind") if isinstance(f, dict) else getattr(f, "kind", None))
-            == "signature"
-            for f in fields
-        ):
+        if not has_signature_field(template.field_definitions):
             raise FieldDefinitionError(
                 "requires_esign templates must define at least one "
                 "signature field before saving."

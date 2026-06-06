@@ -26,7 +26,7 @@ from src.onboarding.packet_errors import (
     PacketRaceError,
     PacketValidationError,
 )
-from src.onboarding.service import template_send_status
+from src.onboarding.service import count_signature_fields, template_send_status
 from src.proposals.models import Proposal
 
 # Proposal statuses at/after acceptance: the auto-send trigger has already
@@ -217,6 +217,7 @@ class SelectionService:
                 kind=kind,
                 pdf_path=pdf_path,
                 field_count=len(field_definitions or []),
+                signature_field_count=count_signature_fields(field_definitions),
             )
             if not ready:
                 raise PacketValidationError(f"Template {tid}: {reason}")

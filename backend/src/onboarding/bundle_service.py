@@ -32,6 +32,7 @@ from src.onboarding.packet_errors import (
 from src.onboarding.service import (
     FieldDefinitionError,
     OnboardingTemplateService,
+    count_signature_fields,
     template_send_status,
 )
 from src.onboarding.starter_definitions import get_starter
@@ -244,6 +245,7 @@ class BundleService:
                 kind=kind,
                 pdf_path=pdf_path,
                 field_count=len(field_definitions or []),
+                signature_field_count=count_signature_fields(field_definitions),
             )
             if not member_ready:
                 ready[bundle_id] = False
@@ -299,6 +301,9 @@ class BundleService:
                 kind=template.kind,
                 pdf_path=template.pdf_path,
                 field_count=len(template.field_definitions or []),
+                signature_field_count=count_signature_fields(
+                    template.field_definitions
+                ),
             )
             if not member_ready:
                 all_ready = False

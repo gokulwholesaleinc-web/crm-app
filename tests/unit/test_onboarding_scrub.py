@@ -26,8 +26,8 @@ from src.onboarding.packet_service import (
 
 from ._onboarding_helpers import (
     cleanup_packet_storage,
-    make_template,
-    text_field,
+    make_questionnaire_template,
+    questionnaire_field,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -36,8 +36,11 @@ RECIPIENT = "client@example.com"
 
 
 async def _packet(db_session, contact_id, *, created_by_id=None):
-    template = await make_template(
-        db_session, field_definitions=[text_field("name")]
+    # A generic non-e-sign lifecycle packet (these tests force status directly and
+    # never run a real signing flow), so a questionnaire is the simplest send-ready
+    # template under the signature-aware e-sign guard.
+    template = await make_questionnaire_template(
+        db_session, field_definitions=[questionnaire_field("name")]
     )
     service = PacketService(db_session)
     packet, raw = await service.create_packet(
@@ -78,7 +81,9 @@ async def test_lazy_expiry_scrubs_and_410s(db_session, test_contact):
     from src.onboarding.public_helpers import load_packet_for_public
 
     service, packet, raw = await _packet(db_session, test_contact.id)
-    pdf_paths = [d.pdf_path for d in await service.load_documents(packet.id)]
+    pdf_paths = [
+        d.pdf_path for d in await service.load_documents(packet.id) if d.pdf_path
+    ]
     # Set the TTL in the past on the live (aware) object.
     packet.token_expires_at = datetime.now(UTC) - timedelta(seconds=1)
     await db_session.flush()
@@ -112,7 +117,9 @@ async def test_list_sweep_ages_completion_failed_to_abandoned(
 ):
     """A completion_failed packet older than the window ages to abandoned."""
     service, packet, raw = await _packet(db_session, test_contact.id)
-    pdf_paths = [d.pdf_path for d in await service.load_documents(packet.id)]
+    pdf_paths = [
+        d.pdf_path for d in await service.load_documents(packet.id) if d.pdf_path
+    ]
     try:
         # Put it in completion_failed with a stale claim timestamp (aware, past
         # the 7-day retention window).
@@ -140,7 +147,9 @@ async def test_list_sweep_ages_completion_failed_to_abandoned(
 async def test_list_sweep_keeps_recent_completion_failed(db_session, test_contact):
     """A recently-failed packet is NOT aged to abandoned by the sweep."""
     service, packet, raw = await _packet(db_session, test_contact.id)
-    pdf_paths = [d.pdf_path for d in await service.load_documents(packet.id)]
+    pdf_paths = [
+        d.pdf_path for d in await service.load_documents(packet.id) if d.pdf_path
+    ]
     try:
         packet.status = "completion_failed"
         packet.completing_since = datetime.now(UTC) - timedelta(hours=1)  # recent
@@ -163,7 +172,9 @@ async def test_list_sweep_keeps_recent_completion_failed(db_session, test_contac
 async def test_abandoned_public_access_410(client, db_session, test_contact):
     """An abandoned packet 410s on the public gateway (data purged)."""
     service, packet, raw = await _packet(db_session, test_contact.id)
-    pdf_paths = [d.pdf_path for d in await service.load_documents(packet.id)]
+    pdf_paths = [
+        d.pdf_path for d in await service.load_documents(packet.id) if d.pdf_path
+    ]
     packet.status = "abandoned"
     packet.abandoned_at = datetime.now(UTC)
     await db_session.commit()
