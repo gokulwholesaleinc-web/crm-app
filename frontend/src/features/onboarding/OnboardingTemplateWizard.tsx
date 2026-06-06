@@ -42,11 +42,8 @@ import type {
   OnboardingQuestionnaireField,
   OnboardingTemplate,
 } from '../../types';
-import {
-  OnboardingFormBuilderBody,
-  validate as validateFormFields,
-  cleanField,
-} from './OnboardingFormBuilder';
+import { OnboardingFormBuilderBody } from './OnboardingFormBuilder';
+import { validate as validateFormFields, cleanField } from './onboardingFormModel';
 // Importing the editor module also installs the pdf.js worker (module scope),
 // which the PDF pre-check below relies on.
 import { OnboardingTemplateEditorBody } from './OnboardingTemplateEditor';
@@ -309,15 +306,19 @@ export function OnboardingTemplateWizard({
     setCommitError(null);
     setNameError(null);
     setRestoreCandidate(null);
-    const service_tag = serviceTag.trim() || undefined; // "" → OMIT (null), never ""
-    const baseDescription = description.trim() || null;
+    const trimmedTag = serviceTag.trim();
+    // service_tag "" → OMIT the key entirely (never send "" — the backend 422s a
+    // non-slug; an absent key means "universal").
+    const createCommon = {
+      name: trimmedName,
+      description: description.trim() || null,
+      ...(trimmedTag ? { service_tag: trimmedTag } : {}),
+    };
     try {
       if (!isEsign) {
         const tmpl = await createOnboardingTemplate({
-          name: trimmedName,
+          ...createCommon,
           kind,
-          description: baseDescription,
-          service_tag,
           field_definitions: formFieldsClean,
         });
         finishSuccess(tmpl.name);
@@ -328,10 +329,8 @@ export function OnboardingTemplateWizard({
       let id = createdTemplateId;
       if (id == null) {
         const tmpl = await createOnboardingTemplate({
-          name: trimmedName,
+          ...createCommon,
           kind: 'esign_pdf',
-          description: baseDescription,
-          service_tag,
           // No fields / no requires_esign — both 422 at create for esign_pdf.
         });
         id = tmpl.id;

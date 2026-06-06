@@ -7,9 +7,8 @@
  * asserted. The real ``api/onboarding`` wrappers, React Query mutations, and
  * the page's own handlers all run for real. Behaviours pinned:
  *
- *  - Create form: no e-sign control — the backend 422s requires_esign at
- *    create (a fresh template has no signature field). It's enabled later via
- *    edit-details, so the create payload never carries requires_esign.
+ *  - New Template: opens the code-split "Create template" wizard (stubbed here;
+ *    its commit/validation behaviour is covered by OnboardingTemplateWizard.test).
  *  - #13 (edit metadata): the "Edit details" control PATCHes name /
  *    service_tag / requires_esign through ``updateOnboardingTemplate``.
  *  - #11 (retired): a retired row hides edit actions and offers Restore,
@@ -73,6 +72,14 @@ vi.mock('./OnboardingTemplateEditor', () => ({
     ) : null,
 }));
 
+// The create wizard is heavy (pdf.js + both builders) and code-split. Stub it
+// so this page test verifies only the wire-in (New Template → wizard mounted);
+// the wizard's own commit/validation behaviour is covered by its dedicated test.
+vi.mock('./OnboardingTemplateWizard', () => ({
+  default: ({ isOpen }: { isOpen: boolean }) =>
+    isOpen ? <div data-testid="wizard-stub">Create wizard</div> : null,
+}));
+
 // URL.createObjectURL / revokeObjectURL aren't in jsdom; the page calls them
 // when opening/closing the editor.
 beforeEach(() => {
@@ -127,32 +134,21 @@ function queueList(template: OnboardingTemplate) {
   apiClientMock.get.mockResolvedValue({ data: [template] });
 }
 
-describe('OnboardingLibraryPage — create form has no e-sign', () => {
-  it('omits the e-sign control and never sends requires_esign on create', async () => {
+describe('OnboardingLibraryPage — New Template opens the wizard', () => {
+  it('mounts the create-template wizard only after New Template is clicked', async () => {
     const template = makeTemplate();
     queueList(template);
-    apiClientMock.post.mockResolvedValue({ data: makeTemplate({ id: 8, name: 'Fresh packet' }) });
 
     renderWithProviders(<OnboardingLibraryPage />);
     await screen.findByText('New client intake');
 
-    // Open the create modal.
+    // The wizard is not mounted until the user opens it.
+    expect(screen.queryByTestId('wizard-stub')).not.toBeInTheDocument();
+
     fireEvent.click(screen.getByRole('button', { name: /new template/i }));
 
-    const nameInput = await screen.findByLabelText('Name');
-    // The e-sign checkbox is gone from create — it's enabled later via edit
-    // details, once a signature field has been placed.
-    expect(screen.queryByLabelText(/requires e-signature/i)).not.toBeInTheDocument();
-
-    fireEvent.change(nameInput, { target: { value: 'Fresh packet' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
-
-    await waitFor(() => expect(apiClientMock.post).toHaveBeenCalledTimes(1));
-    const [url, body] = apiClientMock.post.mock.calls[0]!;
-    expect(url).toBe('/api/onboarding/templates');
-    expect(body).toMatchObject({ name: 'Fresh packet' });
-    // The backend 422s requires_esign at create — the payload must not carry it.
-    expect(body).not.toHaveProperty('requires_esign');
+    // Clicking New Template lazy-loads + mounts the wizard (isOpen).
+    expect(await screen.findByTestId('wizard-stub')).toBeInTheDocument();
   });
 });
 

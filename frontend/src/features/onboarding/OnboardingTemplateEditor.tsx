@@ -71,7 +71,7 @@ function stripKeys(fields: EditorField[]): OnboardingFieldDefinition[] {
 // up via ``onChange`` and re-seeds from ``value`` only when ``pdfUrl`` changes.
 // ===========================================================================
 
-export interface OnboardingTemplateEditorBodyProps {
+interface OnboardingTemplateEditorBodyProps {
   /** Object URL or remote URL pointing at the template PDF bytes. */
   pdfUrl: string;
   /** The current field list (controlled). */
