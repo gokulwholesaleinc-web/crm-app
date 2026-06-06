@@ -31,6 +31,7 @@ from src.onboarding.view_ledger import get_unviewed_packet_document_ids
 from ._onboarding_helpers import (
     cleanup_packet_storage,
     make_template,
+    signature_field,
     text_field,
 )
 
@@ -93,7 +94,9 @@ async def _make_packet(db, contact_id):
 async def _make_esign_packet(db, contact_id):
     """Create a real single ESIGN-doc packet (records via /pdf → F1 refuses /viewed)."""
     template = await make_template(
-        db, field_definitions=[text_field("full_name")]
+        db,
+        field_definitions=[text_field("full_name"), signature_field()],
+        requires_esign=True,
     )
     service = PacketService(db)
     packet, raw = await service.create_packet(

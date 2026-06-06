@@ -17,14 +17,23 @@ from src.onboarding.view_ledger import (
     record_packet_document_view,
 )
 
-from ._onboarding_helpers import cleanup_packet_storage, make_template, text_field
+from ._onboarding_helpers import (
+    cleanup_packet_storage,
+    make_questionnaire_template,
+    questionnaire_field,
+)
 
 pytestmark = pytest.mark.asyncio
 
 
 async def _packet_with_two_docs(db_session, contact_id):
-    t1 = await make_template(db_session, field_definitions=[text_field("a")])
-    t2 = await make_template(db_session, field_definitions=[text_field("b")])
+    # Two generic non-e-sign docs to view; view recording is kind-agnostic.
+    t1 = await make_questionnaire_template(
+        db_session, field_definitions=[questionnaire_field("a")]
+    )
+    t2 = await make_questionnaire_template(
+        db_session, field_definitions=[questionnaire_field("b")]
+    )
     service = PacketService(db_session)
     packet, raw = await service.create_packet(
         created_by_id=None,

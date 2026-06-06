@@ -72,10 +72,10 @@ async def test_persisted_snapshot_matches_ssot(db_session, test_contact):
 
 async def test_non_esign_doc_has_no_disclosure_snapshot(db_session, test_contact):
     """A non-e-sign document carries no disclosure snapshot/version."""
-    from ._onboarding_helpers import text_field
+    from ._onboarding_helpers import make_questionnaire_template, questionnaire_field
 
-    template = await make_template(
-        db_session, field_definitions=[text_field("name")], requires_esign=False
+    template = await make_questionnaire_template(
+        db_session, field_definitions=[questionnaire_field("name")]
     )
     service = PacketService(db_session)
     packet, _ = await service.create_packet(

@@ -234,7 +234,21 @@ async def _seed_completable_packet(session_maker):
                 "y": 600.0,
                 "w": 300.0,
                 "h": 24.0,
-            }
+            },
+            # A signature field is REQUIRED on an esign_pdf doc — without one the
+            # signature-aware completion guard rejects it as un-signable (H1).
+            {
+                "id": "client_sig",
+                "kind": "signature",
+                "label": "Signature",
+                "required": True,
+                "prefill": None,
+                "page": 1,
+                "x": 72.0,
+                "y": 200.0,
+                "w": 220.0,
+                "h": 60.0,
+            },
         ]
         template = OnboardingTemplate(
             name="Lock Template",
@@ -501,7 +515,23 @@ async def _seed_proposal_with_selections(session_maker, n: int):
             pdf_path = await storage.write(key, _one_page_pdf(), "application/pdf")
             tmpl = OnboardingTemplate(
                 name=f"Sel Template {uuid.uuid4().hex[:4]}",
-                field_definitions=[],
+                # A signature field keeps the esign template send-ready under the
+                # signature-aware guard (template_send_status rejects a PDF-backed
+                # esign template with zero signature fields).
+                field_definitions=[
+                    {
+                        "id": "client_sig",
+                        "kind": "signature",
+                        "label": "Signature",
+                        "required": True,
+                        "prefill": None,
+                        "page": 1,
+                        "x": 72.0,
+                        "y": 200.0,
+                        "w": 220.0,
+                        "h": 60.0,
+                    }
+                ],
                 requires_esign=False,
                 is_active=True,
                 pdf_path=pdf_path,

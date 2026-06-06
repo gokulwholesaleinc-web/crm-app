@@ -41,7 +41,11 @@ from src.onboarding.packet_errors import (
     PacketRaceError,
     PacketValidationError,
 )
-from src.onboarding.service import template_send_status
+from src.onboarding.service import (
+    count_signature_fields,
+    has_signature_field,
+    template_send_status,
+)
 
 # Statuses a recipient may still write to (view/patch/signature/complete).
 WRITABLE_STATUSES = ("active", "opened", "in_progress")
@@ -305,6 +309,9 @@ class PacketService:
                 kind=template.kind,
                 pdf_path=template.pdf_path,
                 field_count=len(template.field_definitions or []),
+                signature_field_count=count_signature_fields(
+                    template.field_definitions
+                ),
             )
             if not ready:
                 # Name the member (not just its id) so staff know which saved-
@@ -378,16 +385,13 @@ class PacketService:
         Either mismatch is a fail-closed 422 (``PacketValidationError``) rather
         than a silently broken or uncompletable packet.
         """
-        has_signature_field = any(
-            (f.get("kind") if isinstance(f, dict) else None) == "signature"
-            for f in field_defs
-        )
-        if requires_esign and not has_signature_field:
+        has_sig = has_signature_field(field_defs)
+        if requires_esign and not has_sig:
             raise PacketValidationError(
                 f"Template {template_id} requires e-sign but has no signature "
                 "field; it cannot collect a signature."
             )
-        if has_signature_field and not requires_esign:
+        if has_sig and not requires_esign:
             raise PacketValidationError(
                 f"Template {template_id} has a signature field, so e-sign "
                 "cannot be disabled for it."

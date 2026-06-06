@@ -53,6 +53,7 @@ from src.onboarding.packet_service import (
     ensure_pdf_suffix,
     scrub_packet,
 )
+from src.onboarding.service import has_signature_field
 from src.onboarding.view_ledger import get_unviewed_packet_document_ids
 
 logger = logging.getLogger(__name__)
@@ -355,10 +356,30 @@ def _assert_signature_present(
     the packet strands in ``completion_failed`` forever (the signature is still
     None). Catch it as a clean 422 with the status unchanged so the signer is
     simply told to sign.
+
+    H1 (signature-aware, closes in-flight packets): an ``esign_pdf`` doc that
+    carries a PDF is a signing ceremony regardless of its (possibly pre-fix)
+    ``requires_esign`` flag. Completing one with NO signature field would flatten
+    and attach an UNSIGNED "completed" PDF — no signature was ever collected. The
+    send guard (``template_send_status``) now rejects this state at create time,
+    but a packet snapshotted BEFORE that guard shipped can still reach here, so
+    require a signature field on every esign-with-PDF doc and reject as a clean
+    422 (status unchanged) when one is missing.
     """
+    for doc in docs:
+        if (
+            doc.kind == "esign_pdf"
+            and doc.pdf_path
+            and not has_signature_field(doc.field_definitions)
+        ):
+            raise PacketValidationError(
+                "This e-sign document has no signature field and cannot be signed."
+            )
+    # Every esign-with-PDF doc that survived the loop above HAS a signature field,
+    # so the signature-field clause already covers it — no separate esign_pdf
+    # clause is needed here.
     needs_signature = any(
-        doc.requires_esign
-        or any(f.get("kind") == "signature" for f in (doc.field_definitions or []))
+        doc.requires_esign or has_signature_field(doc.field_definitions)
         for doc in docs
     )
     if needs_signature and packet.signer_signature_image is None:
@@ -399,6 +420,26 @@ async def _phase_b_stamp(db: AsyncSession, *, packet_id: int) -> None:
     if packet is None or packet.status != "completing":
         return
     docs = await service.load_documents(packet_id)
+    # H1 choke point (shared by both completion drivers). _assert_signature_present
+    # blocks the public /complete path in Phase A, but the staff ``retry_completion``
+    # path re-marks ``completing`` and calls this function DIRECTLY (skipping Phase
+    # A), so a packet snapshotted in completion_failed BEFORE the signature-aware
+    # guard shipped could otherwise be stamped here into a flattened, UNSIGNED PDF.
+    # An esign_pdf doc with a PDF but no signature field can never be signed — fail
+    # closed into completion_failed rather than emit an unsigned "completed" artifact.
+    for doc in docs:
+        if (
+            doc.kind == "esign_pdf"
+            and doc.pdf_path
+            and not has_signature_field(doc.field_definitions)
+        ):
+            await _mark_failed(
+                db,
+                packet_id,
+                "esign_pdf document has no signature field; refusing to stamp "
+                "an unsigned PDF.",
+            )
+            return
     for doc in docs:
         if doc.attachment_id is not None:
             continue  # already stamped (a retry / concurrent worker)
@@ -558,19 +599,26 @@ async def retry_completion(db: AsyncSession, *, packet: OnboardingPacket) -> dic
         if claimed_at > _now() - LEASE_TIMEOUT:
             raise PacketRaceError("This packet is still being finalized.")
 
+    # Capture the PK as a plain int before driving the phases: Phase B's
+    # ``_mark_failed`` (or any commit inside _phase_b_stamp) expires the ORM
+    # ``packet`` (expire_on_commit), so a later ``packet.id`` would trigger a sync
+    # lazy-load → MissingGreenlet on the async session. The status guards above
+    # still read the (fresh) in-memory packet.
+    packet_id = packet.id
+
     # Re-mark completing so Phase B's leases apply uniformly, then drive B/C.
     await db.execute(
         update(OnboardingPacket)
-        .where(OnboardingPacket.id == packet.id)
+        .where(OnboardingPacket.id == packet_id)
         .values(status="completing", completing_since=_now())
     )
     await db.commit()
 
-    await _phase_b_stamp(db, packet_id=packet.id)
-    raw_download = await _phase_c_finalize(db, packet_id=packet.id)
+    await _phase_b_stamp(db, packet_id=packet_id)
+    raw_download = await _phase_c_finalize(db, packet_id=packet_id)
 
     service = PacketService(db)
-    refreshed = await service.get_packet(packet.id)
+    refreshed = await service.get_packet(packet_id)
     if refreshed is None:
         return {"status": "completion_failed"}
     if refreshed.status != "completed":
