@@ -95,7 +95,7 @@ function blankUpload(used: Set<string>): OnboardingQuestionnaireField {
 }
 
 /** Strip empty/irrelevant keys so the saved definition matches its kind. */
-function cleanField(field: OnboardingQuestionnaireField): OnboardingQuestionnaireField {
+export function cleanField(field: OnboardingQuestionnaireField): OnboardingQuestionnaireField {
   const label = field.label.trim();
   const out: OnboardingQuestionnaireField = {
     id: field.id,
@@ -133,7 +133,7 @@ function cleanField(field: OnboardingQuestionnaireField): OnboardingQuestionnair
 }
 
 /** Client-side guard mirroring the backend validators (server is authoritative). */
-function validate(fields: OnboardingQuestionnaireField[]): string | null {
+export function validate(fields: OnboardingQuestionnaireField[]): string | null {
   if (fields.length === 0) return 'Add at least one field.';
   for (const f of fields) {
     if (!f.label.trim()) return 'Every field needs a label.';
@@ -154,6 +154,100 @@ function validate(fields: OnboardingQuestionnaireField[]): string | null {
   return null;
 }
 
+export interface OnboardingFormBuilderBodyProps {
+  kind: 'questionnaire' | 'upload_request';
+  /** The current field list (controlled). */
+  value: OnboardingQuestionnaireField[];
+  /** Emits the (raw, uncleaned) field list on every edit. */
+  onChange: (fields: OnboardingQuestionnaireField[]) => void;
+}
+
+/**
+ * The controlled authoring surface — the field list + add button + inline
+ * validation, with NO Modal. Hosted by the Modal builder (editing an existing
+ * template) AND inline by the "Create template" wizard. Holds raw fields; the
+ * host applies {@link cleanField} + {@link validate} when it commits.
+ */
+export function OnboardingFormBuilderBody({
+  kind,
+  value,
+  onChange,
+}: OnboardingFormBuilderBodyProps) {
+  const isUpload = kind === 'upload_request';
+  const validationError = useMemo(() => validate(value), [value]);
+
+  const update = (id: string, patch: Partial<OnboardingQuestionnaireField>) =>
+    onChange(value.map((f) => (f.id === id ? { ...f, ...patch } : f)));
+
+  const addField = () => {
+    // Derive the used-id set from the current value so a rapid double-click
+    // can't mint two fields with the same id.
+    const used = new Set(value.map((f) => f.id));
+    onChange([...value, isUpload ? blankUpload(used) : blankQuestion(used)]);
+  };
+
+  const removeField = (id: string) => onChange(value.filter((f) => f.id !== id));
+
+  const move = (index: number, delta: number) => {
+    const target = index + delta;
+    if (target < 0 || target >= value.length) return;
+    const next = [...value];
+    const a = next[index];
+    const b = next[target];
+    if (a === undefined || b === undefined) return;
+    next[index] = b;
+    next[target] = a;
+    onChange(next);
+  };
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-gray-500 dark:text-gray-400">
+        {isUpload
+          ? 'Define the files the client uploads. Each field becomes a labelled upload slot.'
+          : 'Build the questions the client answers. Group related questions by giving them the same section.'}
+      </p>
+
+      {value.length === 0 ? (
+        <p className="rounded-md border border-dashed border-gray-300 dark:border-gray-600 p-6 text-center text-sm text-gray-400 dark:text-gray-500">
+          No fields yet. Add the first one below.
+        </p>
+      ) : (
+        <ul className="space-y-3">
+          {value.map((field, index) => (
+            <FieldCard
+              key={field.id}
+              field={field}
+              index={index}
+              total={value.length}
+              isUpload={isUpload}
+              onChange={(patch) => update(field.id, patch)}
+              onRemove={() => removeField(field.id)}
+              onMoveUp={() => move(index, -1)}
+              onMoveDown={() => move(index, 1)}
+            />
+          ))}
+        </ul>
+      )}
+
+      <Button
+        type="button"
+        variant="secondary"
+        leftIcon={<PlusIcon className="h-4 w-4" aria-hidden="true" />}
+        onClick={addField}
+      >
+        {isUpload ? 'Add file field' : 'Add question'}
+      </Button>
+
+      {validationError && value.length > 0 && (
+        <p role="status" className="text-sm text-amber-700 dark:text-amber-300">
+          {validationError}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function OnboardingFormBuilder({
   isOpen,
   onClose,
@@ -169,33 +263,6 @@ export function OnboardingFormBuilder({
 
   const isUpload = kind === 'upload_request';
   const validationError = useMemo(() => validate(fields), [fields]);
-
-  const update = (id: string, patch: Partial<OnboardingQuestionnaireField>) =>
-    setFields((curr) => curr.map((f) => (f.id === id ? { ...f, ...patch } : f)));
-
-  const addField = () =>
-    // Derive the used-id set from ``curr`` (not a memoized snapshot) so a rapid
-    // double-click can't mint two fields with the same id.
-    setFields((curr) => {
-      const used = new Set(curr.map((f) => f.id));
-      return [...curr, isUpload ? blankUpload(used) : blankQuestion(used)];
-    });
-
-  const removeField = (id: string) =>
-    setFields((curr) => curr.filter((f) => f.id !== id));
-
-  const move = (index: number, delta: number) =>
-    setFields((curr) => {
-      const target = index + delta;
-      if (target < 0 || target >= curr.length) return curr;
-      const next = [...curr];
-      const a = next[index];
-      const b = next[target];
-      if (a === undefined || b === undefined) return curr;
-      next[index] = b;
-      next[target] = a;
-      return next;
-    });
 
   const handleSave = async () => {
     if (validationError) return;
@@ -218,50 +285,7 @@ export function OnboardingFormBuilder({
       title={`${isUpload ? 'Edit files' : 'Edit questions'} — ${templateName}`}
       size="xl"
     >
-      <div className="space-y-4">
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          {isUpload
-            ? 'Define the files the client uploads. Each field becomes a labelled upload slot.'
-            : 'Build the questions the client answers. Group related questions by giving them the same section.'}
-        </p>
-
-        {fields.length === 0 ? (
-          <p className="rounded-md border border-dashed border-gray-300 dark:border-gray-600 p-6 text-center text-sm text-gray-400 dark:text-gray-500">
-            No fields yet. Add the first one below.
-          </p>
-        ) : (
-          <ul className="space-y-3">
-            {fields.map((field, index) => (
-              <FieldCard
-                key={field.id}
-                field={field}
-                index={index}
-                total={fields.length}
-                isUpload={isUpload}
-                onChange={(patch) => update(field.id, patch)}
-                onRemove={() => removeField(field.id)}
-                onMoveUp={() => move(index, -1)}
-                onMoveDown={() => move(index, 1)}
-              />
-            ))}
-          </ul>
-        )}
-
-        <Button
-          type="button"
-          variant="secondary"
-          leftIcon={<PlusIcon className="h-4 w-4" aria-hidden="true" />}
-          onClick={addField}
-        >
-          {isUpload ? 'Add file field' : 'Add question'}
-        </Button>
-
-        {validationError && fields.length > 0 && (
-          <p role="status" className="text-sm text-amber-700 dark:text-amber-300">
-            {validationError}
-          </p>
-        )}
-      </div>
+      <OnboardingFormBuilderBody kind={kind} value={fields} onChange={setFields} />
 
       <ModalFooter>
         <Button type="button" variant="secondary" onClick={onClose} disabled={saving}>
