@@ -20,7 +20,6 @@ import { showSuccess, showError } from '../../utils/toast';
 import { extractApiErrorDetail } from '../../utils/errors';
 import {
   listOnboardingTemplates,
-  createOnboardingTemplate,
   uploadOnboardingTemplatePdf,
   downloadOnboardingTemplatePdf,
   updateOnboardingTemplate,
@@ -31,7 +30,6 @@ import {
 } from '../../api/onboarding';
 import type {
   OnboardingTemplate,
-  OnboardingTemplateCreate,
   OnboardingTemplateUpdate,
   OnboardingFieldDefinition,
   OnboardingQuestionnaireField,
@@ -46,6 +44,9 @@ const OnboardingSendPanel = lazy(() => import('./OnboardingSendPanel'));
 const SavedPacketsPanel = lazy(() => import('./SavedPacketsPanel'));
 // The questionnaire/upload builder — only loaded when authoring a form kind.
 const OnboardingFormBuilder = lazy(() => import('./OnboardingFormBuilder'));
+// The "Create template" wizard — pulls in pdf.js + both builders; code-split so
+// the library list stays light and it loads only when authoring a new template.
+const OnboardingTemplateWizard = lazy(() => import('./OnboardingTemplateWizard'));
 
 const ONBOARDING_KEY = ['onboarding-templates'] as const;
 
@@ -99,11 +100,6 @@ function OnboardingLibraryPage() {
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ONBOARDING_KEY });
 
-  const createMutation = useMutation({
-    mutationFn: (data: OnboardingTemplateCreate) => createOnboardingTemplate(data),
-    onSuccess: () => invalidate(),
-  });
-
   const uploadMutation = useMutation({
     mutationFn: ({ id, file }: { id: number; file: File }) =>
       uploadOnboardingTemplatePdf(id, file),
@@ -154,20 +150,6 @@ function OnboardingLibraryPage() {
 
   const universal = templates.filter((t) => !t.service_tag);
   const perService = templates.filter((t) => Boolean(t.service_tag));
-
-  const handleCreate = async (data: OnboardingTemplateCreate) => {
-    try {
-      await createMutation.mutateAsync(data);
-      setShowCreate(false);
-      showSuccess('Template created. Upload a PDF to start placing fields.');
-    } catch (err) {
-      // Surfaced via toast; the modal stays open because the success-path
-      // setShowCreate(false) above wasn't reached. No re-throw — the form
-      // fires this via `void`, so a rejection would only become an unhandled
-      // promise rejection.
-      showError(extractApiErrorDetail(err) ?? 'Failed to create template');
-    }
-  };
 
   const triggerUpload = (templateId: number) => {
     uploadTargetIdRef.current = templateId;
@@ -450,14 +432,14 @@ function OnboardingLibraryPage() {
       </>
       )}
 
-      {/* Create modal */}
-      <Modal isOpen={showCreate} onClose={() => setShowCreate(false)} title="New Onboarding Template" size="md">
-        <CreateTemplateForm
-          onSubmit={handleCreate}
-          onCancel={() => setShowCreate(false)}
-          isLoading={createMutation.isPending}
-        />
-      </Modal>
+      {/* Create-template wizard (Kind → Basics → Build → Review/Create) */}
+      {showCreate && (
+        <Suspense fallback={null}>
+          {/* The wizard self-invalidates the onboarding-templates query, so no
+              onCreated handler is needed (it would double-invalidate). */}
+          <OnboardingTemplateWizard isOpen onClose={() => setShowCreate(false)} />
+        </Suspense>
+      )}
 
       {/* Edit-details modal */}
       <Modal
@@ -767,125 +749,6 @@ function TemplateRow({
         )}
       </div>
     </div>
-  );
-}
-
-interface CreateTemplateFormProps {
-  onSubmit: (data: OnboardingTemplateCreate) => Promise<void>;
-  onCancel: () => void;
-  isLoading: boolean;
-}
-
-const KIND_OPTIONS: { value: OnboardingDocumentKind; label: string; hint: string }[] = [
-  {
-    value: 'esign_pdf',
-    label: 'E-sign PDF',
-    hint: 'Upload a PDF and place a signature field to enable e-signature from Edit details.',
-  },
-  {
-    value: 'questionnaire',
-    label: 'Questionnaire',
-    hint: 'Ask typed questions (text, choices, dates). Add them with “Edit questions” after creating.',
-  },
-  {
-    value: 'upload_request',
-    label: 'File upload',
-    hint: 'Collect files (ID, brand assets, documents). Define them with “Edit files” after creating.',
-  },
-];
-
-function CreateTemplateForm({ onSubmit, onCancel, isLoading }: CreateTemplateFormProps) {
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [serviceTag, setServiceTag] = useState('');
-  const [kind, setKind] = useState<OnboardingDocumentKind>('esign_pdf');
-
-  const canSubmit = name.trim().length > 0;
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!canSubmit) return;
-    // E-sign is NOT set at create — a new template has no fields yet, so the
-    // backend rejects requires_esign: true (422). It's enabled later via the
-    // edit-details PATCH (esign) once a signature field has been placed.
-    // Form kinds author their fields via the builder after creating.
-    void onSubmit({
-      name: name.trim(),
-      description: description.trim() || null,
-      service_tag: serviceTag.trim() || null,
-      kind,
-    });
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div>
-        <span className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
-          Document type
-        </span>
-        <div
-          className="inline-flex flex-wrap items-center gap-1 rounded-lg bg-gray-100 p-1 dark:bg-gray-800"
-          role="radiogroup"
-          aria-label="Document type"
-        >
-          {KIND_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              role="radio"
-              aria-checked={kind === opt.value}
-              onClick={() => setKind(opt.value)}
-              className={clsx(
-                'rounded-md px-3 py-1.5 text-sm font-medium transition-colors motion-reduce:transition-none',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500',
-                kind === opt.value
-                  ? 'bg-primary-600 text-white shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white',
-              )}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-      </div>
-      <Input
-        label="Name"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        name="onboarding-template-name"
-        autoComplete="off"
-        placeholder="e.g. New client intake packet..."
-        required
-      />
-      <Input
-        label="Description (optional)"
-        value={description}
-        onChange={(e) => setDescription(e.target.value)}
-        name="onboarding-template-description"
-        autoComplete="off"
-        placeholder="What this template is for..."
-      />
-      <Input
-        label="Service tag (optional)"
-        value={serviceTag}
-        onChange={(e) => setServiceTag(e.target.value)}
-        name="onboarding-template-service-tag"
-        autoComplete="off"
-        placeholder="Leave blank for a universal template..."
-        helperText="Scopes the template to one service. Blank = universal."
-      />
-      <p className="text-xs text-gray-500 dark:text-gray-400">
-        {KIND_OPTIONS.find((o) => o.value === kind)?.hint}
-      </p>
-      <ModalFooter>
-        <Button type="button" variant="secondary" onClick={onCancel} disabled={isLoading}>
-          Cancel
-        </Button>
-        <Button type="submit" variant="primary" disabled={!canSubmit} isLoading={isLoading}>
-          Create
-        </Button>
-      </ModalFooter>
-    </form>
   );
 }
 

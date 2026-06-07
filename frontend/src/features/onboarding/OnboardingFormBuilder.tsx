@@ -11,6 +11,14 @@ import type {
   OnboardingQuestionKind,
   OnboardingFieldOption,
 } from '../../types';
+import {
+  TEXT_KINDS,
+  CHOICE_KINDS,
+  MAX_FILES_CEILING,
+  MAX_MB_CEILING,
+  cleanField,
+  validate,
+} from './onboardingFormModel';
 
 /**
  * Author the field list for a ``questionnaire`` or ``upload_request`` template.
@@ -48,30 +56,6 @@ const PREFILL_OPTIONS = [
   { value: 'company.name', label: 'Company name' },
 ];
 
-const TEXT_KINDS = new Set<OnboardingQuestionnaireField['kind']>([
-  'short_text',
-  'paragraph',
-  'email',
-  'url',
-  'date',
-]);
-const CHOICE_KINDS = new Set<OnboardingQuestionnaireField['kind']>([
-  'single_choice',
-  'multi_choice',
-]);
-
-const MAX_FILES_CEILING = 50;
-const MAX_MB_CEILING = 500;
-
-/** Lowercase slug for derived ids/option values; never empty. */
-function slugify(value: string, fallback: string): string {
-  const slug = value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '');
-  return slug || fallback;
-}
-
 /** Smallest ``${prefix}${n}`` not already used. */
 function nextId(prefix: string, used: Set<string>): string {
   let n = 1;
@@ -94,64 +78,98 @@ function blankUpload(used: Set<string>): OnboardingQuestionnaireField {
   };
 }
 
-/** Strip empty/irrelevant keys so the saved definition matches its kind. */
-function cleanField(field: OnboardingQuestionnaireField): OnboardingQuestionnaireField {
-  const label = field.label.trim();
-  const out: OnboardingQuestionnaireField = {
-    id: field.id,
-    kind: field.kind,
-    label,
-    required: Boolean(field.required),
-  };
-  const help = field.help?.trim();
-  if (help) out.help = help;
-  const section = field.section_label?.trim();
-  if (section) {
-    out.section_label = section;
-    out.section_id = slugify(section, 'section');
-  }
-  if (field.kind === 'file_upload') {
-    out.maxFiles = field.maxFiles ?? 1;
-    out.maxMB = field.maxMB ?? 10;
-    return out;
-  }
-  if (CHOICE_KINDS.has(field.kind)) {
-    out.options = (field.options ?? []).map((o) => ({
-      value: o.value,
-      label: o.label.trim(),
-    }));
-    if (field.allow_other) out.allow_other = true;
-    if (field.kind === 'single_choice' && field.display === 'dropdown') {
-      out.display = 'dropdown';
-    }
-    return out;
-  }
-  // Text kinds.
-  if (field.prefill) out.prefill = field.prefill;
-  if (field.sensitive) out.sensitive = true;
-  return out;
+interface OnboardingFormBuilderBodyProps {
+  kind: 'questionnaire' | 'upload_request';
+  /** The current field list (controlled). */
+  value: OnboardingQuestionnaireField[];
+  /** Emits the (raw, uncleaned) field list on every edit. */
+  onChange: (fields: OnboardingQuestionnaireField[]) => void;
 }
 
-/** Client-side guard mirroring the backend validators (server is authoritative). */
-function validate(fields: OnboardingQuestionnaireField[]): string | null {
-  if (fields.length === 0) return 'Add at least one field.';
-  for (const f of fields) {
-    if (!f.label.trim()) return 'Every field needs a label.';
-    if (f.kind === 'file_upload') {
-      const mf = f.maxFiles ?? 0;
-      const mm = f.maxMB ?? 0;
-      if (!Number.isInteger(mf) || mf < 1 || mf > MAX_FILES_CEILING)
-        return `"${f.label}": max files must be 1–${MAX_FILES_CEILING}.`;
-      if (!Number.isInteger(mm) || mm < 1 || mm > MAX_MB_CEILING)
-        return `"${f.label}": max MB must be 1–${MAX_MB_CEILING}.`;
-    } else if (CHOICE_KINDS.has(f.kind)) {
-      const opts = f.options ?? [];
-      if (opts.length === 0) return `"${f.label}": add at least one option.`;
-      if (opts.some((o) => !o.label.trim()))
-        return `"${f.label}": every option needs a label.`;
-    }
-  }
-  return null;
+/**
+ * The controlled authoring surface — the field list + add button + inline
+ * validation, with NO Modal. Hosted by the Modal builder (editing an existing
+ * template) AND inline by the "Create template" wizard. Holds raw fields; the
+ * host applies {@link cleanField} + {@link validate} when it commits.
+ */
+export function OnboardingFormBuilderBody({
+  kind,
+  value,
+  onChange,
+}: OnboardingFormBuilderBodyProps) {
+  const isUpload = kind === 'upload_request';
+  const validationError = useMemo(() => validate(value), [value]);
+
+  const update = (id: string, patch: Partial<OnboardingQuestionnaireField>) =>
+    onChange(value.map((f) => (f.id === id ? { ...f, ...patch } : f)));
+
+  const addField = () => {
+    // Derive the used-id set from the current value so a rapid double-click
+    // can't mint two fields with the same id.
+    const used = new Set(value.map((f) => f.id));
+    onChange([...value, isUpload ? blankUpload(used) : blankQuestion(used)]);
+  };
+
+  const removeField = (id: string) => onChange(value.filter((f) => f.id !== id));
+
+  const move = (index: number, delta: number) => {
+    const target = index + delta;
+    if (target < 0 || target >= value.length) return;
+    const next = [...value];
+    const a = next[index];
+    const b = next[target];
+    if (a === undefined || b === undefined) return;
+    next[index] = b;
+    next[target] = a;
+    onChange(next);
+  };
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-gray-500 dark:text-gray-400">
+        {isUpload
+          ? 'Define the files the client uploads. Each field becomes a labelled upload slot.'
+          : 'Build the questions the client answers. Group related questions by giving them the same section.'}
+      </p>
+
+      {value.length === 0 ? (
+        <p className="rounded-md border border-dashed border-gray-300 dark:border-gray-600 p-6 text-center text-sm text-gray-400 dark:text-gray-500">
+          No fields yet. Add the first one below.
+        </p>
+      ) : (
+        <ul className="space-y-3">
+          {value.map((field, index) => (
+            <FieldCard
+              key={field.id}
+              field={field}
+              index={index}
+              total={value.length}
+              isUpload={isUpload}
+              onChange={(patch) => update(field.id, patch)}
+              onRemove={() => removeField(field.id)}
+              onMoveUp={() => move(index, -1)}
+              onMoveDown={() => move(index, 1)}
+            />
+          ))}
+        </ul>
+      )}
+
+      <Button
+        type="button"
+        variant="secondary"
+        leftIcon={<PlusIcon className="h-4 w-4" aria-hidden="true" />}
+        onClick={addField}
+      >
+        {isUpload ? 'Add file field' : 'Add question'}
+      </Button>
+
+      {validationError && value.length > 0 && (
+        <p role="status" className="text-sm text-amber-700 dark:text-amber-300">
+          {validationError}
+        </p>
+      )}
+    </div>
+  );
 }
 
 export function OnboardingFormBuilder({
@@ -169,33 +187,6 @@ export function OnboardingFormBuilder({
 
   const isUpload = kind === 'upload_request';
   const validationError = useMemo(() => validate(fields), [fields]);
-
-  const update = (id: string, patch: Partial<OnboardingQuestionnaireField>) =>
-    setFields((curr) => curr.map((f) => (f.id === id ? { ...f, ...patch } : f)));
-
-  const addField = () =>
-    // Derive the used-id set from ``curr`` (not a memoized snapshot) so a rapid
-    // double-click can't mint two fields with the same id.
-    setFields((curr) => {
-      const used = new Set(curr.map((f) => f.id));
-      return [...curr, isUpload ? blankUpload(used) : blankQuestion(used)];
-    });
-
-  const removeField = (id: string) =>
-    setFields((curr) => curr.filter((f) => f.id !== id));
-
-  const move = (index: number, delta: number) =>
-    setFields((curr) => {
-      const target = index + delta;
-      if (target < 0 || target >= curr.length) return curr;
-      const next = [...curr];
-      const a = next[index];
-      const b = next[target];
-      if (a === undefined || b === undefined) return curr;
-      next[index] = b;
-      next[target] = a;
-      return next;
-    });
 
   const handleSave = async () => {
     if (validationError) return;
@@ -218,50 +209,7 @@ export function OnboardingFormBuilder({
       title={`${isUpload ? 'Edit files' : 'Edit questions'} — ${templateName}`}
       size="xl"
     >
-      <div className="space-y-4">
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          {isUpload
-            ? 'Define the files the client uploads. Each field becomes a labelled upload slot.'
-            : 'Build the questions the client answers. Group related questions by giving them the same section.'}
-        </p>
-
-        {fields.length === 0 ? (
-          <p className="rounded-md border border-dashed border-gray-300 dark:border-gray-600 p-6 text-center text-sm text-gray-400 dark:text-gray-500">
-            No fields yet. Add the first one below.
-          </p>
-        ) : (
-          <ul className="space-y-3">
-            {fields.map((field, index) => (
-              <FieldCard
-                key={field.id}
-                field={field}
-                index={index}
-                total={fields.length}
-                isUpload={isUpload}
-                onChange={(patch) => update(field.id, patch)}
-                onRemove={() => removeField(field.id)}
-                onMoveUp={() => move(index, -1)}
-                onMoveDown={() => move(index, 1)}
-              />
-            ))}
-          </ul>
-        )}
-
-        <Button
-          type="button"
-          variant="secondary"
-          leftIcon={<PlusIcon className="h-4 w-4" aria-hidden="true" />}
-          onClick={addField}
-        >
-          {isUpload ? 'Add file field' : 'Add question'}
-        </Button>
-
-        {validationError && fields.length > 0 && (
-          <p role="status" className="text-sm text-amber-700 dark:text-amber-300">
-            {validationError}
-          </p>
-        )}
-      </div>
+      <OnboardingFormBuilderBody kind={kind} value={fields} onChange={setFields} />
 
       <ModalFooter>
         <Button type="button" variant="secondary" onClick={onClose} disabled={saving}>

@@ -1,12 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
   ArrowPathIcon,
-  CalendarDaysIcon,
-  PencilSquareIcon,
-  Bars3BottomLeftIcon,
-  MapPinIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline';
 import { GlobalWorkerOptions, getDocument } from 'pdfjs-dist';
@@ -30,54 +26,21 @@ import type {
   OnboardingFieldPrefill,
 } from '../../types';
 import { extractApiErrorDetail } from '../../utils/errors';
+import {
+  FIELD_KINDS,
+  KIND_META,
+  ESIGN_PREFILL_OPTIONS,
+  fieldErrors,
+  nextFieldId,
+} from './fieldKinds';
 
 GlobalWorkerOptions.workerSrc = pdfWorker;
-
-const FIELD_KINDS: OnboardingFieldKind[] = ['signature', 'date', 'text', 'address'];
-
-const KIND_META: Record<
-  OnboardingFieldKind,
-  { label: string; icon: typeof PencilSquareIcon; accent: string; box: string }
-> = {
-  signature: {
-    label: 'Signature',
-    icon: PencilSquareIcon,
-    accent: 'bg-primary-600',
-    box: 'border-primary-500 bg-primary-500/15',
-  },
-  date: {
-    label: 'Date',
-    icon: CalendarDaysIcon,
-    accent: 'bg-emerald-600',
-    box: 'border-emerald-500 bg-emerald-500/15',
-  },
-  text: {
-    label: 'Text',
-    icon: Bars3BottomLeftIcon,
-    accent: 'bg-sky-600',
-    box: 'border-sky-500 bg-sky-500/15',
-  },
-  address: {
-    label: 'Address',
-    icon: MapPinIcon,
-    accent: 'bg-amber-600',
-    box: 'border-amber-500 bg-amber-500/15',
-  },
-};
-
-const PREFILL_OPTIONS: { value: string; label: string }[] = [
-  { value: '', label: 'No prefill' },
-  { value: 'contact.name', label: 'Contact name' },
-  { value: 'company.name', label: 'Company name' },
-];
-
-const SLUG_RE = /^[a-z0-9_]+$/;
 
 /**
  * In-editor field. ``id`` is a freely-editable, persisted property, so it
  * can't key selection or React lists (editing it would orphan the
  * selection — finding #5). ``_key`` is a stable internal handle assigned on
- * add; it is STRIPPED before {@link OnboardingTemplateEditorProps.onSave}.
+ * add; it is STRIPPED before the field list is emitted to the parent.
  */
 interface EditorField extends OnboardingFieldDefinition {
   _key: string;
@@ -100,45 +63,28 @@ function stripKeys(fields: EditorField[]): OnboardingFieldDefinition[] {
   return fields.map(({ _key, ...field }) => field);
 }
 
-/** Build a unique, slug-safe id for a new field of the given kind. */
-function nextFieldId(kind: OnboardingFieldKind, existing: OnboardingFieldDefinition[]): string {
-  const used = new Set(existing.map((f) => f.id));
-  let n = 1;
-  let candidate = `${kind}_${n}`;
-  while (used.has(candidate)) {
-    n += 1;
-    candidate = `${kind}_${n}`;
-  }
-  return candidate;
-}
+// ===========================================================================
+// Controlled body — the canvas + overlay + per-field panel, with NO Modal.
+// Hosted by the Modal editor (editing an existing template) AND inline by the
+// "Create template" wizard (authoring against a local object-URL preview).
+// Source of truth for editing (keys, selection); emits the stripped field list
+// up via ``onChange`` and re-seeds from ``value`` only when ``pdfUrl`` changes.
+// ===========================================================================
 
-/** A field is saveable only when it has a non-empty label and a unique slug id. */
-function fieldErrors(field: OnboardingFieldDefinition, all: OnboardingFieldDefinition[]): string[] {
-  const errors: string[] = [];
-  if (!field.label.trim()) errors.push('Label is required.');
-  if (!SLUG_RE.test(field.id)) errors.push('Id must be lowercase letters, numbers, or underscores.');
-  if (all.filter((f) => f.id === field.id).length > 1) errors.push('Id must be unique.');
-  return errors;
-}
-
-interface OnboardingTemplateEditorProps {
-  isOpen: boolean;
-  onClose: () => void;
-  templateName: string;
+interface OnboardingTemplateEditorBodyProps {
   /** Object URL or remote URL pointing at the template PDF bytes. */
   pdfUrl: string;
-  currentFields: OnboardingFieldDefinition[];
-  onSave: (fields: OnboardingFieldDefinition[]) => Promise<void>;
+  /** The current field list (controlled). */
+  value: OnboardingFieldDefinition[];
+  /** Emits the field list (without internal keys) on every edit. */
+  onChange: (fields: OnboardingFieldDefinition[]) => void;
 }
 
-export function OnboardingTemplateEditor({
-  isOpen,
-  onClose,
-  templateName,
+export function OnboardingTemplateEditorBody({
   pdfUrl,
-  currentFields,
-  onSave,
-}: OnboardingTemplateEditorProps) {
+  value,
+  onChange,
+}: OnboardingTemplateEditorBodyProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const overlayRef = useRef<HTMLDivElement | null>(null);
   const docRef = useRef<PDFDocumentProxy | null>(null);
@@ -148,7 +94,7 @@ export function OnboardingTemplateEditor({
   const [pageCount, setPageCount] = useState(0);
   const [pageIdx, setPageIdx] = useState(0);
   const [canvasSize, setCanvasSize] = useState<{ w: number; h: number } | null>(null);
-  const [fields, setFields] = useState<EditorField[]>(() => withKeys(currentFields));
+  const [fields, setFields] = useState<EditorField[]>(() => withKeys(value));
   const [activeKind, setActiveKind] = useState<OnboardingFieldKind>('signature');
   // Selection is keyed on the stable internal ``_key``, never the editable
   // ``id`` — editing an id must not orphan the selection (finding #5).
@@ -156,25 +102,30 @@ export function OnboardingTemplateEditor({
   const [draftBox, setDraftBox] = useState<DrawnBox | null>(null);
   const [isLoadingDoc, setIsLoadingDoc] = useState(false);
   const [docError, setDocError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
 
-  // Held in a ref so the doc-load effect doesn't re-fire when a parent
-  // refetch produces a fresh ``currentFields`` array reference.
-  const initialFieldsRef = useRef(currentFields);
-  initialFieldsRef.current = currentFields;
+  // Held in a ref so the doc-load effect re-seeds from the freshest value on a
+  // pdfUrl change without re-firing when the parent re-renders with the same URL.
+  const initialValueRef = useRef(value);
+  initialValueRef.current = value;
 
-  // (Re)load the document each time the modal opens with a fresh URL.
+  // Emit field changes up to the parent (stripped of the internal ``_key``).
+  // The parent's value tracks these emissions; the doc-load effect below only
+  // re-seeds on a pdfUrl change, so this never loops.
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
   useEffect(() => {
-    if (!isOpen) return;
+    onChangeRef.current(stripKeys(fields));
+  }, [fields]);
+
+  // (Re)load the document whenever the source URL changes; re-seed from value.
+  useEffect(() => {
     let cancelled = false;
     setIsLoadingDoc(true);
     setDocError(null);
-    setSaveError(null);
     setDraftBox(null);
     setSelectedKey(null);
     setCanvasSize(null);
-    setFields(withKeys(initialFieldsRef.current));
+    setFields(withKeys(initialValueRef.current));
 
     const loadingTask = getDocument(pdfUrl);
     loadingTask.promise
@@ -185,7 +136,7 @@ export function OnboardingTemplateEditor({
         }
         docRef.current = doc;
         setPageCount(doc.numPages);
-        const seed = initialFieldsRef.current[0];
+        const seed = initialValueRef.current[0];
         setPageIdx(seed ? clamp(seed.page - 1, 0, doc.numPages - 1) : 0);
         setIsLoadingDoc(false);
       })
@@ -207,7 +158,7 @@ export function OnboardingTemplateEditor({
         renderTaskRef.current = null;
       }
     };
-  }, [isOpen, pdfUrl]);
+  }, [pdfUrl]);
 
   // Render the active page to the canvas.
   useEffect(() => {
@@ -327,9 +278,7 @@ export function OnboardingTemplateEditor({
   };
 
   // Select a field for editing by its stable ``_key``: also sync the active type
-  // chip to its kind (so the highlighted chip always matches the edited field)
-  // and follow the view to its page. Shared by the canvas boxes, the type chips,
-  // and the same-kind stepper in the panel.
+  // chip to its kind and follow the view to its page.
   const selectFieldByKey = (key: string) => {
     const f = fields.find((x) => x._key === key);
     if (!f) return;
@@ -338,11 +287,8 @@ export function OnboardingTemplateEditor({
     if (f.page - 1 !== pageIdx) setPageIdx(f.page - 1);
   };
 
-  // Clicking a type chip arms the draw tool AND jumps the editor to a field of
-  // that type, so you don't have to hunt for its box. Repeated clicks cycle
-  // through every field of that type (the count badge shows how many; the panel
-  // shows a "n / total" stepper). A type with no fields just arms the draw tool
-  // and clears the panel to the draw prompt.
+  // Clicking a type chip arms the draw tool AND cycles through fields of that
+  // kind. A type with no fields just arms the draw tool and clears the panel.
   const selectKind = (kind: OnboardingFieldKind) => {
     setActiveKind(kind);
     const ofKind = fields.filter((f) => f.kind === kind);
@@ -350,34 +296,15 @@ export function OnboardingTemplateEditor({
       setSelectedKey(null);
       return;
     }
-    // currentIdx === -1 (selection isn't of this kind) → start at the first;
-    // otherwise advance to the next, wrapping around.
     const currentIdx = ofKind.findIndex((f) => f._key === selectedKey);
     const next = ofKind[(currentIdx + 1) % ofKind.length];
     if (next) selectFieldByKey(next._key);
   };
 
-  // --- Save / cancel ----------------------------------------------
-
   const invalidCount = useMemo(
     () => fields.filter((f) => fieldErrors(f, fields).length > 0).length,
     [fields],
   );
-  const canSave = invalidCount === 0 && !saving;
-
-  const handleSave = async () => {
-    if (invalidCount > 0) return;
-    setSaving(true);
-    setSaveError(null);
-    try {
-      await onSave(stripKeys(fields));
-      onClose();
-    } catch (err) {
-      setSaveError(extractApiErrorDetail(err) ?? 'Failed to save fields');
-    } finally {
-      setSaving(false);
-    }
-  };
 
   const goPrev = () => setPageIdx((i) => Math.max(0, i - 1));
   const goNext = () => setPageIdx((i) => Math.min(pageCount - 1, i + 1));
@@ -399,203 +326,266 @@ export function OnboardingTemplateEditor({
   const fieldsOnPage = fields.filter((f) => f.page - 1 === pageIdx).length;
 
   return (
+    <div className="space-y-4">
+      <p className="text-sm text-gray-500 dark:text-gray-400">
+        Pick a field type, then click and drag on the page to place it. Fill in
+        its label and options in the panel.
+      </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={goPrev}
+            disabled={pageIdx === 0 || isLoadingDoc}
+            aria-label="Previous page"
+          >
+            <ArrowLeftIcon className="h-4 w-4" aria-hidden="true" />
+          </Button>
+          <span
+            className="text-sm text-gray-700 dark:text-gray-200"
+            style={{ fontVariantNumeric: 'tabular-nums' }}
+          >
+            Page {pageCount === 0 ? 0 : pageIdx + 1} of {pageCount}
+          </span>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={goNext}
+            disabled={pageIdx >= pageCount - 1 || isLoadingDoc}
+            aria-label="Next page"
+          >
+            <ArrowRightIcon className="h-4 w-4" aria-hidden="true" />
+          </Button>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Field type">
+          {FIELD_KINDS.map((kind) => (
+            <KindToggle
+              key={kind}
+              kind={kind}
+              activeKind={activeKind}
+              count={fields.filter((f) => f.kind === kind).length}
+              onClick={selectKind}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_20rem] gap-4">
+        {/* Canvas */}
+        <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40 p-3 overflow-auto max-h-[70vh]">
+          {isLoadingDoc && (
+            <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 p-6">
+              <ArrowPathIcon className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+              Loading template...
+            </div>
+          )}
+          {docError && (
+            <p
+              role="alert"
+              aria-live="polite"
+              className="text-sm text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded px-3 py-2"
+            >
+              {docError}
+            </p>
+          )}
+          {!isLoadingDoc && !docError && (
+            <div className="relative inline-block">
+              <canvas
+                ref={canvasRef}
+                aria-label="Template page — click and drag to draw the active field"
+                className="block bg-white shadow-sm"
+              />
+              <div
+                ref={overlayRef}
+                onPointerDown={handlePointerDown}
+                onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerUp}
+                onPointerCancel={handlePointerUp}
+                className="absolute inset-0 cursor-crosshair touch-none"
+                style={{ touchAction: 'none' }}
+              >
+                {visibleBoxes.map(({ field, box }, i) => {
+                  const kind = field?.kind ?? activeKind;
+                  const meta = KIND_META[kind];
+                  const isSelected = field !== null && field._key === selectedKey;
+                  return (
+                    <div
+                      key={field ? field._key : `draft-${i}`}
+                      className={`absolute pointer-events-none border-2 ${meta.box} ${
+                        isSelected ? 'ring-2 ring-offset-1 ring-gray-900 dark:ring-white' : ''
+                      }`}
+                      style={{
+                        left: `${box.leftPx}px`,
+                        top: `${box.topPx}px`,
+                        width: `${box.widthPx}px`,
+                        height: `${box.heightPx}px`,
+                      }}
+                      aria-hidden={field === null ? 'true' : undefined}
+                    >
+                      <span
+                        className={`absolute -top-5 left-0 rounded px-1.5 py-0.5 text-[10px] font-medium text-white ${meta.accent}`}
+                      >
+                        {field?.label?.trim() || meta.label}
+                      </span>
+                      {field !== null && (
+                        <>
+                          <button
+                            type="button"
+                            onPointerDown={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                            }}
+                            onClick={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              selectFieldByKey(field._key);
+                            }}
+                            className="pointer-events-auto absolute inset-0"
+                            aria-label={`Select ${meta.label.toLowerCase()} field ${field.label || field.id}`}
+                          />
+                          <button
+                            type="button"
+                            onPointerDown={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                            }}
+                            onClick={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              removeField(field._key);
+                            }}
+                            className={`pointer-events-auto absolute -right-3 -top-3 inline-flex h-6 w-6 items-center justify-center rounded-full border border-white text-white shadow-sm hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-gray-900 dark:focus-visible:ring-white ${meta.accent}`}
+                            aria-label={`Remove ${meta.label.toLowerCase()} field ${field.label || field.id}`}
+                            title={`Remove ${meta.label.toLowerCase()} field`}
+                          >
+                            <XMarkIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          {!isLoadingDoc && !docError && fieldsOnPage === 0 && !draftBox && (
+            <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+              No fields on this page yet. Pick a type above, then drag a box on the page.
+            </p>
+          )}
+        </div>
+
+        {/* Per-field editor panel */}
+        <FieldEditorPanel
+          field={selectedField}
+          allFields={fields}
+          onChange={updateField}
+          onRemove={removeField}
+          onSelectKey={selectFieldByKey}
+        />
+      </div>
+
+      {invalidCount > 0 && (
+        <p aria-live="polite" className="text-xs text-amber-600 dark:text-amber-300">
+          {invalidCount} field{invalidCount === 1 ? '' : 's'} need a label and a valid, unique id before saving.
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ===========================================================================
+// Modal wrapper — edit the fields of an EXISTING template (the per-row "Edit
+// fields" entry point). Owns the field buffer + save lifecycle; delegates the
+// authoring surface to the controlled body above.
+// ===========================================================================
+
+interface OnboardingTemplateEditorProps {
+  isOpen: boolean;
+  onClose: () => void;
+  templateName: string;
+  /** Object URL or remote URL pointing at the template PDF bytes. */
+  pdfUrl: string;
+  currentFields: OnboardingFieldDefinition[];
+  onSave: (fields: OnboardingFieldDefinition[]) => Promise<void>;
+}
+
+export function OnboardingTemplateEditor({
+  isOpen,
+  onClose,
+  templateName,
+  pdfUrl,
+  currentFields,
+  onSave,
+}: OnboardingTemplateEditorProps) {
+  const [fields, setFields] = useState<OnboardingFieldDefinition[]>(currentFields);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const invalidCount = useMemo(
+    () => fields.filter((f) => fieldErrors(f, fields).length > 0).length,
+    [fields],
+  );
+  const canSave = invalidCount === 0 && !saving;
+
+  const handleSave = async () => {
+    if (invalidCount > 0) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await onSave(fields);
+      onClose();
+    } catch (err) {
+      setSaveError(extractApiErrorDetail(err) ?? 'Failed to save fields');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
     <Modal
       isOpen={isOpen}
       onClose={saving ? () => {} : onClose}
       title={`Define fields — ${templateName}`}
-      description="Pick a field type, then click and drag on the page to place it. Fill in its label and options in the panel."
       size="full"
       closeOnOverlayClick={!saving}
     >
-      <div className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={goPrev}
-              disabled={pageIdx === 0 || isLoadingDoc}
-              aria-label="Previous page"
-            >
-              <ArrowLeftIcon className="h-4 w-4" aria-hidden="true" />
-            </Button>
-            <span
-              className="text-sm text-gray-700 dark:text-gray-200"
-              style={{ fontVariantNumeric: 'tabular-nums' }}
-            >
-              Page {pageCount === 0 ? 0 : pageIdx + 1} of {pageCount}
-            </span>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={goNext}
-              disabled={pageIdx >= pageCount - 1 || isLoadingDoc}
-              aria-label="Next page"
-            >
-              <ArrowRightIcon className="h-4 w-4" aria-hidden="true" />
-            </Button>
-          </div>
+      <OnboardingTemplateEditorBody
+        // Remount on a fresh PDF/template so the body re-seeds from currentFields.
+        key={pdfUrl}
+        pdfUrl={pdfUrl}
+        value={fields}
+        onChange={setFields}
+      />
 
-          <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Field type">
-            {FIELD_KINDS.map((kind) => (
-              <KindToggle
-                key={kind}
-                kind={kind}
-                activeKind={activeKind}
-                count={fields.filter((f) => f.kind === kind).length}
-                onClick={selectKind}
-              />
-            ))}
-          </div>
-        </div>
+      {saveError && (
+        <p
+          role="alert"
+          aria-live="polite"
+          className="mt-4 text-sm text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded px-3 py-2"
+        >
+          {saveError}
+        </p>
+      )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_20rem] gap-4">
-          {/* Canvas */}
-          <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40 p-3 overflow-auto max-h-[70vh]">
-            {isLoadingDoc && (
-              <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 p-6">
-                <ArrowPathIcon className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                Loading template...
-              </div>
-            )}
-            {docError && (
-              <p
-                role="alert"
-                aria-live="polite"
-                className="text-sm text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded px-3 py-2"
-              >
-                {docError}
-              </p>
-            )}
-            {!isLoadingDoc && !docError && (
-              <div className="relative inline-block">
-                <canvas
-                  ref={canvasRef}
-                  aria-label="Template page — click and drag to draw the active field"
-                  className="block bg-white shadow-sm"
-                />
-                <div
-                  ref={overlayRef}
-                  onPointerDown={handlePointerDown}
-                  onPointerMove={handlePointerMove}
-                  onPointerUp={handlePointerUp}
-                  onPointerCancel={handlePointerUp}
-                  className="absolute inset-0 cursor-crosshair touch-none"
-                  style={{ touchAction: 'none' }}
-                >
-                  {visibleBoxes.map(({ field, box }, i) => {
-                    const kind = field?.kind ?? activeKind;
-                    const meta = KIND_META[kind];
-                    const isSelected = field !== null && field._key === selectedKey;
-                    return (
-                      <div
-                        key={field ? field._key : `draft-${i}`}
-                        className={`absolute pointer-events-none border-2 ${meta.box} ${
-                          isSelected ? 'ring-2 ring-offset-1 ring-gray-900 dark:ring-white' : ''
-                        }`}
-                        style={{
-                          left: `${box.leftPx}px`,
-                          top: `${box.topPx}px`,
-                          width: `${box.widthPx}px`,
-                          height: `${box.heightPx}px`,
-                        }}
-                        aria-hidden={field === null ? 'true' : undefined}
-                      >
-                        <span
-                          className={`absolute -top-5 left-0 rounded px-1.5 py-0.5 text-[10px] font-medium text-white ${meta.accent}`}
-                        >
-                          {field?.label?.trim() || meta.label}
-                        </span>
-                        {field !== null && (
-                          <>
-                            <button
-                              type="button"
-                              onPointerDown={(event) => {
-                                event.preventDefault();
-                                event.stopPropagation();
-                              }}
-                              onClick={(event) => {
-                                event.preventDefault();
-                                event.stopPropagation();
-                                selectFieldByKey(field._key);
-                              }}
-                              className="pointer-events-auto absolute inset-0"
-                              aria-label={`Select ${meta.label.toLowerCase()} field ${field.label || field.id}`}
-                            />
-                            <button
-                              type="button"
-                              onPointerDown={(event) => {
-                                event.preventDefault();
-                                event.stopPropagation();
-                              }}
-                              onClick={(event) => {
-                                event.preventDefault();
-                                event.stopPropagation();
-                                removeField(field._key);
-                              }}
-                              className={`pointer-events-auto absolute -right-3 -top-3 inline-flex h-6 w-6 items-center justify-center rounded-full border border-white text-white shadow-sm hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-gray-900 dark:focus-visible:ring-white ${meta.accent}`}
-                              aria-label={`Remove ${meta.label.toLowerCase()} field ${field.label || field.id}`}
-                              title={`Remove ${meta.label.toLowerCase()} field`}
-                            >
-                              <XMarkIcon className="h-3.5 w-3.5" aria-hidden="true" />
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-            {!isLoadingDoc && !docError && fieldsOnPage === 0 && !draftBox && (
-              <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
-                No fields on this page yet. Pick a type above, then drag a box on the page.
-              </p>
-            )}
-          </div>
-
-          {/* Per-field editor panel */}
-          <FieldEditorPanel
-            field={selectedField}
-            allFields={fields}
-            onChange={updateField}
-            onRemove={removeField}
-            onSelectKey={selectFieldByKey}
-          />
-        </div>
-
-        {saveError && (
-          <p
-            role="alert"
-            aria-live="polite"
-            className="text-sm text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded px-3 py-2"
-          >
-            {saveError}
-          </p>
-        )}
-        {invalidCount > 0 && (
-          <p aria-live="polite" className="text-xs text-amber-600 dark:text-amber-300">
-            {invalidCount} field{invalidCount === 1 ? '' : 's'} need a label and a valid, unique id before saving.
-          </p>
-        )}
-
-        <ModalFooter>
-          <Button type="button" variant="secondary" onClick={onClose} disabled={saving}>
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            variant="primary"
-            onClick={handleSave}
-            disabled={!canSave}
-            isLoading={saving}
-          >
-            Save fields
-          </Button>
-        </ModalFooter>
-      </div>
+      <ModalFooter>
+        <Button type="button" variant="secondary" onClick={onClose} disabled={saving}>
+          Cancel
+        </Button>
+        <Button
+          type="button"
+          variant="primary"
+          onClick={handleSave}
+          disabled={!canSave}
+          isLoading={saving}
+        >
+          Save fields
+        </Button>
+      </ModalFooter>
     </Modal>
   );
 }
@@ -654,8 +644,7 @@ function FieldEditorPanel({ field, allFields, onChange, onRemove, onSelectKey }:
   const errors = fieldErrors(field, allFields);
 
   // Same-kind siblings, so a doc with e.g. 2 signatures can step between them
-  // right here in the panel (◀ 1 / 2 ▶) — in addition to clicking their boxes
-  // or re-clicking the type chip to cycle.
+  // right here in the panel (◀ 1 / 2 ▶).
   const siblings = allFields.filter((f) => f.kind === field.kind);
   const siblingIdx = siblings.findIndex((f) => f._key === field._key);
   const hasSiblings = siblings.length > 1;
@@ -746,7 +735,7 @@ function FieldEditorPanel({ field, allFields, onChange, onRemove, onSelectKey }:
             prefill: (e.target.value || null) as OnboardingFieldPrefill,
           })
         }
-        options={PREFILL_OPTIONS}
+        options={ESIGN_PREFILL_OPTIONS}
         helperText="Auto-fill the value from the linked contact or company."
       />
 
