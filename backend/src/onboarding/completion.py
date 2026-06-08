@@ -506,7 +506,7 @@ async def _phase_b_stamp(db: AsyncSession, *, packet_id: int) -> None:
             # ``RuntimeError``, value/overflow — none of which subclass the old
             # narrow tuple. Mark completion_failed + release the lease + log,
             # never strand the packet `completing` behind an opaque 500.
-            await _mark_failed(db, packet_id, str(exc))
+            await _mark_failed(db, packet_id, str(exc), exc_info=True)
             return
 
 
@@ -529,7 +529,9 @@ async def _acquire_lease(db: AsyncSession, *, doc_id: int) -> bool:
     return result.first() is not None
 
 
-async def _mark_failed(db: AsyncSession, packet_id: int, error: str) -> None:
+async def _mark_failed(
+    db: AsyncSession, packet_id: int, error: str, *, exc_info: bool = False
+) -> None:
     await db.rollback()
     await db.execute(
         update(OnboardingPacket)
@@ -546,9 +548,16 @@ async def _mark_failed(db: AsyncSession, packet_id: int, error: str) -> None:
         .values(filled_pdf_error=error[:1000], stamp_lease_at=None)
     )
     await db.commit()
-    # logger.exception captures the active traceback (we're inside the Phase-B
-    # except), so the real infra cause reaches Sentry, not just this summary.
-    logger.exception("Onboarding packet %s completion failed: %s", packet_id, error)
+    # Only attach a traceback when an exception is actually active (the Phase-B
+    # stamp except). The H1 signature choke point calls this on a deliberate,
+    # non-exception rejection — ``logger.exception`` there would log a bogus
+    # ``NoneType: None`` traceback to Sentry, so the caller passes exc_info=False.
+    logger.error(
+        "Onboarding packet %s completion failed: %s",
+        packet_id,
+        error,
+        exc_info=exc_info,
+    )
 
 
 # --------------------------------------------------------------------------
