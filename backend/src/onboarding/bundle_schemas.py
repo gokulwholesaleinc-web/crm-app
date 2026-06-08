@@ -39,7 +39,7 @@ class BundleWizardItem(BaseModel):
     starter_key: str | None = None
     # blank
     kind: DocumentKind | None = None
-    description: str | None = None
+    description: str | None = Field(default=None, max_length=2000)
     service_tag: str | None = Field(default=None, max_length=100)
     field_definitions: list[dict] | None = None
 

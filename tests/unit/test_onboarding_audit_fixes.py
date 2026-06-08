@@ -12,7 +12,11 @@ import logging
 import pytest
 from pydantic import ValidationError
 from src.onboarding import completion
-from src.onboarding.bundle_schemas import BundleCreate, BundleUpdate
+from src.onboarding.bundle_schemas import (
+    BundleCreate,
+    BundleUpdate,
+    BundleWizardItem,
+)
 from src.onboarding.kinds.questionnaire import validate_questionnaire_definitions
 from src.onboarding.models import OnboardingPacket
 from src.onboarding.packet_service import PacketService
@@ -46,6 +50,21 @@ def test_bundle_description_over_cap_rejected():
         BundleCreate(name="OK", description="x" * 2001)
     with pytest.raises(ValidationError):
         BundleUpdate(description="x" * 2001)
+
+
+def test_bundle_wizard_item_description_over_cap_rejected():
+    # The blank-source wizard item passes its description straight into
+    # _build_template, so it needs the same cap as the create schemas.
+    BundleWizardItem(
+        source="blank", name="Doc", kind="questionnaire", description="x" * 2000
+    )
+    with pytest.raises(ValidationError):
+        BundleWizardItem(
+            source="blank",
+            name="Doc",
+            kind="questionnaire",
+            description="x" * 2001,
+        )
 
 
 # --------------------------------------------------------------------------
