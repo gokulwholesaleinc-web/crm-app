@@ -128,6 +128,42 @@ const WRITABLE_STATUSES = new Set(['active', 'opened', 'in_progress']);
 // Terminal-dead statuses the server answers with 410 — the link is gone.
 const DEAD_STATUSES = new Set(['abandoned', 'expired', 'revoked']);
 
+// --- session-scoped persistence (QOL) --------------------------------------
+// The bearer session + the last document index are cached in sessionStorage so
+// an accidental reload / back-nav doesn't drop the signer back at the e-mail
+// gate (their answers are already server-saved; this preserves the SESSION).
+// sessionStorage — NOT localStorage: scoped to the tab, cleared on close, and
+// the token self-expires server-side after SESSION_TTL (45 min) regardless, so
+// nothing usable outlives the fill. Versioned keys + try/catch (private mode /
+// quota / disabled storage throw — persistence is best-effort, never fatal).
+const SESSION_STORE_PREFIX = 'onboardingSession:v1:';
+const DOCINDEX_STORE_PREFIX = 'onboardingDocIndex:v1:';
+const SESSION_TIMEOUT_NOTICE =
+  'Your session timed out for security. Re-enter your email to pick up where ' +
+  'you left off — your answers are saved.';
+
+function safeSessionGet(key: string): string | null {
+  try {
+    return window.sessionStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+function safeSessionSet(key: string, value: string): void {
+  try {
+    window.sessionStorage.setItem(key, value);
+  } catch {
+    /* private mode / quota — best-effort */
+  }
+}
+function safeSessionRemove(key: string): void {
+  try {
+    window.sessionStorage.removeItem(key);
+  } catch {
+    /* ignore */
+  }
+}
+
 // Per-document draft of answers, widened in v3 to carry choice lists + the
 // Other write-in shape (the FE half of P0-1). Keyed doc id → field id → answer.
 type DraftValues = Record<number, Record<string, OnboardingAnswerValue>>;
@@ -233,19 +269,34 @@ function PublicOnboardingView() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [logoError, setLogoError] = useState(false);
 
-  // Bearer session token returned by /verify, held in memory only (no cookie,
-  // no localStorage) and attached to every subsequent request.
-  const [sessionToken, setSessionToken] = useState<string | null>(null);
+  // Bearer session token returned by /verify. Cached in sessionStorage (NOT a
+  // cookie/localStorage) and re-seeded on mount so a reload / accidental nav
+  // skips the e-mail gate instead of forcing re-verification. Attached to every
+  // request; if it's stale the first call 401s → handleSessionExpired clears it.
+  const sessionStoreKey = token ? `${SESSION_STORE_PREFIX}${token}` : null;
+  const docIndexStoreKey = token ? `${DOCINDEX_STORE_PREFIX}${token}` : null;
+  const [sessionToken, setSessionToken] = useState<string | null>(() =>
+    sessionStoreKey ? safeSessionGet(sessionStoreKey) : null,
+  );
   const sessionTokenRef = useRef<string | null>(null);
   sessionTokenRef.current = sessionToken;
+  // Shown on the e-mail gate after a session times out / is dropped, so the
+  // signer understands why they're being asked to re-verify (answers are safe).
+  const [sessionNotice, setSessionNotice] = useState<string | null>(null);
 
   // Email-gate state.
   const [email, setEmail] = useState('');
   const [verifying, setVerifying] = useState(false);
   const [verifyError, setVerifyError] = useState<string | null>(null);
 
-  // Step-through state — one document at a time.
-  const [docIndex, setDocIndex] = useState(0);
+  // Step-through state — one document at a time. Seeded from sessionStorage so a
+  // reload lands the signer back on the document they were filling, not Doc 1
+  // (clamped to the real doc count once documents load; cleared on completion).
+  const [docIndex, setDocIndex] = useState<number>(() => {
+    const raw = docIndexStoreKey ? safeSessionGet(docIndexStoreKey) : null;
+    const n = raw ? Number.parseInt(raw, 10) : 0;
+    return Number.isInteger(n) && n >= 0 ? n : 0;
+  });
   // Local draft of field values per document, seeded from the server payload and
   // the source of truth for the inputs. Widened in v3 (the FE half of P0-1) to
   // carry choice lists + the Other write-in shape, not just strings.
@@ -256,6 +307,10 @@ function PublicOnboardingView() {
   const [viewedDocIds, setViewedDocIds] = useState<Set<number>>(() => new Set());
   const [savingDoc, setSavingDoc] = useState(false);
   const [docError, setDocError] = useState<string | null>(null);
+  // Docs that have had at least one successful save this session — gates the
+  // "All changes saved" reassurance so it never shows on a pristine, untouched
+  // doc (only after the signer's answers have actually been persisted).
+  const savedDocsRef = useRef<Set<number>>(new Set());
 
   // Signature drawn once, reused across all documents. Typed non-null so the
   // ref is assignable to the forwardRef ``ref`` prop (the imperative handle is
@@ -288,9 +343,24 @@ function PublicOnboardingView() {
     return t ? { 'X-Onboarding-Session': t } : undefined;
   }, []);
 
+  // Drop the (expired/invalid) session and fall back to the e-mail gate with a
+  // reassuring notice. Called on any 401 — the server returns 401 from
+  // require_session once the 45-min token expires. Answers are already saved, so
+  // re-verifying simply re-issues a session and reloads the saved field_values.
+  const handleSessionExpired = useCallback(() => {
+    sessionTokenRef.current = null;
+    setSessionToken(null);
+    if (sessionStoreKey) safeSessionRemove(sessionStoreKey);
+    setSessionNotice(SESSION_TIMEOUT_NOTICE);
+  }, [sessionStoreKey]);
+
   // --- Initial load (pre-gate) -------------------------------------------
+  // Self-reference for the 401 re-fetch (drop the stale session, reload pre-gate
+  // branding/counts so the gate renders branded) without a recursive useCallback.
+  const fetchPacketRef = useRef<() => Promise<void>>();
   const fetchPacket = useCallback(async () => {
     if (!token) return;
+    const sentWithSession = sessionTokenRef.current != null;
     try {
       const res = await publicClient.get<OnboardingPublicPacket>(
         `/api/onboarding/public/${token}`,
@@ -301,6 +371,13 @@ function PublicOnboardingView() {
       if (res.data.status === 'completed') setCompleted(true);
     } catch (err) {
       const status = errorStatus(err);
+      if (status === 401 && sentWithSession) {
+        // A cached session expired between visits → drop it and reload pre-gate
+        // (no session header now) so the branded gate shows with the notice.
+        handleSessionExpired();
+        await fetchPacketRef.current?.();
+        return;
+      }
       // 410 = the link is no longer available (abandoned/expired/revoked).
       if (status === 410) {
         setLoadError('This onboarding link is no longer available. Please contact us for a new link.');
@@ -312,7 +389,8 @@ function PublicOnboardingView() {
     } finally {
       setLoading(false);
     }
-  }, [token, requestHeaders]);
+  }, [token, requestHeaders, handleSessionExpired]);
+  fetchPacketRef.current = fetchPacket;
 
   useEffect(() => {
     void fetchPacket();
@@ -420,6 +498,10 @@ function PublicOnboardingView() {
       const newToken = res.data.session_token;
       sessionTokenRef.current = newToken;
       setSessionToken(newToken);
+      // Cache the session so a reload skips the gate (cleared on tab close /
+      // 401). Clear any prior timeout notice — we're back in.
+      if (sessionStoreKey) safeSessionSet(sessionStoreKey, newToken);
+      setSessionNotice(null);
       // Re-fetch with the session attached to pull the post-gate documents.
       await fetchPacket();
     } catch (err) {
@@ -448,6 +530,24 @@ function PublicOnboardingView() {
   // the documents — the validation/gating useMemos below depend on it.
   const docs = useMemo(() => packet?.documents ?? [], [packet?.documents]);
   const currentDoc = docs[docIndex] ?? null;
+
+  // Persist the position so a reload resumes here…
+  useEffect(() => {
+    if (docIndexStoreKey) safeSessionSet(docIndexStoreKey, String(docIndex));
+  }, [docIndexStoreKey, docIndex]);
+  // …clamped to the loaded doc count (a stored index past a now-shorter packet
+  // must not strand the signer on a blank step).
+  useEffect(() => {
+    if (docs.length > 0 && docIndex > docs.length - 1) setDocIndex(docs.length - 1);
+  }, [docs.length, docIndex]);
+
+  // On completion the flow is finished — drop the cached session + position so a
+  // shared device can't reload back into a now-completed packet's session.
+  useEffect(() => {
+    if (!completed) return;
+    if (sessionStoreKey) safeSessionRemove(sessionStoreKey);
+    if (docIndexStoreKey) safeSessionRemove(docIndexStoreKey);
+  }, [completed, sessionStoreKey, docIndexStoreKey]);
 
   // Mark the current document viewed once it's shown post-gate.
   const currentDocId = currentDoc?.id ?? null;
@@ -517,10 +617,14 @@ function PublicOnboardingView() {
           { headers: requestHeaders() },
         );
         setDocVersions((curr) => ({ ...curr, [doc.id]: res.data.field_values_version }));
+        savedDocsRef.current.add(doc.id);
         return true;
       } catch (err) {
         const status = errorStatus(err);
-        if (status === 409) {
+        if (status === 401) {
+          // Session timed out mid-fill → back to the gate (answers are saved).
+          handleSessionExpired();
+        } else if (status === 409) {
           // Lost update (version drifted) OR the packet moved to a non-writable
           // state. Re-fetch so the inputs reconcile to the server's values.
           setDocError('Your form was updated elsewhere. We refreshed it — please review and continue.');
@@ -535,7 +639,7 @@ function PublicOnboardingView() {
         setSavingDoc(false);
       }
     },
-    [token, draftValues, docVersions, requestHeaders, fetchPacket],
+    [token, draftValues, docVersions, requestHeaders, fetchPacket, handleSessionExpired],
   );
 
   // --- Debounced autosave + unsaved-changes guard (Form 2 = 18 required
@@ -591,19 +695,62 @@ function PublicOnboardingView() {
     };
   }, [currentDoc, draftValues, isDocDirty, saveDocument, packetWritable]);
 
-  // Warn before navigating away with unsaved questionnaire answers
-  // (CLAUDE.md-mandated; absent before v3). Only arms for a writable packet with
-  // a dirty form doc so a completed/read-only page never nags.
-  const anyFormDirty = docs.some((d) => isFormDoc(d) && isDocDirty(d.id));
+  // Best-effort flush of the OPEN document on hide/unload, so the last
+  // sub-debounce keystrokes (and esign field edits, which otherwise only save on
+  // Next) aren't lost if the signer closes/backgrounds the tab. Uses fetch +
+  // keepalive — axios/XHR is cancelled on unload, keepalive survives it. Kept in
+  // a ref so one stable listener fires the freshest closure without re-binding
+  // on every keystroke.
+  const flushRef = useRef<() => void>(() => {});
+  flushRef.current = () => {
+    const doc = currentDoc;
+    if (!doc || !packetWritable || !token || !isDocDirty(doc.id)) return;
+    try {
+      void fetch(
+        `${publicClient.defaults.baseURL ?? ''}/api/onboarding/public/${token}/documents/${doc.id}`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(sessionTokenRef.current
+              ? { 'X-Onboarding-Session': sessionTokenRef.current }
+              : {}),
+          },
+          body: JSON.stringify({
+            field_values: patchableValues(doc, draftValues[doc.id]),
+            base_version: docVersions[doc.id] ?? doc.field_values_version,
+          }),
+          keepalive: true,
+        },
+      );
+    } catch {
+      /* best-effort on unload */
+    }
+  };
+
+  // Warn before navigating away with unsaved answers (CLAUDE.md-mandated) AND
+  // flush the open doc on hide. Arms only for a writable packet with a dirty doc
+  // (form OR esign) so a completed/read-only page never nags or flushes.
+  const anyDirty = docs.some((d) => isDocDirty(d.id));
   useEffect(() => {
-    if (!anyFormDirty) return;
-    const handler = (e: BeforeUnloadEvent) => {
+    if (!anyDirty) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
       e.preventDefault();
       e.returnValue = '';
     };
-    window.addEventListener('beforeunload', handler);
-    return () => window.removeEventListener('beforeunload', handler);
-  }, [anyFormDirty]);
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') flushRef.current();
+    };
+    const onPageHide = () => flushRef.current();
+    window.addEventListener('beforeunload', onBeforeUnload);
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pagehide', onPageHide);
+    return () => {
+      window.removeEventListener('beforeunload', onBeforeUnload);
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pagehide', onPageHide);
+    };
+  }, [anyDirty]);
 
   // --- Signature save (POST) ---------------------------------------------
   const saveSignature = useCallback(async (): Promise<boolean> => {
@@ -629,7 +776,9 @@ function PublicOnboardingView() {
       return true;
     } catch (err) {
       const status = errorStatus(err);
-      if (status === 409) {
+      if (status === 401) {
+        handleSessionExpired();
+      } else if (status === 409) {
         setSigError('Your signature was updated elsewhere. Please redraw and save again.');
         await fetchPacket();
       } else if (status === 410) {
@@ -641,7 +790,7 @@ function PublicOnboardingView() {
     } finally {
       setSavingSig(false);
     }
-  }, [token, signatureVersion, requestHeaders, fetchPacket]);
+  }, [token, signatureVersion, requestHeaders, fetchPacket, handleSessionExpired]);
 
   // --- E-records consent (POST /consent) ---------------------------------
   // The affirmative consent step the signer makes BEFORE drawing a signature.
@@ -661,7 +810,9 @@ function PublicOnboardingView() {
       return true;
     } catch (err) {
       const status = errorStatus(err);
-      if (status === 409) {
+      if (status === 401) {
+        handleSessionExpired();
+      } else if (status === 409) {
         setConsentError('This document was updated. We refreshed it — please review the disclosure and consent again.');
         await fetchPacket();
       } else if (status === 410) {
@@ -673,7 +824,7 @@ function PublicOnboardingView() {
     } finally {
       setRecordingConsent(false);
     }
-  }, [token, recordingConsent, packet?.esign_disclosure_version, requestHeaders, fetchPacket]);
+  }, [token, recordingConsent, packet?.esign_disclosure_version, requestHeaders, fetchPacket, handleSessionExpired]);
 
   // --- Derived gating ----------------------------------------------------
   // A signature is required when any doc is e-sign OR carries a signature field
@@ -831,7 +982,9 @@ function PublicOnboardingView() {
       }
     } catch (err) {
       const status = errorStatus(err);
-      if (status === 409) {
+      if (status === 401) {
+        handleSessionExpired();
+      } else if (status === 409) {
         // Already in progress / already completed, or a claim race.
         setSubmitError('This packet is already being finalized. Refreshing…');
         await fetchPacket();
@@ -855,6 +1008,7 @@ function PublicOnboardingView() {
     saveDocument,
     requestHeaders,
     fetchPacket,
+    handleSessionExpired,
   ]);
 
   // When a background ``completing`` poll lands on ``completed``, stop polling
@@ -988,6 +1142,7 @@ function PublicOnboardingView() {
             onSubmit={handleVerify}
             verifying={verifying}
             error={verifyError}
+            notice={sessionNotice}
             accent={accent}
           />
         ) : (
@@ -1001,6 +1156,12 @@ function PublicOnboardingView() {
             onPrev={goPrevDoc}
             onNext={goNextDoc}
             savingDoc={savingDoc}
+            savedCurrentDoc={
+              currentDoc != null &&
+              isFormDoc(currentDoc) &&
+              !isDocDirty(currentDoc.id) &&
+              savedDocsRef.current.has(currentDoc.id)
+            }
             docError={docError}
             isWritable={isWritable}
             requiresSignature={requiresSignature}
@@ -1051,6 +1212,8 @@ interface EmailGateProps {
   onSubmit: (e: React.FormEvent) => void;
   verifying: boolean;
   error: string | null;
+  /** Shown above the form after a session timeout (answers are still saved). */
+  notice?: string | null;
   accent: string;
 }
 
@@ -1063,6 +1226,7 @@ function EmailGate({
   onSubmit,
   verifying,
   error,
+  notice,
   accent,
 }: EmailGateProps) {
   return (
@@ -1075,6 +1239,16 @@ function EmailGate({
           ? statusMessage
           : `${companyName} has prepared ${documentCount} document${documentCount === 1 ? '' : 's'} for you to review and complete. Enter your email to begin.`}
       </p>
+
+      {notice && (
+        <p
+          role="status"
+          aria-live="polite"
+          className="mt-5 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2 text-left"
+        >
+          {notice}
+        </p>
+      )}
 
       <form onSubmit={onSubmit} className="mt-8 text-left space-y-4">
         <div>
@@ -1135,6 +1309,8 @@ interface FillFlowProps {
   onPrev: () => void;
   onNext: () => void;
   savingDoc: boolean;
+  /** The open form doc is clean + has been saved this session ("All saved"). */
+  savedCurrentDoc: boolean;
   docError: string | null;
   isWritable: boolean;
   requiresSignature: boolean;
@@ -1172,6 +1348,7 @@ function FillFlow({
   onPrev,
   onNext,
   savingDoc,
+  savedCurrentDoc,
   docError,
   isWritable,
   requiresSignature,
@@ -1242,6 +1419,7 @@ function FillFlow({
           // passive "Saving…" indicator below replaces the disabled surface.
           disabled={!isWritable}
           savingDoc={savingDoc}
+          saved={savedCurrentDoc}
           submitAttempted={submitAttempted}
           accent={accent}
           requestHeaders={requestHeaders}
@@ -1393,7 +1571,7 @@ function FillFlow({
             </p>
           )}
           {missingRequired.length > 0 && (
-            <div role="status" className="mb-4 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+            <div role="status" aria-live="polite" className="mb-4 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2">
               <p className="font-medium">Please complete the required fields:</p>
               <ul className="mt-1 list-disc list-inside space-y-0.5">
                 {missingRequired.slice(0, 6).map((m) => (
@@ -1451,6 +1629,8 @@ interface QuestionnaireFillerProps {
   disabled: boolean;
   /** Drives the passive "Saving…" indicator; never disables the inputs. */
   savingDoc: boolean;
+  /** Drives the "All changes saved" reassurance once a save has landed + clean. */
+  saved: boolean;
   /** Once true, unsatisfied required fields show aria-invalid + inline error. */
   submitAttempted: boolean;
   accent: string;
@@ -1492,6 +1672,7 @@ function QuestionnaireFiller({
   onFieldChange,
   disabled,
   savingDoc,
+  saved,
   submitAttempted,
   accent,
   requestHeaders,
@@ -1505,8 +1686,9 @@ function QuestionnaireFiller({
         <p className="text-sm font-medium text-gray-900 truncate" title={doc.original_filename}>
           {doc.original_filename}
         </p>
-        {/* PF1: passive autosave indicator — never a disabled surface. */}
-        {savingDoc && (
+        {/* PF1: passive autosave indicator — never a disabled surface. The
+            "saved" reassurance lets the signer trust their answers persisted. */}
+        {savingDoc ? (
           <span
             role="status"
             aria-live="polite"
@@ -1515,7 +1697,16 @@ function QuestionnaireFiller({
             <ArrowPathIcon className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" aria-hidden="true" />
             Saving…
           </span>
-        )}
+        ) : saved ? (
+          <span
+            role="status"
+            aria-live="polite"
+            className="inline-flex flex-shrink-0 items-center gap-1 text-xs text-green-700"
+          >
+            <CheckIcon className="h-3.5 w-3.5" aria-hidden="true" />
+            All changes saved
+          </span>
+        ) : null}
       </div>
 
       <div className="mt-4 space-y-8">
@@ -2099,6 +2290,12 @@ function FileUploadField({
           Uploading…
         </p>
       )}
+      {atLimit && !uploading && (
+        // Explain the disabled picker instead of leaving it silently greyed out.
+        <p className="mt-2 text-xs text-gray-500">
+          Maximum of {maxFiles} file{maxFiles === 1 ? '' : 's'} reached — remove one to add another.
+        </p>
+      )}
       {error && (
         <p role="alert" aria-live="polite" className="mt-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded px-3 py-2">
           {error}
@@ -2464,6 +2661,7 @@ function CompletionScreen({ downloadUrl, accent }: { downloadUrl: string | null;
   // there's no in-session URL (e.g. after a reload, or a background-completed
   // poll), we fall back to the "arrive by email" copy — the e-mailed link works.
   const [downloads, setDownloads] = useState<OnboardingDownloadDocument[]>([]);
+  const [downloadError, setDownloadError] = useState(false);
   useEffect(() => {
     if (!downloadUrl) return;
     let cancelled = false;
@@ -2476,8 +2674,11 @@ function CompletionScreen({ downloadUrl, accent }: { downloadUrl: string | null;
       } catch (err) {
         // Fall back to the e-mailed copy — never block the success screen — but
         // log so a systemic landing-endpoint outage is observable rather than
-        // silently indistinguishable from "no documents".
+        // silently indistinguishable from "no documents", and tell the signer
+        // explicitly to use their e-mail rather than waiting on a link that
+        // failed to load here.
         console.warn('onboarding: in-session download list fetch failed', err);
+        if (!cancelled) setDownloadError(true);
       }
     })();
     return () => {
@@ -2518,7 +2719,9 @@ function CompletionScreen({ downloadUrl, accent }: { downloadUrl: string | null;
         </div>
       ) : (
         <p className="mt-6 text-sm text-gray-500">
-          Your signed copies will arrive by email shortly. You can safely close this page.
+          {downloadError
+            ? 'We couldn’t load your download links here, but your signed copies have been emailed to you. You can safely close this page.'
+            : 'Your signed copies will arrive by email shortly. You can safely close this page.'}
         </p>
       )}
     </section>

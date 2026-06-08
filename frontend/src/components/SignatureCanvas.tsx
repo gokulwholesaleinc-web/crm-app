@@ -108,7 +108,9 @@ export const SignatureCanvas = forwardRef<SignatureCanvasHandle, SignatureCanvas
           clearOnResize={false}
           onEnd={handleEnd}
           canvasProps={{
-            className: `block w-full h-full rounded-2xl ${disabled ? 'pointer-events-none opacity-60' : 'cursor-crosshair'}`,
+            // touch-none: a finger drag draws the signature instead of scrolling
+            // / pinch-zooming the page out from under the stroke on mobile.
+            className: `block w-full h-full rounded-2xl touch-none ${disabled ? 'pointer-events-none opacity-60' : 'cursor-crosshair'}`,
             'aria-label': 'Signature pad — draw your signature with mouse or touch',
             role: 'img',
           }}

@@ -164,6 +164,7 @@ beforeAll(() => {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.useRealTimers();
+  sessionStorage.clear();
 });
 
 afterEach(() => {
@@ -527,5 +528,72 @@ describe('PublicOnboardingView — final-gate accessibility + autosave fixes', (
     expect(screen.getByLabelText(/Drop one/i)).toHaveAttribute('aria-required', 'true');
     // File <input>.
     expect(screen.getByLabelText(/Upload file/i)).toHaveAttribute('aria-required', 'true');
+  });
+});
+
+describe('PublicOnboardingView — session persistence + expiry (QOL)', () => {
+  const SESSION_KEY = `onboardingSession:v1:${TOKEN}`;
+  const DOCINDEX_KEY = `onboardingDocIndex:v1:${TOKEN}`;
+
+  it('caches the session token + position in sessionStorage after verify', async () => {
+    await unlockGate(questionnaireDoc());
+    expect(sessionStorage.getItem(SESSION_KEY)).toBe('s-tok');
+    expect(sessionStorage.getItem(DOCINDEX_KEY)).toBe('0');
+  });
+
+  it('skips the e-mail gate on reload when a cached session is present', async () => {
+    sessionStorage.setItem(SESSION_KEY, 's-tok');
+    const doc = questionnaireDoc();
+    // The very first GET carries the cached session → returns post-gate docs.
+    api.get.mockResolvedValue({ data: postGatePayload(doc) });
+    api.post.mockResolvedValue({ data: { viewed: true, opened: true } });
+    api.patch.mockResolvedValue({ data: { field_values_version: 1 } });
+
+    renderPage();
+
+    // The form renders WITHOUT ever typing an e-mail — the gate was skipped.
+    await screen.findByText(doc.original_filename);
+    expect(screen.queryByLabelText(/email address/i)).not.toBeInTheDocument();
+    // …and that first GET carried the session header.
+    expect(api.get).toHaveBeenCalledWith(
+      expect.stringContaining(`/public/${TOKEN}`),
+      expect.objectContaining({
+        headers: { 'X-Onboarding-Session': 's-tok' },
+      }),
+    );
+  });
+
+  it('drops an expired cached session back to the gate with a notice (401)', async () => {
+    sessionStorage.setItem(SESSION_KEY, 'stale-tok');
+    // First GET (with the stale session) → 401; the re-fetch (no session) loads
+    // the pre-gate payload so the branded gate can render.
+    api.get
+      .mockRejectedValueOnce({ response: { status: 401 } })
+      .mockResolvedValue({ data: preGatePayload() });
+
+    renderPage();
+
+    // The reassuring timeout notice shows and we're back on the e-mail gate…
+    expect(await screen.findByText(/timed out/i)).toBeInTheDocument();
+    expect(await screen.findByLabelText(/email address/i)).toBeInTheDocument();
+    // …and the stale token was purged.
+    expect(sessionStorage.getItem(SESSION_KEY)).toBeNull();
+  });
+
+  it('clears the cached session + position on completion', async () => {
+    const doc = questionnaireDoc({ field_definitions: [], requires_esign: false });
+    sessionStorage.setItem(SESSION_KEY, 's-tok');
+    sessionStorage.setItem(DOCINDEX_KEY, '0');
+    // A packet already in the completed state seeds completed=true on load.
+    api.get.mockResolvedValue({
+      data: { ...postGatePayload(doc), status: 'completed' },
+    });
+    api.post.mockResolvedValue({ data: {} });
+
+    renderPage();
+
+    await screen.findByText(/all done/i);
+    await waitFor(() => expect(sessionStorage.getItem(SESSION_KEY)).toBeNull());
+    expect(sessionStorage.getItem(DOCINDEX_KEY)).toBeNull();
   });
 });
