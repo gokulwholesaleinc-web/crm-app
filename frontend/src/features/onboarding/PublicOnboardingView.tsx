@@ -311,6 +311,11 @@ function PublicOnboardingView() {
   // "All changes saved" reassurance so it never shows on a pristine, untouched
   // doc (only after the signer's answers have actually been persisted).
   const savedDocsRef = useRef<Set<number>>(new Set());
+  // Last-saved draft per doc (JSON), the baseline the dirty check compares
+  // against. Refreshed by EVERY successful save (autosave, Next, Submit — for
+  // form AND esign docs) so a saved doc never reads dirty (which would arm the
+  // beforeunload nag even on the completion screen).
+  const savedSnapshotRef = useRef<Record<number, string>>({});
 
   // Signature drawn once, reused across all documents. Typed non-null so the
   // ref is assignable to the forwardRef ``ref`` prop (the imperative handle is
@@ -529,7 +534,11 @@ function PublicOnboardingView() {
   // Memoized so the array reference is stable across renders that don't change
   // the documents — the validation/gating useMemos below depend on it.
   const docs = useMemo(() => packet?.documents ?? [], [packet?.documents]);
-  const currentDoc = docs[docIndex] ?? null;
+  // Clamp at read time too (not just via the effect below): a restored index
+  // past a now-shorter packet must not render a blank body for the frame before
+  // the clamp effect corrects the state.
+  const currentDoc =
+    docs.length > 0 ? docs[Math.min(docIndex, docs.length - 1)] ?? null : null;
 
   // Persist the position so a reload resumes here…
   useEffect(() => {
@@ -543,11 +552,14 @@ function PublicOnboardingView() {
 
   // On completion the flow is finished — drop the cached session + position so a
   // shared device can't reload back into a now-completed packet's session.
+  // Likewise once the link goes dead (revoked/abandoned/expired) the cached
+  // token is inert — purge it rather than let it linger until tab close.
+  const packetDead = packet != null && DEAD_STATUSES.has(packet.status);
   useEffect(() => {
-    if (!completed) return;
+    if (!completed && !packetDead) return;
     if (sessionStoreKey) safeSessionRemove(sessionStoreKey);
     if (docIndexStoreKey) safeSessionRemove(docIndexStoreKey);
-  }, [completed, sessionStoreKey, docIndexStoreKey]);
+  }, [completed, packetDead, sessionStoreKey, docIndexStoreKey]);
 
   // Mark the current document viewed once it's shown post-gate.
   const currentDocId = currentDoc?.id ?? null;
@@ -618,6 +630,9 @@ function PublicOnboardingView() {
         );
         setDocVersions((curr) => ({ ...curr, [doc.id]: res.data.field_values_version }));
         savedDocsRef.current.add(doc.id);
+        // Mark this draft as the clean baseline so the doc no longer reads dirty
+        // (covers esign Next/Submit saves, which used to never clear dirtiness).
+        savedSnapshotRef.current[doc.id] = JSON.stringify(draftValues[doc.id] ?? {});
         return true;
       } catch (err) {
         const status = errorStatus(err);
@@ -646,7 +661,6 @@ function PublicOnboardingView() {
   // paragraphs — a reload must not lose answers; §7.4). The snapshot is the
   // last-saved draft per doc; a draft that differs is "dirty" → a debounced
   // PATCH persists it and a beforeunload warns if the user leaves first.
-  const savedSnapshotRef = useRef<Record<number, string>>({});
   const isDocDirty = useCallback(
     (docId: number): boolean => {
       const snapshot = savedSnapshotRef.current[docId];
@@ -681,19 +695,13 @@ function PublicOnboardingView() {
     const doc = currentDoc;
     autosaveTimerRef.current = setTimeout(() => {
       autosaveTimerRef.current = null;
-      void (async () => {
-        const ok = await saveDocument(doc);
-        if (ok) {
-          savedSnapshotRef.current[doc.id] = JSON.stringify(
-            draftValues[doc.id] ?? {},
-          );
-        }
-      })();
+      // saveDocument refreshes the saved snapshot on success (all doc kinds).
+      void saveDocument(doc);
     }, 1200);
     return () => {
       if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
     };
-  }, [currentDoc, draftValues, isDocDirty, saveDocument, packetWritable]);
+  }, [currentDoc, isDocDirty, saveDocument, packetWritable]);
 
   // Best-effort flush of the OPEN document on hide/unload, so the last
   // sub-debounce keystrokes (and esign field edits, which otherwise only save on
@@ -705,6 +713,14 @@ function PublicOnboardingView() {
   flushRef.current = () => {
     const doc = currentDoc;
     if (!doc || !packetWritable || !token || !isDocDirty(doc.id)) return;
+    // Cancel any pending debounced autosave first: it would otherwise fire on
+    // return with the now-stale local base_version (the flush advanced the
+    // server version but can't read its keepalive response) and 409 with a
+    // confusing "updated elsewhere" notice.
+    if (autosaveTimerRef.current) {
+      clearTimeout(autosaveTimerRef.current);
+      autosaveTimerRef.current = null;
+    }
     try {
       void fetch(
         `${publicClient.defaults.baseURL ?? ''}/api/onboarding/public/${token}/documents/${doc.id}`,
