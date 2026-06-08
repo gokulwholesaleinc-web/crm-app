@@ -63,7 +63,7 @@ beforeEach(() => {
 });
 
 describe('ProposalOnboardingSelectionsCard "Add a document" picker', () => {
-  it('offers active questionnaire/upload templates without a PDF, and esign only when it has a PDF', async () => {
+  it('offers active questionnaire/upload templates with fields, and esign only when it has a PDF and a signature field', async () => {
     const questionnaire = makeTemplate({
       id: 10,
       name: 'Intake Questionnaire',
@@ -92,12 +92,28 @@ describe('ProposalOnboardingSelectionsCard "Add a document" picker', () => {
       name: 'Signed Agreement',
       kind: 'esign_pdf',
       has_pdf: true,
+      field_definitions: [
+        { id: 'sig1', kind: 'signature', label: 'Signature', required: true,
+          prefill: null, page: 1, x: 10, y: 10, w: 120, h: 40 },
+      ],
     });
     const esignNoPdf = makeTemplate({
       id: 13,
       name: 'Draft Agreement',
       kind: 'esign_pdf',
       has_pdf: false,
+    });
+    // esign WITH a PDF but no signature field — can never be signed (H1), so the
+    // picker must hide it just like the backend's signature-aware send gate.
+    const esignNoSig = makeTemplate({
+      id: 16,
+      name: 'Unsignable Agreement',
+      kind: 'esign_pdf',
+      has_pdf: true,
+      field_definitions: [
+        { id: 't1', kind: 'text', label: 'Name', required: false,
+          prefill: null, page: 1, x: 10, y: 10, w: 120, h: 40 },
+      ],
     });
     const retired = makeTemplate({
       id: 14,
@@ -111,6 +127,7 @@ describe('ProposalOnboardingSelectionsCard "Add a document" picker', () => {
       upload,
       esignReady,
       esignNoPdf,
+      esignNoSig,
       retired,
       emptyForm,
     ]);
@@ -132,9 +149,15 @@ describe('ProposalOnboardingSelectionsCard "Add a document" picker', () => {
       screen.getByRole('button', { name: 'Add Signed Agreement to onboarding' }),
     ).toBeInTheDocument();
 
-    // …but the PDF-less esign, the retired, and the empty (field-less) form are not.
+    // …but the PDF-less esign, the signature-less esign, the retired, and the
+    // empty (field-less) form are not.
     expect(
       screen.queryByRole('button', { name: 'Add Draft Agreement to onboarding' }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', {
+        name: 'Add Unsignable Agreement to onboarding',
+      }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole('button', {

@@ -16,7 +16,11 @@ import {
   Bars3BottomLeftIcon,
   MapPinIcon,
 } from '@heroicons/react/24/outline';
-import type { OnboardingFieldDefinition, OnboardingFieldKind } from '../../types';
+import type {
+  OnboardingFieldDefinition,
+  OnboardingFieldKind,
+  OnboardingTemplate,
+} from '../../types';
 
 /** The four placeable e-sign field kinds, in toolbar order. */
 export const FIELD_KINDS: OnboardingFieldKind[] = ['signature', 'date', 'text', 'address'];
@@ -57,6 +61,30 @@ export const ESIGN_PREFILL_OPTIONS: { value: string; label: string }[] = [
   { value: 'contact.name', label: 'Contact name' },
   { value: 'company.name', label: 'Company name' },
 ];
+
+/**
+ * Send-readiness for a template, mirroring the backend ``_template_send_status``
+ * gate (``service.py``) so every picker shows the SAME readiness the server
+ * enforces at create — otherwise a "Ready" template 422s late (H1-FE). An
+ * ``esign_pdf`` needs a PDF AND ≥1 signature field (an e-sign doc with a PDF
+ * but no signature field can never be signed — H1); a form kind
+ * (questionnaire/upload_request) needs ≥1 authored field (the D2 empty-form
+ * guard). Keep this in lock-step with the backend predicate.
+ */
+export function templateSendReadiness(
+  t: Pick<OnboardingTemplate, 'kind' | 'has_pdf' | 'field_definitions'>,
+): { ready: boolean; reason?: string } {
+  const isEsignPdf = (t.kind ?? 'esign_pdf') === 'esign_pdf';
+  if (isEsignPdf) {
+    if (!t.has_pdf) return { ready: false, reason: 'No PDF uploaded yet' };
+    if (!t.field_definitions.some((f) => f.kind === 'signature'))
+      return { ready: false, reason: 'No signature field yet' };
+    return { ready: true };
+  }
+  if (t.field_definitions.length === 0)
+    return { ready: false, reason: 'No questions or fields yet' };
+  return { ready: true };
+}
 
 /** A field id must be a lowercase slug (letters, numbers, underscores). */
 const SLUG_RE = /^[a-z0-9_]+$/;

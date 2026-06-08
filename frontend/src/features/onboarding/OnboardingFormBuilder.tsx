@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import {
   PlusIcon,
   TrashIcon,
@@ -419,6 +419,7 @@ interface OptionsEditorProps {
 
 function OptionsEditor({ field, onChange }: OptionsEditorProps) {
   const options = field.options ?? [];
+  const baseId = useId();
 
   const addOption = () => {
     const used = new Set(options.map((o) => o.value));
@@ -437,11 +438,14 @@ function OptionsEditor({ field, onChange }: OptionsEditorProps) {
       <ul className="space-y-1.5">
         {options.map((opt, idx) => (
           <li key={opt.value} className="flex items-center gap-2">
+            <label htmlFor={`${baseId}-opt-${idx}`} className="sr-only">
+              Option {idx + 1} label
+            </label>
             <input
+              id={`${baseId}-opt-${idx}`}
               type="text"
               value={opt.label}
               onChange={(e) => updateOption(idx, e.target.value)}
-              aria-label={`Option ${idx + 1} label`}
               placeholder="Option label..."
               autoComplete="off"
               className="block w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-1.5 text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus-visible:border-primary-500 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary-500"

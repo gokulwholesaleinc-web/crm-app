@@ -84,6 +84,16 @@ def _option_values(field: dict) -> set[str]:
     return values
 
 
+def _has_control_chars(text: str) -> bool:
+    """Whether a label carries an embedded line break / CR / tab.
+
+    Field + option labels render as single lines on the public fill page and in
+    the summary PDF; an embedded newline survives ``escape()`` and breaks the
+    layout. Reject at author time rather than ship a label that renders wrong.
+    """
+    return any(ord(ch) < 0x20 for ch in text)
+
+
 def validate_questionnaire_definitions(defs: list[dict]) -> None:
     """Author-time validation for a questionnaire field list (P0-9: no PDF read).
 
@@ -121,6 +131,10 @@ def validate_questionnaire_definitions(defs: list[dict]) -> None:
         field_label = field.get("label")
         if not isinstance(field_label, str) or not field_label.strip():
             raise FieldDefinitionError(f"{label}: a non-empty label is required")
+        if _has_control_chars(field_label):
+            raise FieldDefinitionError(
+                f"{label}: a label cannot contain line breaks or tabs"
+            )
 
         # Boolean flags must be REAL bools — a stringy ``"false"`` is truthy at
         # fill time (``field.get("required")``) and would silently flip the
@@ -168,6 +182,11 @@ def validate_questionnaire_definitions(defs: list[dict]) -> None:
                     raise FieldDefinitionError(
                         f"{label}: each option needs a non-empty "
                         "string value and label"
+                    )
+                if _has_control_chars(opt["label"]):
+                    raise FieldDefinitionError(
+                        f"{label}: an option label cannot contain line breaks "
+                        "or tabs"
                     )
                 if opt["value"] == OTHER_TOKEN:
                     raise FieldDefinitionError(

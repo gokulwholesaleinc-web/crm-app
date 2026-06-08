@@ -99,7 +99,7 @@ class TemplateCreate(BaseModel):
     """
 
     name: str = Field(min_length=1, max_length=255)
-    description: str | None = None
+    description: str | None = Field(default=None, max_length=2000)
     service_tag: str | None = Field(default=None, max_length=100)
     requires_esign: bool = False
     kind: DocumentKind = "esign_pdf"
@@ -143,7 +143,7 @@ class TemplateUpdate(BaseModel):
     """
 
     name: str | None = Field(default=None, min_length=1, max_length=255)
-    description: str | None = None
+    description: str | None = Field(default=None, max_length=2000)
     service_tag: str | None = Field(default=None, max_length=100)
     requires_esign: bool | None = None
     field_definitions: list[dict] | None = None

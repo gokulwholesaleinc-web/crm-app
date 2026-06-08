@@ -39,7 +39,7 @@ class BundleWizardItem(BaseModel):
     starter_key: str | None = None
     # blank
     kind: DocumentKind | None = None
-    description: str | None = None
+    description: str | None = Field(default=None, max_length=2000)
     service_tag: str | None = Field(default=None, max_length=100)
     field_definitions: list[dict] | None = None
 
@@ -68,7 +68,7 @@ class BundleCreate(BaseModel):
     """Wizard create body: a named, ordered set of documents (≥1 — §C3)."""
 
     name: str = Field(min_length=1, max_length=255)
-    description: str | None = None
+    description: str | None = Field(default=None, max_length=2000)
     items: list[BundleWizardItem] = Field(default_factory=list)
 
     @field_validator("name")
@@ -81,7 +81,7 @@ class BundleUpdate(BaseModel):
     """Partial update: rename / re-describe / retire-restore a bundle."""
 
     name: str | None = Field(default=None, min_length=1, max_length=255)
-    description: str | None = None
+    description: str | None = Field(default=None, max_length=2000)
     is_active: bool | None = None
 
     @field_validator("name")

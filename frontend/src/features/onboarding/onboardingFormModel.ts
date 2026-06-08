@@ -22,6 +22,15 @@ export const CHOICE_KINDS = new Set<OnboardingQuestionnaireField['kind']>([
 export const MAX_FILES_CEILING = 50;
 export const MAX_MB_CEILING = 500;
 
+/**
+ * Prefill sources a questionnaire text field may declare — mirrors the backend
+ * ``ALLOWED_PREFILL`` (``prefill.py``). ``contact.email``/PII is deliberately
+ * absent (§D.5). The builder UI only offers these via a dropdown, but the
+ * validator mirrors the backend so an imported/replayed definition with an
+ * unsupported prefill is caught client-side instead of 422ing late.
+ */
+const ALLOWED_PREFILL = new Set(['contact.name', 'company.name']);
+
 /** Lowercase slug for derived ids/option values; never empty. */
 function slugify(value: string, fallback: string): string {
   const slug = value
@@ -88,6 +97,16 @@ export function validate(fields: OnboardingQuestionnaireField[]): string | null 
       if (opts.length === 0) return `"${f.label}": add at least one option.`;
       if (opts.some((o) => !o.label.trim()))
         return `"${f.label}": every option needs a label.`;
+      // Mirror the backend: option values must be non-empty and unique (values
+      // are auto-derived in the UI, so this only bites a replayed/bad payload).
+      const values = opts.map((o) => o.value);
+      if (values.some((v) => !v))
+        return `"${f.label}": every option needs a value.`;
+      if (new Set(values).size !== values.length)
+        return `"${f.label}": option values must be unique.`;
+    } else if (TEXT_KINDS.has(f.kind) && f.prefill && !ALLOWED_PREFILL.has(f.prefill)) {
+      // Mirror the backend prefill allow-list (PII can never be prefillable).
+      return `"${f.label}": unsupported prefill "${f.prefill}".`;
     }
   }
   return null;
