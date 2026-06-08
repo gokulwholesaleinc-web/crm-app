@@ -833,6 +833,7 @@ def render_onboarding_invite_email(branding: dict, data: dict) -> str:
     company = escape(branding.get("company_name", "CRM"))
     name = escape(str(data.get("recipient_name") or "").strip())
     expires_days = int(data.get("expires_days") or 30)
+    access_link = data.get("access_link")
     greeting = f"<p>Hi {name},</p>" if name else "<p>Hi there,</p>"
     body_html = f"""\
 {greeting}
@@ -843,8 +844,10 @@ def render_onboarding_invite_email(branding: dict, data: dict) -> str:
         subject="Complete your onboarding",
         headline="Complete your onboarding",
         body_html=body_html,
-        cta_text="Start onboarding",
-        cta_url=data.get("access_link"),
+        # Omit the pill when there's no link rather than render a "click the
+        # button" body with no button (matches the sibling renderers).
+        cta_text="Start onboarding" if access_link else None,
+        cta_url=access_link,
     )
 
 
@@ -859,6 +862,7 @@ def render_onboarding_ready_email(branding: dict, data: dict) -> str:
     default 7).
     """
     company = escape(branding.get("company_name", "CRM"))
+    download_link = data.get("download_link")
     expires_days = int(data.get("expires_days") or 7)
     body_html = f"""\
 <p>Thank you for completing your onboarding with {company}.</p>
@@ -869,8 +873,10 @@ def render_onboarding_ready_email(branding: dict, data: dict) -> str:
         subject="Your onboarding documents are ready",
         headline="Your documents are ready",
         body_html=body_html,
-        cta_text="Download documents",
-        cta_url=data.get("download_link"),
+        # Omit the pill when there's no link rather than render a "click the
+        # button" body with no button (matches the sibling renderers).
+        cta_text="Download documents" if download_link else None,
+        cta_url=download_link,
     )
 
 

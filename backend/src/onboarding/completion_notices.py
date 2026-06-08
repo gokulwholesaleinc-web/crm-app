@@ -49,6 +49,27 @@ def _client_ready_body(branding: dict, client_link: str) -> str:
     )
 
 
+async def _branding_for(db: AsyncSession, user_id: int | None) -> dict:
+    """Tenant branding for a packet's client notice — fail-soft to defaults.
+
+    Branding the bodies added a DB round-trip to paths that previously could
+    not fail at render time. On the manual routes (create/resend) this lookup
+    is NOT inside a try/except, and the packet token is already committed by
+    the time it runs (and, on resend, already ROTATED — the old emailed link
+    is dead). A transient lookup error must not 500 the request and strand the
+    client with no email: degrade to default branding so the notice still goes
+    out, just unbranded.
+    """
+    try:
+        return await TenantBrandingHelper.get_branding_for_user(db, user_id)
+    except Exception:
+        logger.exception(
+            "Onboarding branding lookup failed for user %s; using default branding",
+            user_id,
+        )
+        return TenantBrandingHelper.get_default_branding()
+
+
 def _download_url(raw_download: str | None) -> str | None:
     """In-session download URL carrying the freshly minted raw download token.
 
@@ -92,7 +113,7 @@ async def _post_commit_notices(
     sender_id = packet.created_by_id
     # Tenant branding for the client-facing notice (matches the proposal e-mail
     # look). The owner notice stays plain — it's an internal staff message.
-    branding = await TenantBrandingHelper.get_branding_for_user(db, sender_id)
+    branding = await _branding_for(db, sender_id)
 
     # Client download link (carries the raw download token — its only egress).
     if raw_download:
@@ -225,9 +246,7 @@ async def queue_invite(
         return False
     base_url = settings.FRONTEND_BASE_URL or "http://localhost:3000"
     access_link = f"{base_url}/onboarding/{raw_access_token}"
-    branding = await TenantBrandingHelper.get_branding_for_user(
-        db, packet.created_by_id
-    )
+    branding = await _branding_for(db, packet.created_by_id)
     await EmailService(db).queue_email(
         to_email=packet.recipient_email,
         subject=INVITE_SUBJECT,
@@ -286,9 +305,7 @@ async def resend_completion_notices(
     # unrecoverable) old value, leaving the recipient a dead emailed link.
     await db.commit()
     client_link = f"{base_url}/onboarding/complete/{raw_download}"
-    branding = await TenantBrandingHelper.get_branding_for_user(
-        db, packet.created_by_id
-    )
+    branding = await _branding_for(db, packet.created_by_id)
 
     owner_email = await _owner_email(db, packet)
     for to_email, subject, body in _resend_targets(

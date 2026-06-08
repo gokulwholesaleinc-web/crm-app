@@ -72,6 +72,22 @@ def test_ready_render_is_branded_html_with_download_cta():
     assert "7 days" in html
 
 
+def test_invite_render_without_link_omits_cta_pill():
+    """A missing access_link drops the CTA rather than rendering a dead button."""
+    branding = TenantBrandingHelper.get_default_branding()
+    html = render_onboarding_invite_email(branding, {"expires_days": 30})
+    assert "<!DOCTYPE html>" in html  # still a branded body
+    assert "Start onboarding" not in html  # no pill label without a link
+
+
+def test_ready_render_without_link_omits_cta_pill():
+    """A missing download_link drops the CTA rather than rendering a dead button."""
+    branding = TenantBrandingHelper.get_default_branding()
+    html = render_onboarding_ready_email(branding, {"expires_days": 7})
+    assert "<!DOCTYPE html>" in html
+    assert "Download documents" not in html
+
+
 # --------------------------------------------------------------------------
 # Wiring: queue_invite lands the branded HTML on the real EmailQueue row
 # --------------------------------------------------------------------------
