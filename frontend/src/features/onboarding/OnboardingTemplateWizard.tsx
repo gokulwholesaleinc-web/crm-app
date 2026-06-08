@@ -188,6 +188,10 @@ export function OnboardingTemplateWizard({
   const [restoreCandidate, setRestoreCandidate] = useState<OnboardingTemplate | null>(null);
 
   const objectUrlRef = useRef<string | null>(null);
+  // Synchronous double-submit guard: ``submitting`` state lags a render, so two
+  // fast clicks both read it false and both start the e-sign commit (the 2nd
+  // 422s on the unique name). A ref flips immediately, before React re-renders.
+  const inFlightRef = useRef(false);
   const nameInputRef = useRef<HTMLInputElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const headingRef = useRef<HTMLHeadingElement | null>(null);
@@ -377,7 +381,8 @@ export function OnboardingTemplateWizard({
   };
 
   const handleCreate = async () => {
-    if (!canCreate || submitting) return;
+    if (!canCreate || inFlightRef.current) return;
+    inFlightRef.current = true;
     setSubmitting(true);
     setCommitError(null);
     setNameError(null);
@@ -436,6 +441,7 @@ export function OnboardingTemplateWizard({
       await handleCommitError(err);
     } finally {
       setSubmitting(false);
+      inFlightRef.current = false;
     }
   };
 
@@ -482,9 +488,12 @@ export function OnboardingTemplateWizard({
       {/* Step indicator */}
       <ol className="mb-4 flex flex-wrap items-center gap-2 text-xs font-medium" aria-label="Wizard steps">
         {STEPS.map((s, i) => (
-          <li key={s.key} className="flex items-center gap-2">
+          <li
+            key={s.key}
+            aria-current={step === s.key ? 'step' : undefined}
+            className="flex items-center gap-2"
+          >
             <span
-              aria-current={step === s.key ? 'step' : undefined}
               className={STEP_PILL_CLASS[stepState(step === s.key, i < stepIndex)]}
             >
               {i + 1}. {s.label}
@@ -504,7 +513,7 @@ export function OnboardingTemplateWizard({
           <h2
             ref={headingRef}
             tabIndex={-1}
-            className="text-base font-semibold text-gray-900 dark:text-gray-100 focus:outline-none"
+            className="rounded-sm text-base font-semibold text-gray-900 dark:text-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
           >
             What kind of document is this?
           </h2>
@@ -518,7 +527,7 @@ export function OnboardingTemplateWizard({
           <h2
             ref={headingRef}
             tabIndex={-1}
-            className="text-base font-semibold text-gray-900 dark:text-gray-100 focus:outline-none"
+            className="rounded-sm text-base font-semibold text-gray-900 dark:text-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
           >
             Name this template
           </h2>
@@ -535,6 +544,10 @@ export function OnboardingTemplateWizard({
             autoComplete="off"
             placeholder="e.g. New client intake packet..."
             required
+            // Locked during the in-flight commit so the name can't change out
+            // from under the duplicate-name restore match (it keys off the name
+            // that was actually sent). Re-enabled in handleCreate's finally.
+            disabled={submitting}
             error={nameError ?? undefined}
           />
           {restoreCandidate && (
@@ -586,7 +599,7 @@ export function OnboardingTemplateWizard({
           <h2
             ref={headingRef}
             tabIndex={-1}
-            className="text-base font-semibold text-gray-900 dark:text-gray-100 focus:outline-none"
+            className="rounded-sm text-base font-semibold text-gray-900 dark:text-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
           >
             {isEsign ? 'Place the fields' : 'Build the form'}
           </h2>
@@ -675,7 +688,7 @@ export function OnboardingTemplateWizard({
           <h2
             ref={headingRef}
             tabIndex={-1}
-            className="text-base font-semibold text-gray-900 dark:text-gray-100 focus:outline-none"
+            className="rounded-sm text-base font-semibold text-gray-900 dark:text-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
           >
             Review &amp; create
           </h2>

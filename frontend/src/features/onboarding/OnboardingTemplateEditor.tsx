@@ -3,6 +3,7 @@ import {
   ArrowLeftIcon,
   ArrowRightIcon,
   ArrowPathIcon,
+  PlusIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline';
 import { GlobalWorkerOptions, getDocument } from 'pdfjs-dist';
@@ -218,6 +219,46 @@ export function OnboardingTemplateEditorBody({
     };
   }, []);
 
+  // Create a field of the active kind from a pixel box, select it. Shared by
+  // the pointer-drag path and the keyboard "Add field" path so both produce an
+  // identical field — the latter keeps the editor operable without a pointer
+  // (WCAG 2.1.1): a default box that arrow keys then position.
+  const addFieldFromBox = (box: DrawnBox) => {
+    if (!canvasSize) return;
+    const pdfBox = boxToPdfCoords(box, canvasSize.h);
+    const key = nextKey();
+    setFields((curr) =>
+      curr.concat({
+        _key: key,
+        id: nextFieldId(activeKind, curr),
+        kind: activeKind,
+        label: '',
+        description: '',
+        required: false,
+        prefill: null,
+        page: box.pageIdx + 1,
+        ...pdfBox,
+      }),
+    );
+    setSelectedKey(key);
+  };
+
+  // Keyboard field placement: drop a default-sized box near the top-left of the
+  // current page (then nudge it with the arrow keys). The only way to author an
+  // e-sign field without a pointer.
+  const addFieldAtDefault = () => {
+    if (!canvasSize) return;
+    const widthPx = Math.min(160, canvasSize.w * 0.4);
+    const heightPx = Math.min(44, canvasSize.h * 0.08);
+    addFieldFromBox({
+      pageIdx,
+      leftPx: clamp(canvasSize.w * 0.1, 0, canvasSize.w - widthPx),
+      topPx: clamp(canvasSize.h * 0.1, 0, canvasSize.h - heightPx),
+      widthPx,
+      heightPx,
+    });
+  };
+
   const handlePointerDown = (e: React.PointerEvent) => {
     if (!canvasSize) return;
     overlayRef.current?.setPointerCapture(e.pointerId);
@@ -246,23 +287,41 @@ export function OnboardingTemplateEditorBody({
       setDraftBox(null);
       return;
     }
-    const pdfBox = boxToPdfCoords(draftBox, canvasSize.h);
-    const id = nextFieldId(activeKind, fields);
-    const key = nextKey();
-    const newField: EditorField = {
-      _key: key,
-      id,
-      kind: activeKind,
-      label: '',
-      description: '',
-      required: false,
-      prefill: null,
-      page: draftBox.pageIdx + 1,
-      ...pdfBox,
-    };
-    setFields((curr) => curr.concat(newField));
-    setSelectedKey(key);
+    addFieldFromBox(draftBox);
     setDraftBox(null);
+  };
+
+  // Arrow keys move the focused field box; Shift+Arrow resizes it. Lets a
+  // keyboard user position a field after adding it (pairs with addFieldAtDefault
+  // to make the canvas fully operable without a pointer).
+  const NUDGE_PX = 6;
+  const nudgeField = (key: string, dx: number, dy: number, resize: boolean) => {
+    if (!canvasSize) return;
+    setFields((curr) =>
+      curr.map((f) => {
+        if (f._key !== key) return f;
+        const box = pdfCoordsToBox(f, canvasSize.h);
+        const next: DrawnBox = resize
+          ? {
+              ...box,
+              widthPx: clamp(box.widthPx + dx * NUDGE_PX, 8, canvasSize.w - box.leftPx),
+              heightPx: clamp(box.heightPx + dy * NUDGE_PX, 8, canvasSize.h - box.topPx),
+            }
+          : {
+              ...box,
+              leftPx: clamp(box.leftPx + dx * NUDGE_PX, 0, canvasSize.w - box.widthPx),
+              topPx: clamp(box.topPx + dy * NUDGE_PX, 0, canvasSize.h - box.heightPx),
+            };
+        return { ...f, ...boxToPdfCoords(next, canvasSize.h) };
+      }),
+    );
+  };
+
+  const ARROW_DELTAS: Record<string, [number, number]> = {
+    ArrowLeft: [-1, 0],
+    ArrowRight: [1, 0],
+    ArrowUp: [0, -1],
+    ArrowDown: [0, 1],
   };
 
   // --- Field edits ------------------------------------------------
@@ -328,8 +387,9 @@ export function OnboardingTemplateEditorBody({
   return (
     <div className="space-y-4">
       <p className="text-sm text-gray-500 dark:text-gray-400">
-        Pick a field type, then click and drag on the page to place it. Fill in
-        its label and options in the panel.
+        Pick a field type, then click and drag on the page to place it — or use
+        Add field and the arrow keys to position it. Fill in its label and
+        options in the panel.
       </p>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
@@ -361,16 +421,28 @@ export function OnboardingTemplateEditorBody({
           </Button>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Field type">
-          {FIELD_KINDS.map((kind) => (
-            <KindToggle
-              key={kind}
-              kind={kind}
-              activeKind={activeKind}
-              count={fields.filter((f) => f.kind === kind).length}
-              onClick={selectKind}
-            />
-          ))}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Field type">
+            {FIELD_KINDS.map((kind) => (
+              <KindToggle
+                key={kind}
+                kind={kind}
+                activeKind={activeKind}
+                count={fields.filter((f) => f.kind === kind).length}
+                onClick={selectKind}
+              />
+            ))}
+          </div>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={addFieldAtDefault}
+            disabled={!canvasSize || isLoadingDoc}
+            leftIcon={<PlusIcon className="h-4 w-4" aria-hidden="true" />}
+          >
+            Add {KIND_META[activeKind].label.toLowerCase()} field
+          </Button>
         </div>
       </div>
 
@@ -444,8 +516,17 @@ export function OnboardingTemplateEditorBody({
                               event.stopPropagation();
                               selectFieldByKey(field._key);
                             }}
-                            className="pointer-events-auto absolute inset-0"
-                            aria-label={`Select ${meta.label.toLowerCase()} field ${field.label || field.id}`}
+                            onKeyDown={(event) => {
+                              // Arrow keys move the box; Shift+Arrow resizes it.
+                              const d = ARROW_DELTAS[event.key];
+                              if (!d) return;
+                              event.preventDefault();
+                              if (field._key !== selectedKey)
+                                selectFieldByKey(field._key);
+                              nudgeField(field._key, d[0], d[1], event.shiftKey);
+                            }}
+                            className="pointer-events-auto absolute inset-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gray-900 dark:focus-visible:ring-white"
+                            aria-label={`Select ${meta.label.toLowerCase()} field ${field.label || field.id}. Use arrow keys to move, shift plus arrow keys to resize.`}
                           />
                           <button
                             type="button"

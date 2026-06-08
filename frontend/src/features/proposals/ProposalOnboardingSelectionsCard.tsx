@@ -29,6 +29,7 @@ import {
 } from '../../api/onboarding';
 import { showSuccess, showError } from '../../utils/toast';
 import { extractApiErrorDetail } from '../../utils/errors';
+import { templateSendReadiness } from '../onboarding/fieldKinds';
 import type {
   OnboardingTemplate,
   OnboardingProposalSelection,
@@ -69,11 +70,9 @@ export function ProposalOnboardingSelectionsCard({
 
   const selectableTemplates = useMemo<OnboardingTemplate[]>(
     () =>
-      (templates ?? []).filter((t) => {
-        if (!t.is_active) return false;
-        const isEsignPdf = (t.kind ?? 'esign_pdf') === 'esign_pdf';
-        return isEsignPdf ? t.has_pdf : t.field_definitions.length > 0;
-      }),
+      (templates ?? []).filter(
+        (t) => t.is_active && templateSendReadiness(t).ready,
+      ),
     [templates],
   );
 

@@ -166,14 +166,20 @@ export interface OnboardingPacketEmail {
   created_at: string;
 }
 
-/** Per-document summary in the staff packet detail view (NO field values). */
+/**
+ * Per-document summary in the staff packet detail view (NO field values).
+ * Mirrors the backend ``PacketDocumentSummary`` (``packet_schemas.py``): the
+ * completed artifact is fetched via ``attachment_id``; ``filled_pdf_error``
+ * carries a completion-stamp failure. (The backend sends no ``status``.)
+ */
 export interface OnboardingPacketDocumentSummary {
   id: number;
-  original_filename: string;
   display_order: number;
+  original_filename: string;
   requires_esign: boolean;
-  status: string;
+  attachment_id?: number | null;
   completed_at?: string | null;
+  filled_pdf_error?: string | null;
 }
 
 /**

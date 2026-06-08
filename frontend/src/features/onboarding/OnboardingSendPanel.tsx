@@ -21,6 +21,7 @@ import {
 } from '../../api/onboarding';
 import { showSuccess, showError } from '../../utils/toast';
 import { extractApiErrorDetail } from '../../utils/errors';
+import { templateSendReadiness } from './fieldKinds';
 import { isGmailReconnectSendError } from '../../utils/gmailSendError';
 import { GMAIL_SETTINGS_PATH } from '../../utils/integrationLinks';
 import { OnboardingPacketList, PACKETS_KEY } from './OnboardingPacketList';
@@ -107,16 +108,9 @@ export function OnboardingSendPanel({ templates }: OnboardingSendPanelProps) {
         // Mirror the backend's template_send_status gate so a standalone
         // (not-in-a-saved-packet) selection shows the same readiness the server
         // will enforce at create — otherwise canSend lies and Send 422s late.
-        // esign_pdf needs a PDF; a form kind (questionnaire/upload_request)
-        // needs at least one authored field (the D2 empty-form guard).
-        const isEsignPdf = (t.kind ?? 'esign_pdf') === 'esign_pdf';
-        const ready = isEsignPdf ? t.has_pdf : t.field_definitions.length > 0;
-        const reason = ready
-          ? undefined
-          : isEsignPdf
-            ? 'No PDF uploaded yet'
-            : 'No questions or fields yet';
-        map.set(t.id, { ready, reason });
+        // esign_pdf needs a PDF AND a signature field (H1); a form kind needs
+        // at least one authored field (the D2 empty-form guard).
+        map.set(t.id, templateSendReadiness(t));
       }
     }
     return map;
