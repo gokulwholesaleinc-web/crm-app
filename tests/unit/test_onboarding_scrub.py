@@ -250,7 +250,9 @@ async def test_resend_completion_notice_remints_working_link(
         assert "contact us" not in client_row.body.lower()
         # Resent notice is attributed to the packet owner (no fallback sender).
         assert client_row.sent_by_id == test_user.id
-        match = re.search(r"/onboarding/complete/(\S+)", client_row.body)
+        # The body is the branded HTML wrapper, so the link lives in the CTA
+        # href — match only the urlsafe download token (stop at the quote).
+        match = re.search(r"/onboarding/complete/([A-Za-z0-9_-]+)", client_row.body)
         assert match, client_row.body
         assert tokens.hash_token(match.group(1)) == packet.download_token_hash
 

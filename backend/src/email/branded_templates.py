@@ -195,12 +195,13 @@ class TenantBrandingHelper:
     """Fetches and provides tenant branding for templates."""
 
     @staticmethod
-    async def get_branding_for_user(db: AsyncSession, user_id: int) -> dict:
+    async def get_branding_for_user(db: AsyncSession, user_id: int | None) -> dict:
         """Get branding dict from user's primary tenant.
 
         Queries TenantUser -> Tenant -> TenantSettings and returns a flat
         dictionary of branding values.  Falls back to defaults when no
-        tenant or settings are found.
+        tenant or settings are found — including when ``user_id`` is None (an
+        owner-less packet still renders the default-branded e-mail).
         """
         # Prefer the primary TenantUser row, but fall back to any tenant
         # the user belongs to. `is_primary` defaults to False at the DB
@@ -812,6 +813,71 @@ def render_proposal_email(branding: dict, proposal_data: dict) -> tuple[str, str
         cta_url=view_url,
     )
     return subject, html
+
+
+# ---------------------------------------------------------------------------
+# Onboarding e-mails (invite + completion download)
+# ---------------------------------------------------------------------------
+
+def render_onboarding_invite_email(branding: dict, data: dict) -> str:
+    """Branded HTML body for the onboarding INVITE e-mail.
+
+    Returns the wrapped HTML only — the caller owns the subject line so the
+    invite's idempotency key (``INVITE_SUBJECT``) stays stable. Mirrors the
+    proposal e-mail: a greeting, a one-line ask, a verify/expiry note, and a
+    branded CTA pill to the access link.
+
+    Expected ``data`` keys: ``recipient_name`` (optional), ``access_link``,
+    ``expires_days`` (optional, default 30).
+    """
+    company = escape(branding.get("company_name", "CRM"))
+    name = escape(str(data.get("recipient_name") or "").strip())
+    expires_days = int(data.get("expires_days") or 30)
+    access_link = data.get("access_link")
+    greeting = f"<p>Hi {name},</p>" if name else "<p>Hi there,</p>"
+    body_html = f"""\
+{greeting}
+<p>You have onboarding documents from {company} to review and complete. Click the button below to get started.</p>
+<p style="color:#6b7280;font-size:13px;">You'll be asked to verify your email before you can fill them in. This link expires in {expires_days} days.</p>"""
+    return render_branded_email(
+        branding=branding,
+        subject="Complete your onboarding",
+        headline="Complete your onboarding",
+        body_html=body_html,
+        # Omit the pill when there's no link rather than render a "click the
+        # button" body with no button (matches the sibling renderers).
+        cta_text="Start onboarding" if access_link else None,
+        cta_url=access_link,
+    )
+
+
+def render_onboarding_ready_email(branding: dict, data: dict) -> str:
+    """Branded HTML body for the client "documents are ready" download e-mail.
+
+    Returns the wrapped HTML only — the caller owns the subject line
+    (``CLIENT_READY_SUBJECT``) so the completion-notice idempotency key stays
+    stable. The download link becomes a branded CTA pill.
+
+    Expected ``data`` keys: ``download_link``, ``expires_days`` (optional,
+    default 7).
+    """
+    company = escape(branding.get("company_name", "CRM"))
+    download_link = data.get("download_link")
+    expires_days = int(data.get("expires_days") or 7)
+    body_html = f"""\
+<p>Thank you for completing your onboarding with {company}.</p>
+<p>Your signed documents are ready — click the button below to download them.</p>
+<p style="color:#6b7280;font-size:13px;">This link expires in {expires_days} days.</p>"""
+    return render_branded_email(
+        branding=branding,
+        subject="Your onboarding documents are ready",
+        headline="Your documents are ready",
+        body_html=body_html,
+        # Omit the pill when there's no link rather than render a "click the
+        # button" body with no button (matches the sibling renderers).
+        cta_text="Download documents" if download_link else None,
+        cta_url=download_link,
+    )
 
 
 # ---------------------------------------------------------------------------
