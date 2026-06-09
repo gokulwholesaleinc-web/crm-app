@@ -109,6 +109,7 @@ export interface DayOfWeekResponse {
 export interface BreakdownRow {
   date: string;
   platform: string;
+  currency: string | null;
   spend: Numish;
   impressions: number;
   clicks: number;

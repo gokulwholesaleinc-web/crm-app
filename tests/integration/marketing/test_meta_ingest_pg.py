@@ -166,3 +166,18 @@ async def test_meta_rerun_is_idempotent(pg_session, monkeypatch):
     ).scalar_one()
 
     assert after_first == after_second  # restated, not duplicated (A2)
+
+
+async def test_meta_fails_closed_without_app_secret(pg_session, monkeypatch):
+    # appsecret_proof fail-closed: with MKTG_META_ENABLED on but META_APP_SECRET unset
+    # and no injected seam, the real Meta client path must refuse (missing_config),
+    # not call Meta without the proof.
+    monkeypatch.setattr(settings, "MKTG_META_ENABLED", True)
+    monkeypatch.setattr(settings, "META_APP_SECRET", "")
+    _company, conn = await _seed(pg_session)
+    run = await run_connection_sync(
+        pg_session, conn, run_type="daily", window_start=WINDOW_START, window_end=WINDOW_END,
+    )
+    await pg_session.commit()
+    assert run.status == "error"
+    assert run.error_class == "missing_config"

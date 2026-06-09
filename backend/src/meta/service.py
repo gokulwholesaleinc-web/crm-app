@@ -53,6 +53,12 @@ class MetaService:
             raise crypto.MetaCryptoError(
                 "META_TOKEN_KEY must be set when META_TOKEN_ENCRYPTION_STRICT is on."
             )
+        else:
+            # Expand phase with no key: CLEAR any prior ciphertext so the freshly
+            # written plaintext is authoritative. Otherwise a stale ciphertext (from
+            # when the key was set) would win on read and return the OLD token (C4-1).
+            credential.access_token_ciphertext = None
+            credential.token_key_version = None
         credential.access_token = None if strict else token
 
     @staticmethod
@@ -84,9 +90,11 @@ class MetaService:
 
     async def exchange_code(self, code: str, redirect_uri: str, user_id: int) -> MetaCredential:
         """Exchange authorization code for a long-lived access token."""
-        # Short-lived token
+        # POST (not GET) so client_secret + the token never ride in the query string
+        # — on a 4xx, httpx's error string embeds the full URL and it surfaces in the
+        # HTTPException detail + logs (C4-3). Meta's token endpoint accepts form POST.
         async with httpx.AsyncClient() as client:
-            response = await client.get(META_TOKEN_URL, params={
+            response = await client.post(META_TOKEN_URL, data={
                 "client_id": settings.META_APP_ID,
                 "client_secret": settings.META_APP_SECRET,
                 "redirect_uri": redirect_uri,
@@ -96,7 +104,7 @@ class MetaService:
             short_token_data = response.json()
 
             # Exchange for long-lived token (60 days)
-            ll_response = await client.get(META_TOKEN_URL, params={
+            ll_response = await client.post(META_TOKEN_URL, data={
                 "grant_type": "fb_exchange_token",
                 "client_id": settings.META_APP_ID,
                 "client_secret": settings.META_APP_SECRET,
@@ -150,19 +158,34 @@ class MetaService:
         if not credential or not credential.is_active:
             return {"connected": False, "scopes": None, "token_expiry": None, "pages": []}
 
-        pages = []
+        pages: list[dict[str, Any]] = []
+        token_error = False
+        # C4-2: a decrypt failure (key rotated out / removed / corrupt) must NOT be
+        # swallowed as a green "connected, 0 pages". Surface it distinctly so the
+        # admin sees the credential is unreadable, not merely page-less.
         try:
             token = self._effective_token(credential)
-            if token:
+        except crypto.MetaCryptoError:
+            logger.error(
+                "Meta token for user %s could not be decrypted (META_TOKEN_KEY "
+                "rotated/removed/corrupt?) — credential is unreadable.",
+                user_id,
+            )
+            token = None
+            token_error = True
+
+        if token:
+            try:
                 pages = await self._fetch_user_pages(token)
-        except Exception as e:
-            logger.warning("Failed to fetch pages for user %s: %s", user_id, e)
+            except Exception as e:
+                logger.warning("Failed to fetch pages for user %s: %s", user_id, e)
 
         return {
             "connected": True,
             "scopes": credential.scopes,
             "token_expiry": credential.token_expiry,
             "pages": pages,
+            "token_error": token_error,
         }
 
     # =========================================================================

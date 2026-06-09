@@ -77,11 +77,52 @@ async def backfill_meta_tokens(session: AsyncSession, *, batch_size: int = 100) 
     return {"encrypted": encrypted}
 
 
+async def strict_readiness(session: AsyncSession) -> dict[str, int]:
+    """Operator gates for the C4 contract steps (C4-4 / C4-5).
+
+    Returns counts that MUST be 0 before the irreversible steps:
+      * ``plaintext_only`` — rows readable only via plaintext (ciphertext NULL but
+        access_token set). Flipping META_TOKEN_ENCRYPTION_STRICT while >0 makes those
+        Meta connections silently unreadable (the runtime fails closed, recoverable).
+      * ``nonempty_page_access_tokens`` — rows whose dead page_access_tokens column is
+        non-NULL. The future plaintext-DROP migration must NOT run while >0, or those
+        are silently-dropped plaintext secrets.
+    """
+    plaintext_only = (
+        await session.execute(
+            select(func.count())
+            .select_from(MetaCredential)
+            .where(
+                MetaCredential.access_token_ciphertext.is_(None),
+                MetaCredential.access_token.isnot(None),
+                func.length(MetaCredential.access_token) > 0,
+            )
+        )
+    ).scalar_one()
+    nonempty_pages = (
+        await session.execute(
+            select(func.count())
+            .select_from(MetaCredential)
+            .where(MetaCredential.page_access_tokens.isnot(None))
+        )
+    ).scalar_one()
+    return {"plaintext_only": plaintext_only, "nonempty_page_access_tokens": nonempty_pages}
+
+
 async def main() -> None:
     logging.basicConfig(level=logging.INFO)
     async with async_session_maker() as session:
         result = await backfill_meta_tokens(session)
+        gates = await strict_readiness(session)
     logger.info("Meta token backfill complete: %d encrypted", result["encrypted"])
+    logger.info(
+        "STRICT-readiness: %d plaintext-only remaining (must be 0 before flipping "
+        "META_TOKEN_ENCRYPTION_STRICT); %d non-empty page_access_tokens (must be 0 "
+        "before the plaintext-drop migration).",
+        gates["plaintext_only"], gates["nonempty_page_access_tokens"],
+    )
+    if gates["plaintext_only"]:
+        logger.warning("NOT STRICT-ready: %d Meta credential(s) still plaintext-only.", gates["plaintext_only"])
 
 
 if __name__ == "__main__":

@@ -14,7 +14,8 @@ Design:
   (``invalid_grant`` / OAuth-190 / 4xx) → ``needs_reauth`` / ``error``.
 * REST endpoints only — NO google-ads / google-analytics-data / grpc deps. GA4
   ``analyticsdata v1beta :runReport``; GSC ``webmasters v3 searchAnalytics:query``;
-  Google Ads ``v20 …:searchStream``; PageSpeed ``pagespeedonline/v5`` (API key).
+  Google Ads ``v24 …:searchStream``; Meta Graph ``v25.0``; PageSpeed
+  ``pagespeedonline/v5`` (API key).
 """
 
 from __future__ import annotations
@@ -140,6 +141,22 @@ def _is_google_resource_exhausted(response: httpx.Response) -> bool:
     return bool(err) and err.get("status") == "RESOURCE_EXHAUSTED"
 
 
+# Meta Graph error codes that are TRANSIENT (rate limits / temporary), not auth
+# failures — returned with a 4xx, so without this they'd fall into the generic
+# permanent-4xx bucket and flip a healthy connection to error/needs_reauth.
+_META_TRANSIENT_CODES = frozenset({1, 2, 4, 17, 32, 341, 613, 80000, 80001, 80002, 80003, 80004})
+
+
+def _is_meta_transient(response: httpx.Response) -> bool:
+    """A Meta Graph rate-limit / temporary error (code in the transient set)."""
+    try:
+        body = response.json()
+    except (ValueError, httpx.DecodingError):
+        return False
+    err = body.get("error") if isinstance(body, dict) else None
+    return isinstance(err, dict) and err.get("code") in _META_TRANSIENT_CODES
+
+
 def _classify_oauth(response: httpx.Response) -> PermanentError | None:
     """Map a 400/401 body to a credential-revocation error (B5), else ``None``.
 
@@ -219,6 +236,17 @@ async def request_with_retry(
         oauth = _classify_oauth(response)
         if oauth is not None:
             raise oauth
+
+        # Meta returns 4xx for rate limits / temporary errors — retry with backoff,
+        # don't let them flip the connection to error/needs_reauth.
+        if _is_meta_transient(response):
+            last_transient = TransientError(
+                "Meta rate limit / transient error",
+                status_code=response.status_code,
+                error_class="meta_transient",
+            )
+            await asyncio.sleep(_full_jitter_backoff(attempt, _parse_retry_after(response)))
+            continue
 
         if response.status_code >= 500:
             last_transient = TransientError(

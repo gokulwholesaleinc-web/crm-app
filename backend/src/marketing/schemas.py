@@ -297,6 +297,7 @@ class SiteHealthResponse(BaseModel):
 class BreakdownRow(BaseModel):
     date: date
     platform: str
+    currency: str | None = None  # this row's account currency (FE-1: per-row, multi-currency)
     spend: Decimal
     impressions: int
     clicks: int

@@ -249,3 +249,41 @@ class TestSsrfAlternateEncodings:
     def test_public_host_and_ip_allowed(self):
         assert _validate_public_url("https://www.example.com/") == "https://www.example.com/"
         assert _validate_public_url("https://8.8.8.8/") == "https://8.8.8.8/"
+
+
+class TestMetaTransientClassification:
+    """Meta returns 4xx for rate limits — these must classify TRANSIENT, not flip the
+    connection to needs_reauth/error (MEDIUM)."""
+
+    def test_rate_limit_codes_are_transient(self):
+        from src.marketing.ingest.http_client import _is_meta_transient
+        for code in (1, 2, 4, 17, 613, 80004):
+            assert _is_meta_transient(httpx.Response(400, json={"error": {"code": code}})) is True
+
+    def test_oauth_190_and_plain_4xx_are_not_transient(self):
+        from src.marketing.ingest.http_client import _is_meta_transient
+        assert _is_meta_transient(httpx.Response(400, json={"error": {"code": 190}})) is False
+        assert _is_meta_transient(httpx.Response(404, json={"foo": "bar"})) is False
+
+
+class TestMetaCursorPaging:
+    async def test_fetch_paged_follows_after_cursor(self):
+        pages = [
+            {"data": [{"id": "1"}], "paging": {"next": "u2", "cursors": {"after": "C1"}}},
+            {"data": [{"id": "2"}], "paging": {}},
+        ]
+
+        class _Seq:
+            def __init__(self):
+                self.i = 0
+
+            async def get(self, url, params=None):
+                page = pages[min(self.i, len(pages) - 1)]
+                self.i += 1
+                return page
+
+            async def post(self, url, params=None):
+                return {}
+
+        out = await meta_ads._fetch_paged(_Seq(), "https://x/insights", {"limit": 1})
+        assert [r["id"] for r in out] == ["1", "2"]  # both pages collected via after-cursor

@@ -762,6 +762,11 @@ async def breakdown(
             select(
                 AdsDailyMetric.date,
                 AdsDailyMetric.platform,
+                # FE-1: group by currency too so each (date, platform) row carries its
+                # own currency — the breakdown is the only paid panel rendered under a
+                # multi-currency client, so it must label money correctly (mirrors
+                # allocation's per-slice currency), not with one client-wide currency.
+                AdsDailyMetric.currency,
                 func.coalesce(func.sum(AdsDailyMetric.spend), 0),
                 func.coalesce(func.sum(AdsDailyMetric.impressions), 0),
                 func.coalesce(func.sum(AdsDailyMetric.clicks), 0),
@@ -774,17 +779,18 @@ async def breakdown(
                 AdsDailyMetric.date >= date_from,
                 AdsDailyMetric.date <= date_to,
             )
-            .group_by(AdsDailyMetric.date, AdsDailyMetric.platform)
+            .group_by(AdsDailyMetric.date, AdsDailyMetric.platform, AdsDailyMetric.currency)
             .order_by(AdsDailyMetric.date.desc(), AdsDailyMetric.platform)
         )
     ).all()
 
     out: list[dict] = []
-    for d, platform, spend, impressions, clicks, conversions, conversion_value in rows:
+    for d, platform, currency, spend, impressions, clicks, conversions, conversion_value in rows:
         out.append(
             {
                 "date": d,
                 "platform": platform,
+                "currency": currency,
                 **_ads_metrics(
                     spend, impressions, clicks, conversions, conversion_value,
                     cost_per_conversion=True,

@@ -125,9 +125,11 @@ def _meta_seam(connection: PlatformConnection, http_client: Any | None) -> MetaS
         return http_client
     from src.config import settings
 
-    # appsecret_proof needs the app secret; if unset Meta calls go without proof
-    # (works unless the app requires proof — flagged as a deploy gate in the report).
-    return MetaClient(_access_token(connection), settings.META_APP_SECRET or None)
+    # Fail closed: appsecret_proof needs the app secret. Since meta_ads only ingests
+    # when MKTG_META_ENABLED, require it here rather than silently calling Meta without
+    # the proof (an app with the proof setting on would reject every call).
+    app_secret = _require(connection, settings.META_APP_SECRET, "Meta app secret")
+    return MetaClient(_access_token(connection), app_secret)
 
 
 async def _sync_google_ads(

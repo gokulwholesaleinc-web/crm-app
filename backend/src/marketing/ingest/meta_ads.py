@@ -52,9 +52,11 @@ _DEFAULT_POLL_INTERVAL = 2.0  # seconds between async-status polls
 _DEFAULT_MAX_POLLS = 30  # ~60s ceiling; daily/settling windows complete fast
 
 # Insight fields requested at the ad-set grain (one row per adset per day).
+# purchase_roas is requested as the conversion-value fallback for value-optimized /
+# Advantage+ accounts, which report revenue via ROAS rather than action_values (M-2).
 _INSIGHT_FIELDS = (
     "campaign_id,campaign_name,adset_id,adset_name,"
-    "spend,impressions,clicks,reach,actions,action_values"
+    "spend,impressions,clicks,reach,actions,action_values,purchase_roas"
 )
 
 # Meta effective_status → the dim's canonical token (reads.campaigns counts
@@ -246,6 +248,13 @@ def map_meta_ads(
         reach = _int(row.get("reach")) if row.get("reach") not in (None, "") else None
         purchases = _purchase_value(row.get("actions"))
         conversion_value = _purchase_value(row.get("action_values"))
+        # M-2: value-optimized / Advantage+ accounts report revenue as purchase_roas
+        # (value÷spend), not action_values — without this fallback they'd record real
+        # spend with $0 conversion_value and look healthy. Derive value = roas × spend.
+        if conversion_value == 0 and purchases > 0:
+            roas = _purchase_value(row.get("purchase_roas"))
+            if roas > 0:
+                conversion_value = q6(roas * spend)
         conversions = purchases  # Meta's primary conversion for this dashboard
 
         ads.append(

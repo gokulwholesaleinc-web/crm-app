@@ -79,6 +79,19 @@ class TestStoreAccessToken:
         with pytest.raises(crypto.MetaCryptoError):
             MetaService._store_access_token(MetaCredential(user_id=1), "tok-123")
 
+    def test_expand_without_key_clears_stale_ciphertext(self, monkeypatch):
+        # C4-1: a reconnect while the key is unset must clear a prior ciphertext, else
+        # _effective_token would prefer the STALE ciphertext and return the old token.
+        monkeypatch.setenv(crypto.ENV_VAR, crypto.generate_key())
+        old_ct, _ = crypto.encrypt_token("OLD")
+        monkeypatch.delenv(crypto.ENV_VAR, raising=False)  # key now unset
+        monkeypatch.setattr(settings, "META_TOKEN_ENCRYPTION_STRICT", False)
+        cred = MetaCredential(user_id=1, access_token="OLD", access_token_ciphertext=old_ct, token_key_version=1)
+        MetaService._store_access_token(cred, "NEW")
+        assert cred.access_token == "NEW"
+        assert cred.access_token_ciphertext is None and cred.token_key_version is None
+        assert MetaService._effective_token(cred) == "NEW"  # not the stale "OLD"
+
 
 class TestEffectiveToken:
     def test_prefers_ciphertext(self, meta_key, monkeypatch):
@@ -132,3 +145,37 @@ class TestBackfill:
         assert result["encrypted"] == 0
         await db_session.refresh(cred)
         assert cred.access_token_ciphertext is None
+
+
+class TestDecryptFailureSurfaced:
+    async def test_undecryptable_token_sets_token_error_not_silent(self, db_session, test_superuser, monkeypatch):
+        # C4-2: a ciphertext encrypted under a DIFFERENT key must surface token_error,
+        # NOT a green connected/0-pages. Encrypt under key A, then switch to key B.
+        monkeypatch.setenv(crypto.ENV_VAR, crypto.generate_key())
+        ct, ver = crypto.encrypt_token("tok")
+        cred = MetaCredential(
+            user_id=test_superuser.id, access_token=None,
+            access_token_ciphertext=ct, token_key_version=ver, is_active=True,
+        )
+        db_session.add(cred)
+        await db_session.commit()
+        monkeypatch.setenv(crypto.ENV_VAR, crypto.generate_key())  # key rotated → can't decrypt
+        monkeypatch.setattr(settings, "META_TOKEN_ENCRYPTION_STRICT", True)
+
+        status = await MetaService(db_session).get_connection_status(test_superuser.id)
+        assert status["connected"] is True
+        assert status["token_error"] is True  # decrypt failure surfaced, not swallowed
+        assert status["pages"] == []
+
+
+class TestStrictReadiness:
+    async def test_counts_plaintext_only_and_pages(self, meta_key, db_session, test_superuser):
+        from scripts.backfill_meta_token_encryption import strict_readiness
+        cred = MetaCredential(user_id=test_superuser.id, access_token="legacy")  # plaintext-only
+        db_session.add(cred)
+        await db_session.commit()
+        gates = await strict_readiness(db_session)
+        assert gates["plaintext_only"] == 1  # NOT strict-ready until backfilled
+        # after backfill, 0 remain
+        await backfill_meta_tokens(db_session)
+        assert (await strict_readiness(db_session))["plaintext_only"] == 0

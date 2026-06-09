@@ -7,6 +7,7 @@ function row(over: Partial<BreakdownRow>): BreakdownRow {
   return {
     date: '2026-06-01',
     platform: 'google_ads',
+    currency: 'USD',
     spend: '100',
     impressions: 1000,
     clicks: 50,

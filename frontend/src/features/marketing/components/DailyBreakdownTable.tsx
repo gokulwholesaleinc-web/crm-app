@@ -72,7 +72,9 @@ export function DailyBreakdownTable({ rows, currency }: Props) {
                 <td className="px-3 py-2 text-gray-700 dark:text-gray-300">{formatDate(r.date)}</td>
                 <td className="px-3 py-2 text-gray-700 dark:text-gray-300">{platformLabel(r.platform)}</td>
                 <td className="px-3 py-2 text-right tabular-nums text-gray-700 dark:text-gray-300">
-                  {formatCurrency(r.spend, currency)}
+                  {/* FE-1: use the row's own currency (multi-currency clients), not one
+                      client-wide currency, so EUR spend isn't labelled '$'. */}
+                  {formatCurrency(r.spend, r.currency ?? currency)}
                 </td>
                 <td className="px-3 py-2 text-right tabular-nums text-gray-700 dark:text-gray-300">
                   {formatNumber(r.clicks)}

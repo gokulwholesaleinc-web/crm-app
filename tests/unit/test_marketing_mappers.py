@@ -205,6 +205,24 @@ class TestMetaAdsMapper:
         )
         assert ads == [] and campaigns == [] and adgroups == []
 
+    def test_conversion_value_falls_back_to_purchase_roas(self):
+        # M-2: value-optimized / Advantage+ accounts report revenue via purchase_roas,
+        # not action_values — derive value = roas × spend so it's not a silent $0.
+        payload = {
+            "insights": [{
+                "date_start": "2026-06-01", "campaign_id": "1", "adset_id": "9",
+                "spend": "100.00", "impressions": "10", "clicks": "5",
+                "actions": [{"action_type": "omni_purchase", "value": "4"}],
+                "action_values": [],  # no value reported here
+                "purchase_roas": [{"action_type": "omni_purchase", "value": "2.5"}],
+            }],
+            "campaigns": [], "adsets": [],
+        }
+        ads, _, _ = meta_ads.map_meta_ads(payload, connection_id=7, company_id=3, currency="USD")
+        adset = next(r for r in ads if r.entity_level == "adgroup")
+        assert adset.conversions == Decimal("4")
+        assert adset.conversion_value == Decimal("250")  # roas 2.5 × spend 100
+
     def test_missing_insights_envelope_raises_drift(self):
         for drifted in ({}, {"error": {"code": 190}}, {"insights": {"data": []}}):
             with pytest.raises(UnmappableShapeError):
