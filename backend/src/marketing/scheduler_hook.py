@@ -26,7 +26,7 @@ import src.database as db_module
 from src.config import settings
 
 from . import alerts, cache
-from .ingest import health, run_connection_sync, settling
+from .ingest import SUPPORTED_PLATFORMS, health, run_connection_sync, settling
 from .models import PlatformConnection
 
 logger = logging.getLogger(__name__)
@@ -43,12 +43,24 @@ DAILY_LOOKBACK_DAYS = 3
 SYNCABLE_STATUSES = ("active", "pending", "error")
 
 
+def _allowed_platforms() -> set[str]:
+    """Platforms eligible for the daily sync: the wired set, minus phase-gated ones.
+
+    meta_ads is excluded until MKTG_META_ENABLED so a created-but-dark Meta
+    connection isn't selected (no burned error runs / no daily health flip)."""
+    allowed = set(SUPPORTED_PLATFORMS)
+    if not settings.MKTG_META_ENABLED:
+        allowed.discard("meta_ads")
+    return allowed
+
+
 async def _syncable_connections() -> list[PlatformConnection]:
     async with db_module.async_session_maker() as session:
         rows = await session.execute(
             select(PlatformConnection).where(
                 PlatformConnection.is_enabled.is_(True),
                 PlatformConnection.status.in_(SYNCABLE_STATUSES),
+                PlatformConnection.platform.in_(_allowed_platforms()),
             )
         )
         return list(rows.scalars().all())

@@ -182,3 +182,41 @@ def count_ads(connection_id):
     return select(func.count()).select_from(AdsDailyMetric).where(
         AdsDailyMetric.connection_id == connection_id
     )
+
+
+class TestMetaPhaseGate:
+    """meta_ads admin actions stay dark behind MKTG_META_ENABLED (Business-Verification gated)."""
+
+    async def test_create_meta_blocked_when_flag_off(self, client, superuser_token, test_company, monkeypatch):
+        from src.config import settings
+        monkeypatch.setattr(settings, "MKTG_META_ENABLED", False)
+        r = await _create(
+            client, _admin(superuser_token), test_company.id,
+            platform="meta_ads", external_account_id="act_222", credential_mode="system_user",
+        )
+        assert r.status_code == 422
+
+    async def test_create_meta_allowed_when_flag_on(self, client, superuser_token, test_company, monkeypatch):
+        from src.config import settings
+        monkeypatch.setattr(settings, "MKTG_META_ENABLED", True)
+        r = await _create(
+            client, _admin(superuser_token), test_company.id,
+            platform="meta_ads", external_account_id="act_222", credential_mode="system_user",
+        )
+        assert r.status_code == 201
+        assert r.json()["external_account_id"] == "act_222"  # A10 normalized
+
+    async def test_refresh_meta_blocked_when_flag_off(self, client, superuser_token, test_company, monkeypatch):
+        from src.config import settings
+        # create it while enabled, then turn Meta off and try to refresh
+        monkeypatch.setattr(settings, "MKTG_META_ENABLED", True)
+        cid = (await _create(
+            client, _admin(superuser_token), test_company.id,
+            platform="meta_ads", external_account_id="act_222", credential_mode="system_user",
+        )).json()["id"]
+        monkeypatch.setattr(settings, "MKTG_META_ENABLED", False)
+        r = await client.post(
+            f"/api/marketing/admin/companies/{test_company.id}/connections/{cid}/refresh",
+            headers=_admin(superuser_token),
+        )
+        assert r.status_code == 422

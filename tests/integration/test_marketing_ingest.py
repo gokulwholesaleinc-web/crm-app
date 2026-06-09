@@ -149,3 +149,20 @@ class TestRetryAfterParsing:
 
     def test_missing_header(self):
         assert _parse_retry_after(httpx.Response(429)) is None
+
+
+class TestSchedulerPlatformGate:
+    """meta_ads is excluded from the daily selection until MKTG_META_ENABLED."""
+
+    def test_meta_excluded_when_flag_off(self, monkeypatch):
+        from src.config import settings
+        from src.marketing.scheduler_hook import _allowed_platforms
+        monkeypatch.setattr(settings, "MKTG_META_ENABLED", False)
+        assert "meta_ads" not in _allowed_platforms()
+        assert "google_ads" in _allowed_platforms()
+
+    def test_meta_included_when_flag_on(self, monkeypatch):
+        from src.config import settings
+        from src.marketing.scheduler_hook import _allowed_platforms
+        monkeypatch.setattr(settings, "MKTG_META_ENABLED", True)
+        assert "meta_ads" in _allowed_platforms()

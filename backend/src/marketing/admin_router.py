@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import delete, select
 
 from src.auth.models import User
+from src.config import settings
 from src.core.constants import HTTPStatus
 from src.core.permissions import require_admin
 from src.core.router_utils import DBSession
@@ -147,6 +148,18 @@ def _audit(session, connection: PlatformConnection, *, action: str, user_id: int
     )
 
 
+def _require_platform_enabled(platform: str) -> None:
+    """Block create/refresh of a phase-gated platform while it's dark.
+
+    meta_ads is admin-creatable in code but stays behind MKTG_META_ENABLED (Business
+    Verification gated) so connections aren't wired/synced before Meta access lands."""
+    if platform == "meta_ads" and not settings.MKTG_META_ENABLED:
+        raise HTTPException(
+            HTTPStatus.UNPROCESSABLE_ENTITY,
+            "meta_ads is not enabled yet (MKTG_META_ENABLED is off)",
+        )
+
+
 async def _scoped_connection(db, company_id: int, connection_id: int) -> PlatformConnection:
     """Load a connection and assert it belongs to ``company_id`` (M-idor).
 
@@ -185,6 +198,7 @@ async def create_connection(
         raise HTTPException(HTTPStatus.UNPROCESSABLE_ENTITY, f"unknown platform '{body.platform}'")
     if body.credential_mode not in CREDENTIAL_MODES:
         raise HTTPException(HTTPStatus.UNPROCESSABLE_ENTITY, f"unknown credential_mode '{body.credential_mode}'")
+    _require_platform_enabled(body.platform)
 
     from src.companies.models import Company
 
@@ -292,6 +306,7 @@ async def refresh_connection(
     """Sync now: run the daily lookback (+ settling for ad platforms), then
     invalidate the client's cached reads so the dashboard updates immediately."""
     connection = await _scoped_connection(db, company_id, connection_id)
+    _require_platform_enabled(connection.platform)
 
     today = date.today()
     daily_end = today - timedelta(days=1)
