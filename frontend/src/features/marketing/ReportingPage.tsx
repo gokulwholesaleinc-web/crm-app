@@ -20,16 +20,18 @@ import { DailyBreakdownTable } from './components/DailyBreakdownTable';
 import { DataTrustBadge } from './components/DataTrustBadge';
 import { KpiCard } from './components/KpiCard';
 import { QueryPanel } from './components/QueryPanel';
+import { SocialTab } from './components/SocialTab';
 import { WebsiteAnalyticsTab } from './components/WebsiteAnalyticsTab';
 import { formatCardValue, toKpiDelta } from './utils/cardMapping';
 import { isValidPreset, PRESET_LABELS, presetRange, type RangePreset } from './utils/dateRange';
 import { syncToSources } from './utils/syncToSources';
 
-type TabKey = 'paid' | 'analytics' | 'campaigns';
+type TabKey = 'paid' | 'analytics' | 'campaigns' | 'social';
 const TABS: Array<{ key: TabKey; label: string }> = [
   { key: 'paid', label: 'Paid Media' },
   { key: 'analytics', label: 'Website Analytics' },
   { key: 'campaigns', label: 'Campaigns' },
+  { key: 'social', label: 'Social' },
 ];
 const TAB_KEYS: readonly string[] = TABS.map((t) => t.key);
 
@@ -122,8 +124,10 @@ export default function ReportingPage() {
         <PaidMediaTab companyId={effectiveCompanyId} preset={preset} />
       ) : tab === 'analytics' ? (
         <WebsiteAnalyticsTab companyId={effectiveCompanyId} preset={preset} />
-      ) : (
+      ) : tab === 'campaigns' ? (
         <CampaignsTab companyId={effectiveCompanyId} preset={preset} />
+      ) : (
+        <SocialTab companyId={effectiveCompanyId} preset={preset} />
       )}
     </div>
   );
