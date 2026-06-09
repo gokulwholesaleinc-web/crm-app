@@ -73,6 +73,7 @@ from src.integrations.google_calendar import models as google_calendar_models
 from src.integrations.mailchimp import models as mailchimp_models
 from src.leads import models as lead_models
 from src.leads.models import Lead, LeadSource
+from src.marketing import models as marketing_models
 from src.meta import models as meta_models
 from src.notifications import models as notification_models
 from src.onboarding import models as onboarding_models
@@ -115,6 +116,7 @@ _MODEL_REGISTRY_IMPORTS = (
     google_calendar_models,
     lead_models,
     mailchimp_models,
+    marketing_models,
     meta_models,
     notification_models,
     onboarding_models,

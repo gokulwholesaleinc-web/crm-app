@@ -55,6 +55,34 @@ class Settings(BaseSettings):
     MAILCHIMP_API_KEY: str = ""
     MAILCHIMP_DEFAULT_AUDIENCE_ID: str = ""
 
+    # ── Marketing Analytics (in-CRM ads/analytics warehouse) ──────────────
+    # Dedicated Fernet key for platform OAuth/token encryption at rest. NEVER
+    # reuse SECRET_KEY or ONBOARDING_FIELD_KEY (blast-radius isolation, D-cluster).
+    # Comma-separated for MultiFernet rotation; fail-closed if a token is handled
+    # while unset. Verified at use in marketing/crypto.py.
+    MARKETING_TOKEN_KEY: str = ""
+    # Separate Google Cloud OAuth client for marketing scopes (adwords +
+    # analytics.readonly + webmasters.readonly) — MANDATORY per C3; kept out of
+    # the Gmail/Calendar client so its restricted-scope CASA review is untouched.
+    GOOGLE_MARKETING_CLIENT_ID: str = ""
+    GOOGLE_MARKETING_CLIENT_SECRET: str = ""
+    GOOGLE_ADS_DEVELOPER_TOKEN: str = ""
+    GOOGLE_ADS_LOGIN_CUSTOMER_ID: str = ""  # Link Creative MCC, digits only
+    PAGESPEED_API_KEY: str = ""
+    # Dedicated Meta token key for the plaintext→encrypted retrofit (C4).
+    META_TOKEN_KEY: str = ""
+
+    # Feature flags — every marketing surface ships behind one; defaults keep
+    # approval-gated and dormant platforms DARK so the module is safe to deploy
+    # before access lands. Flip per-flag once access/decision is confirmed.
+    MKTG_ENABLED: bool = False  # master gate for the /reporting feature
+    MKTG_META_ENABLED: bool = False  # Phase 2 — Meta Ads (Business Verification gated)
+    MKTG_SOCIAL_ENABLED: bool = False  # Phase 4 — IG/FB/TikTok/LinkedIn (App Review gated)
+    MKTG_SCHEDULED_DELIVERY: bool = False  # E2/Q12 — scheduled emailed PDF (B4 tables dormant)
+    MKTG_ALERTS_ENABLED: bool = False  # B4 anomaly alerts (dormant until Phase 5)
+    MKTG_MULTI_CURRENCY: bool = False  # A9/Q11 — default: withhold blended KPIs for multi-currency clients
+    MKTG_PORTAL_ENABLED: bool = False  # client read-only portal (MOOT/admin-only v1)
+
     SEED_ON_STARTUP: bool = False
 
     @property
