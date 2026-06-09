@@ -26,7 +26,7 @@ import src.database as db_module
 from src.config import settings
 
 from . import cache
-from .ingest import run_connection_sync, settling
+from .ingest import health, run_connection_sync, settling
 from .models import PlatformConnection
 
 logger = logging.getLogger(__name__)
@@ -35,9 +35,11 @@ logger = logging.getLogger(__name__)
 # conversion-settling window is fetched separately for ad platforms (A7).
 DAILY_LOOKBACK_DAYS = 3
 
-# Statuses worth syncing: active (healthy), pending (first sync), error (transient
-# retry — backoff is enforced by failure_count in the health machine). needs_reauth
-# and disabled are skipped (no valid token / operator-disabled).
+# Statuses worth syncing: active (healthy), pending (first sync), error (retry — a
+# transient-tripped error may have recovered). The daily cadence is itself gentle
+# (one attempt/day; within-attempt 429/5xx backoff lives in http_client), so we
+# retry rather than implement cross-day backoff. needs_reauth/disabled are excluded
+# here AND re-checked by health.backoff_should_skip in _sync_one (one skip authority).
 SYNCABLE_STATUSES = ("active", "pending", "error")
 
 
@@ -59,6 +61,10 @@ async def _sync_one(connection_id: int, *, today: date) -> int | None:
         async with db_module.async_session_maker() as session:
             connection = await session.get(PlatformConnection, connection_id)
             if connection is None:
+                return None
+            if health.backoff_should_skip(connection):
+                # needs_reauth / disabled — a fetch would just fail until an
+                # operator reconnects. Skip without burning a sync attempt.
                 return None
             daily_end = today - timedelta(days=1)
             daily_start = daily_end - timedelta(days=DAILY_LOOKBACK_DAYS - 1)

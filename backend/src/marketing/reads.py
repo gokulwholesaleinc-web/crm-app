@@ -161,6 +161,7 @@ async def allocation(
         await session.execute(
             select(
                 AdsDailyMetric.platform,
+                AdsDailyMetric.currency,
                 func.coalesce(func.sum(AdsDailyMetric.spend), 0),
                 func.coalesce(func.sum(AdsDailyMetric.clicks), 0),
                 func.coalesce(func.sum(AdsDailyMetric.impressions), 0),
@@ -171,7 +172,9 @@ async def allocation(
                 AdsDailyMetric.date >= date_from,
                 AdsDailyMetric.date <= date_to,
             )
-            .group_by(AdsDailyMetric.platform)
+            # Group by currency too so a multi-currency client's per-platform spend
+            # is shown each in its OWN currency (A9) rather than blended/mislabeled.
+            .group_by(AdsDailyMetric.platform, AdsDailyMetric.currency)
             .order_by(func.coalesce(func.sum(AdsDailyMetric.spend), 0).desc())
         )
     ).all()
@@ -179,11 +182,12 @@ async def allocation(
     return [
         {
             "platform": platform,
+            "currency": currency,
             "spend": _money(spend),
             "clicks": _int(clicks),
             "impressions": _int(impressions),
         }
-        for platform, spend, clicks, impressions in rows
+        for platform, currency, spend, clicks, impressions in rows
     ]
 
 

@@ -12,17 +12,28 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
+from typing import Literal
+
+EntityLevel = Literal["account", "campaign", "adgroup"]
+AnalyticsSource = Literal["ga4", "gsc"]
 
 
 @dataclass(frozen=True, slots=True)
 class AdsDailyRow:
-    """One ``ads_daily_metrics`` grain (Meta or Google Ads)."""
+    """One ``ads_daily_metrics`` grain (Meta or Google Ads).
+
+    The grain↔id correlation is a load-bearing A2 invariant (it's what keeps
+    account/campaign/adgroup rollups from double-counting). ``__post_init__``
+    enforces it at construction — an account row carrying a campaign_id, or a
+    campaign row with no campaign_id, fails loudly at the mapper instead of
+    silently mis-graining a fact and surviving to a wrong dashboard number.
+    """
 
     connection_id: int
     company_id: int
     platform: str
     date: date
-    entity_level: str  # account | campaign | adgroup
+    entity_level: EntityLevel
     spend: Decimal
     impressions: int
     clicks: int
@@ -34,6 +45,15 @@ class AdsDailyRow:
     purchases: Decimal | None = None
     currency: str | None = None
 
+    def __post_init__(self) -> None:
+        level, camp, ag = self.entity_level, self.campaign_id, self.adgroup_id
+        if level == "account" and (camp is not None or ag is not None):
+            raise ValueError("account-level row must have NULL campaign_id and adgroup_id")
+        if level == "campaign" and (camp is None or ag is not None):
+            raise ValueError("campaign-level row must have campaign_id and NULL adgroup_id")
+        if level == "adgroup" and ag is None:
+            raise ValueError("adgroup-level row must have an adgroup_id")
+
 
 @dataclass(frozen=True, slots=True)
 class AnalyticsDailyRow:
@@ -41,7 +61,7 @@ class AnalyticsDailyRow:
 
     connection_id: int
     company_id: int
-    source: str  # ga4 | gsc
+    source: AnalyticsSource  # ga4 | gsc
     date: date
     dimension_type: str  # total | channel | page | query | source_medium
     dimension_value: str = ""

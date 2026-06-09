@@ -92,17 +92,23 @@ def map_google_ads(
 ) -> tuple[list[AdsDailyRow], list[CampaignDimRow], list[AdGroupDimRow]]:
     """Pure: searchStream payload → (ads rows, campaign dims, ad-group dims).
 
-    Builds campaign-level facts directly and an account-level roll-up by summing
-    per date — the warehouse keys account rows on a NULL campaign/adgroup grain
-    (A2). Money normalized via ``from_micros`` (A4); empty payload → empty lists.
+    The GAQL grain is ad-group; from it we also roll up **campaign-level** and
+    **account-level** facts by summing per date. Each level is a distinct
+    ``entity_level`` so every read filters to exactly one (A2) — ``reads.campaigns``
+    reads the campaign grain, ``reads.adgroups`` the ad-group grain, the overview
+    the account grain — and none double-counts. Money normalized via
+    ``from_micros`` (A4); empty payload → empty lists.
     """
     ads: list[AdsDailyRow] = []
     campaigns: dict[str, CampaignDimRow] = {}
     adgroups: dict[str, AdGroupDimRow] = {}
-    # account roll-up accumulator keyed by date
-    acct: dict[date_cls, dict[str, Any]] = defaultdict(
-        lambda: {"spend": Decimal("0"), "impr": 0, "clicks": 0, "conv": Decimal("0"), "val": Decimal("0")}
-    )
+
+    def _accum() -> dict[str, Any]:
+        return {"spend": Decimal("0"), "impr": 0, "clicks": 0, "conv": Decimal("0"), "val": Decimal("0")}
+
+    # roll-up accumulators: account keyed by date, campaign keyed by (campaign_id, date)
+    acct: dict[date_cls, dict[str, Any]] = defaultdict(_accum)
+    camp: dict[tuple[str, date_cls], dict[str, Any]] = defaultdict(_accum)
 
     for result in _iter_results(payload):
         seg = result.get("segments", {})
@@ -159,12 +165,36 @@ def map_google_ads(
                 status=ag_status,
             )
 
-        bucket = acct[row_date]
-        bucket["spend"] += spend
-        bucket["impr"] += impressions
-        bucket["clicks"] += clicks
-        bucket["conv"] += conversions
-        bucket["val"] += conversion_value
+        targets = [acct[row_date]]
+        if campaign_id:
+            targets.append(camp[(campaign_id, row_date)])
+        for bucket in targets:
+            bucket["spend"] += spend
+            bucket["impr"] += impressions
+            bucket["clicks"] += clicks
+            bucket["conv"] += conversions
+            bucket["val"] += conversion_value
+
+    # campaign-level roll-up rows (NULL adgroup grain, A2) so reads.campaigns reads
+    # a real campaign grain instead of re-summing ad-group facts.
+    for (c_id, row_date), b in camp.items():
+        ads.append(
+            AdsDailyRow(
+                connection_id=connection_id,
+                company_id=company_id,
+                platform="google_ads",
+                date=row_date,
+                entity_level="campaign",
+                campaign_id=c_id,
+                adgroup_id=None,
+                spend=q6(b["spend"]),
+                impressions=b["impr"],
+                clicks=b["clicks"],
+                conversions=q6(b["conv"]),
+                conversion_value=q6(b["val"]),
+                currency=currency,
+            )
+        )
 
     # account-level roll-up rows (NULL campaign/adgroup grain, A2)
     for row_date, b in acct.items():

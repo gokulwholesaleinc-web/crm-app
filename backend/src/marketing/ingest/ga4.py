@@ -150,6 +150,9 @@ def map_ga4(
                 engagement_rate=_dec(mets, mi.get("engagementRate")),
                 bounce_rate=_dec(mets, mi.get("bounceRate")),
                 key_events=_dec(mets, mi.get("keyEvents")),
+                # GA4 renamed "conversions" → "keyEvents"; carry it in both columns
+                # so reads.analytics (which sums `conversions`) isn't permanently 0.
+                conversions=_dec(mets, mi.get("keyEvents")),
                 avg_session_duration=_dec(mets, mi.get("averageSessionDuration")),
                 is_sampled=sampled,
             )

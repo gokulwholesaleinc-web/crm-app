@@ -11,13 +11,14 @@ MKTG_ENABLED dark-by-default flag.
 from datetime import UTC, date, datetime
 from decimal import Decimal
 
-import pytest
 import pytest_asyncio
-
-from src.auth.models import User
-from src.auth.security import create_access_token, get_password_hash
 from src.companies.models import Company
-from src.marketing.models import AdsDailyMetric, PlatformConnection
+from src.marketing.models import (
+    AdsDailyMetric,
+    AnalyticsDaily,
+    MarketingCampaign,
+    PlatformConnection,
+)
 
 D1 = date(2026, 6, 1)
 D2 = date(2026, 6, 2)
@@ -195,3 +196,71 @@ class TestAllocationAndSyncStatus:
         body = r.json()
         assert len(body["connections"]) == 1
         assert body["connections"][0]["platform"] == "ga4"
+
+
+class TestCampaigns:
+    async def test_campaign_table_populated_and_active_count_from_dim(
+        self, client, auth_headers, db_session, test_company
+    ):
+        # H1 regression: campaign-level facts now exist, so the metrics table is
+        # populated (it was structurally empty when only adgroup/account were written).
+        conn = await _conn(db_session, test_company.id)
+        db_session.add_all([
+            MarketingCampaign(connection_id=conn.id, campaign_id="c1", name="Brand", status="enabled", raw_status="ENABLED"),
+            MarketingCampaign(connection_id=conn.id, campaign_id="c2", name="Old", status="removed", raw_status="REMOVED"),
+        ])
+        for cid, spend, clicks in (("c1", 60, 6), ("c2", 40, 4)):
+            db_session.add(AdsDailyMetric(
+                connection_id=conn.id, company_id=test_company.id, platform="google_ads",
+                date=D1, entity_level="campaign", campaign_id=cid, spend=Decimal(str(spend)),
+                impressions=1000, clicks=clicks, conversions=Decimal("0"), conversion_value=Decimal("0"),
+                currency="USD",
+            ))
+        await db_session.commit()
+
+        r = await client.get(
+            f"/api/marketing/companies/{test_company.id}/campaigns",
+            params={"date_from": FROM.isoformat(), "date_to": TO.isoformat()},
+            headers=auth_headers,
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert {c["name"] for c in body["campaigns"]} == {"Brand", "Old"}  # not empty
+        # active_campaigns reads CURRENT dim status, not the facts → only the enabled one
+        assert body["active_campaigns"] == 1
+        c1 = next(c for c in body["campaigns"] if c["name"] == "Brand")
+        assert Decimal(str(c1["cpc"])) == Decimal("10")  # ratio-of-sums 60/6
+
+
+class TestAnalytics:
+    async def test_ga4_totals_only_from_total_rows_and_conversions_surfaced(
+        self, client, auth_headers, db_session, test_company
+    ):
+        conn = await _conn(db_session, test_company.id, platform="ga4", external="prop")
+        # a 'total' row + a 'channel' row with DIFFERENT sessions — A11 says the total
+        # must come ONLY from the 'total' row, never total+channel summed.
+        db_session.add(AnalyticsDaily(
+            connection_id=conn.id, company_id=test_company.id, source="ga4", date=D1,
+            dimension_type="total", dimension_value="", sessions=1000, users=800,
+            new_users=300, engaged_sessions=700, conversions=Decimal("37"), key_events=Decimal("37"),
+        ))
+        db_session.add(AnalyticsDaily(
+            connection_id=conn.id, company_id=test_company.id, source="ga4", date=D1,
+            dimension_type="channel", dimension_value="Organic Search", sessions=600, users=500,
+        ))
+        await db_session.commit()
+
+        r = await client.get(
+            f"/api/marketing/companies/{test_company.id}/analytics",
+            params={"date_from": FROM.isoformat(), "date_to": TO.isoformat()},
+            headers=auth_headers,
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["ga4_configured"] is True
+        # A11: sessions total is ONLY the 'total' row (1000), not total+channel (1600)
+        assert body["ga4_totals"]["sessions"] == 1000
+        # M1: GA4 conversions are surfaced (keyEvents → conversions), no longer 0
+        assert Decimal(str(body["ga4_totals"]["conversions"])) == Decimal("37")
+        # traffic sources come from the channel rows, not the total
+        assert "Organic Search" in {s["channel"] for s in body["traffic_sources"]}

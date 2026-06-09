@@ -27,6 +27,8 @@ export function AllocationDonut({ slices, currency, withheldReason }: Props) {
     .map((s) => ({ name: PLATFORM_LABEL[s.platform] ?? s.platform, value: Number(s.spend ?? 0) }))
     .filter((d) => d.value > 0);
 
+  // Per-platform table — always available (incl. when the blended donut is
+  // withheld), each row in its OWN account currency (A9), never blended.
   const table = {
     columns: [
       { key: 'name', label: 'Platform' },
@@ -34,16 +36,17 @@ export function AllocationDonut({ slices, currency, withheldReason }: Props) {
     ],
     rows: slices.map((s) => ({
       name: PLATFORM_LABEL[s.platform] ?? s.platform,
-      spend: formatCurrency(s.spend, currency),
+      spend: formatCurrency(s.spend, s.currency ?? currency),
     })),
   };
 
   return (
-    <ChartFigure title="Spend allocation" subtitle="Share of spend by platform" table={withheldReason ? undefined : table}>
+    <ChartFigure title="Spend allocation" subtitle="Share of spend by platform" table={table}>
       {withheldReason ? (
         <div className="flex h-[240px] items-center justify-center px-6 text-center text-sm text-gray-500 dark:text-gray-400">
-          Blended spend is withheld because this client's accounts report in
-          different currencies. Per-platform spend is still shown above.
+          The blended donut is withheld because this client's accounts report in
+          different currencies. Use “Show data as table” for per-platform spend,
+          each in its own currency.
         </div>
       ) : data.length === 0 ? (
         <div className="flex h-[240px] items-center justify-center text-sm text-gray-400">No spend in this period</div>

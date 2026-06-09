@@ -95,12 +95,17 @@ class MarketingReadService:
         return "UTC"
 
     async def _last_synced_at(self, company_id: int) -> datetime | None:
-        """The most recent successful ingest across the client's connections —
-        the truthful freshness signal (§C), never page-load time."""
+        """The freshness of the STALEST contributing source — the truthful headline
+        (§C), never page-load time. Deliberately ``MIN`` not ``MAX``: a single dead
+        connection (ads stuck while GA4 keeps succeeding) must drag the chip to
+        stale, not be masked by a healthy sibling. Disabled connections don't
+        contribute; a never-synced (NULL) source is surfaced per-source instead."""
         return (
             await self.db.execute(
-                select(func.max(PlatformConnection.last_synced_at)).where(
-                    PlatformConnection.company_id == company_id
+                select(func.min(PlatformConnection.last_synced_at)).where(
+                    PlatformConnection.company_id == company_id,
+                    PlatformConnection.is_enabled.is_(True),
+                    PlatformConnection.last_synced_at.isnot(None),
                 )
             )
         ).scalar_one_or_none()

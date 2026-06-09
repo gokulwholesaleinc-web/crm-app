@@ -113,6 +113,7 @@ class SeriesResponse(BaseModel):
 # ── /allocation ──────────────────────────────────────────────────────────────
 class AllocationSlice(BaseModel):
     platform: str
+    currency: str | None = None  # this slice's account currency (A9 per-platform)
     spend: Decimal
     clicks: int
     impressions: int

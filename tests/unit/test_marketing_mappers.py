@@ -26,18 +26,24 @@ def _load(name: str) -> dict:
 
 # ── Google Ads (A4 micros, A3 dims, A2 entity_level) ─────────────────────────
 class TestGoogleAdsMapper:
-    def test_emits_adgroup_facts_and_account_rollup(self):
+    def test_emits_adgroup_campaign_and_account_rollups(self):
         ads, campaigns, adgroups = google_ads.map_google_ads(
             _load("google_ads_searchstream.json"), connection_id=7, company_id=3, currency="USD"
         )
         levels = {r.entity_level for r in ads}
-        assert levels == {"adgroup", "account"}
-        # three ad-group rows (the GAQL grain) + one account roll-up for the day
+        # ad-group (GAQL grain) + campaign roll-up + account roll-up — three distinct
+        # entity_levels so reads.{adgroups,campaigns,overview} each filter to one (A2).
+        assert levels == {"adgroup", "campaign", "account"}
         assert sum(r.entity_level == "adgroup" for r in ads) == 3
         account = [r for r in ads if r.entity_level == "account"]
         assert len(account) == 1
         # account row has NULL campaign/adgroup ids (A2 NULL grain)
         assert account[0].campaign_id is None and account[0].adgroup_id is None
+        # campaign roll-ups carry campaign_id, NULL adgroup_id (A2), and re-sum to the
+        # account total (every ad-group belongs to a campaign).
+        camp_rows = [r for r in ads if r.entity_level == "campaign"]
+        assert camp_rows and all(r.campaign_id and r.adgroup_id is None for r in camp_rows)
+        assert sum((r.spend for r in camp_rows), Decimal("0")) == account[0].spend
 
     def test_micros_normalized_to_decimal_currency(self):
         ads, _, _ = google_ads.map_google_ads(
@@ -109,6 +115,9 @@ class TestGa4Mapper:
         assert first.engaged_sessions == 910
         assert first.engagement_rate == Decimal("0.689394")
         assert first.key_events == Decimal("37")
+        # GA4 keyEvents IS the modern "conversions" — carried into the conversions
+        # column too, so reads.analytics doesn't report a permanent 0 (M1).
+        assert first.conversions == Decimal("37")
         assert first.source == "ga4"
 
     def test_total_query_is_not_sampled(self):

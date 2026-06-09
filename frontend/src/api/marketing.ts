@@ -81,6 +81,7 @@ export interface SeriesResponse {
 
 export interface AllocationSlice {
   platform: string;
+  currency: string | null;
   spend: Numish;
   clicks: number;
   impressions: number;
