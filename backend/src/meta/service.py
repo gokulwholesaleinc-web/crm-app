@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
+from src.meta import crypto
 from src.meta.models import CompanyMetaData, MetaCredential, MetaLeadCapture
 
 logger = logging.getLogger(__name__)
@@ -29,6 +30,41 @@ class MetaService:
 
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    # =========================================================================
+    # Token encryption (C4 retrofit — write-both / read-new-fallback-old / strict)
+    # =========================================================================
+
+    @staticmethod
+    def _store_access_token(credential: MetaCredential, token: str) -> None:
+        """Persist the access token per the C4 rollout phase.
+
+        * key configured → write the encrypted column (+ version);
+        * expand phase (not strict) → ALSO keep writing the legacy plaintext column
+          so a deploy before the key is set never breaks the OAuth callback;
+        * strict phase → require the key (fail closed) and stop writing plaintext.
+        """
+        strict = settings.META_TOKEN_ENCRYPTION_STRICT
+        if crypto.is_configured():
+            ct, version = crypto.encrypt_token(token)
+            credential.access_token_ciphertext = ct
+            credential.token_key_version = version
+        elif strict:
+            raise crypto.MetaCryptoError(
+                "META_TOKEN_KEY must be set when META_TOKEN_ENCRYPTION_STRICT is on."
+            )
+        credential.access_token = None if strict else token
+
+    @staticmethod
+    def _effective_token(credential: MetaCredential) -> str | None:
+        """Decrypt the stored token (C4). Prefers ciphertext; in the expand phase
+        falls back to the legacy plaintext column for un-backfilled rows. Returns
+        ``None`` when no usable token exists (caller treats as not-connected)."""
+        if credential.access_token_ciphertext:
+            return crypto.decrypt_token(credential.access_token_ciphertext)
+        if not settings.META_TOKEN_ENCRYPTION_STRICT and credential.access_token:
+            return credential.access_token
+        return None
 
     # =========================================================================
     # OAuth2 Flow
@@ -70,11 +106,12 @@ class MetaService:
             ll_data = ll_response.json()
 
         expiry = datetime.now(UTC) + timedelta(seconds=ll_data.get("expires_in", 5184000))
+        token = ll_data["access_token"]
 
-        # Upsert credential
+        # Upsert credential (token stored encrypted per the C4 rollout phase).
         existing = await self.get_credential(user_id)
         if existing:
-            existing.access_token = ll_data["access_token"]
+            self._store_access_token(existing, token)
             existing.token_expiry = expiry
             existing.scopes = META_SCOPES
             existing.is_active = True
@@ -83,10 +120,10 @@ class MetaService:
 
         credential = MetaCredential(
             user_id=user_id,
-            access_token=ll_data["access_token"],
             token_expiry=expiry,
             scopes=META_SCOPES,
         )
+        self._store_access_token(credential, token)
         self.db.add(credential)
         await self.db.flush()
         return credential
@@ -115,7 +152,9 @@ class MetaService:
 
         pages = []
         try:
-            pages = await self._fetch_user_pages(credential.access_token)
+            token = self._effective_token(credential)
+            if token:
+                pages = await self._fetch_user_pages(token)
         except Exception as e:
             logger.warning("Failed to fetch pages for user %s: %s", user_id, e)
 

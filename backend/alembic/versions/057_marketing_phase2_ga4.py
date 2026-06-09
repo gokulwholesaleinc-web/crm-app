@@ -19,8 +19,8 @@ Kept byte-identical with the model so ``test_marketing_migration`` (which now ru
 056 → 057 and diffs against ``create_all``) stays green on SQLite.
 """
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "057_marketing_phase2_ga4"
 down_revision = "056_marketing_warehouse"
