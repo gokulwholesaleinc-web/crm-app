@@ -24,7 +24,7 @@ from src.companies.models import Company
 from src.config import settings
 from src.marketing import warehouse
 from src.marketing.ingest import backfill
-from src.marketing.models import AdsDailyMetric, AnalyticsDaily, PlatformConnection
+from src.marketing.models import AdsDailyMetric, AnalyticsDaily, MarketingSyncRun, PlatformConnection
 
 pytestmark = pytest.mark.pg
 
@@ -167,6 +167,48 @@ async def test_run_backfill_advances_bounded_chunks(pg_session, monkeypatch):
         )
     ).scalar_one()
     assert facts > 0  # backfill landed facts
+
+
+class _EmptyGoogleSeam:
+    """A successful searchStream that returns NO rows — a legitimately-empty
+    historical window (pre-account-creation / paused / zero-spend period)."""
+
+    async def post(self, url: str, json: dict[str, Any], *, headers: dict[str, str] | None = None) -> list[Any]:
+        return []
+
+    async def get(self, url: str, params: dict[str, Any] | None = None) -> dict[str, Any]:  # pragma: no cover
+        return {}
+
+
+async def test_run_backfill_advances_past_empty_windows(pg_session, monkeypatch):
+    # Regression: a successful but EMPTY window writes 0 facts, so a fact-only
+    # watermark would never move and the backfill would re-pull the same window
+    # forever. The coverage watermark (successful backfill window_start) must
+    # advance past empty windows.
+    monkeypatch.setattr(settings, "GOOGLE_ADS_DEVELOPER_TOKEN", "dev-token")
+    _company, conn = await _seed_conn(pg_session)
+    import src.marketing.ingest as ingest_pkg
+
+    monkeypatch.setattr(ingest_pkg, "_google_seam", lambda connection, http_client: _EmptyGoogleSeam())
+
+    progress = await backfill.run_connection_backfill(pg_session, conn, today=TODAY, max_chunks=3)
+    assert progress.chunks == 3  # advanced through 3 windows, not stuck on the first
+
+    facts = (
+        await pg_session.execute(
+            select(func.count()).select_from(AdsDailyMetric).where(AdsDailyMetric.connection_id == conn.id)
+        )
+    ).scalar_one()
+    assert facts == 0  # every window was empty
+
+    starts = (
+        await pg_session.execute(
+            select(MarketingSyncRun.window_start)
+            .where(MarketingSyncRun.connection_id == conn.id, MarketingSyncRun.run_type == "backfill")
+            .order_by(MarketingSyncRun.window_start.desc())
+        )
+    ).scalars().all()
+    assert len(starts) == 3 and len(set(starts)) == 3  # 3 DISTINCT, strictly-older windows
 
 
 async def test_run_backfill_complete_at_floor(pg_session, monkeypatch):

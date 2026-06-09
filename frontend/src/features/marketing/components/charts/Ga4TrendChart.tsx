@@ -23,7 +23,17 @@ export function Ga4TrendChart({ points }: Props) {
   const sessionsColor = getBrandColor('primary', '#2563eb');
   const usersColor = getBrandColor('secondary', '#06b6d4');
 
-  if (points.length === 0) {
+  // Show the empty state when there are no date rows OR every day is all-zero
+  // (a configured-but-no-traffic property) — a flat zero line reads as a bug, not
+  // "no traffic". Coerce once here and reuse for the chart data.
+  const data = points.map((p) => ({
+    date: p.date,
+    sessions: Number(p.sessions ?? 0),
+    users: Number(p.users ?? 0),
+  }));
+  const hasTraffic = data.some((d) => d.sessions > 0 || d.users > 0);
+
+  if (points.length === 0 || !hasTraffic) {
     return (
       <ChartFigure title="Sessions and users over time">
         <div className="flex h-[240px] items-center justify-center text-sm text-gray-400">
@@ -32,12 +42,6 @@ export function Ga4TrendChart({ points }: Props) {
       </ChartFigure>
     );
   }
-
-  const data = points.map((p) => ({
-    date: p.date,
-    sessions: Number(p.sessions ?? 0),
-    users: Number(p.users ?? 0),
-  }));
 
   const table = {
     columns: [

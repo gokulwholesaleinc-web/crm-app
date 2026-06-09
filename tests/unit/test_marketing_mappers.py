@@ -267,6 +267,32 @@ class TestGa4Mapper:
         assert {r.dimension_value for r in rows} == {"Organic Search", "Paid Search", "Direct"}
         assert all(r.dimension_type == "channel" for r in rows)
 
+    def test_breakdown_missing_dimension_header_raises_drift(self):
+        # CRITICAL-1: a 2xx report with rows but the requested breakdown header
+        # dropped (drift) must RAISE, not collapse every row to dimension_value=""
+        # and land as a silent success — symmetric with the GSC breakdown guard.
+        from src.marketing.ingest.http_client import UnmappableShapeError
+
+        payload = {
+            "dimensionHeaders": [{"name": "date"}],  # pagePath header missing
+            "metricHeaders": [{"name": "sessions"}],
+            "rows": [{"dimensionValues": [{"value": "20260601"}], "metricValues": [{"value": "5"}]}],
+        }
+        with pytest.raises(UnmappableShapeError):
+            ga4.map_ga4(payload, connection_id=5, company_id=9, dimension_type="page")
+        with pytest.raises(UnmappableShapeError):
+            ga4.map_ga4(payload, connection_id=5, company_id=9, dimension_type="channel")
+
+    def test_breakdown_empty_report_does_not_raise(self):
+        # a genuinely-empty report (no rows) returns [] even for a breakdown shape.
+        assert (
+            ga4.map_ga4(
+                {"dimensionHeaders": [], "metricHeaders": [], "rows": []},
+                connection_id=5, company_id=9, dimension_type="page",
+            )
+            == []
+        )
+
     def test_page_query_sets_pagepath_dimension_value(self):
         # Phase 3: date × pagePath → dimension_type='page', dimension_value=pagePath.
         rows = ga4.map_ga4(

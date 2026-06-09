@@ -22,7 +22,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .. import warehouse
-from ..models import AdsDailyMetric, AnalyticsDaily, PlatformConnection
+from ..models import AdsDailyMetric, AnalyticsDaily, MarketingSyncRun, PlatformConnection
 
 logger = logging.getLogger(__name__)
 
@@ -54,13 +54,49 @@ def retention_floor(connection: PlatformConnection, *, today: date) -> date:
 
 
 async def _earliest_fact_date(session: AsyncSession, connection: PlatformConnection) -> date | None:
-    """The earliest day already in the warehouse for this connection (the
-    resumable watermark). Ads vs analytics live in different fact tables."""
+    """The earliest day with landed FACTS for this connection. Ads vs analytics
+    live in different fact tables."""
     if connection.platform in ("ga4", "gsc"):
         stmt = select(func.min(AnalyticsDaily.date)).where(AnalyticsDaily.connection_id == connection.id)
     else:
         stmt = select(func.min(AdsDailyMetric.date)).where(AdsDailyMetric.connection_id == connection.id)
     return (await session.execute(stmt)).scalar_one_or_none()
+
+
+async def _earliest_backfilled_window_start(
+    session: AsyncSession, connection: PlatformConnection
+) -> date | None:
+    """The earliest ``window_start`` of a SUCCESSFUL backfill run for this connection.
+
+    Tracks coverage independent of whether a window produced facts. Without this,
+    the watermark is fact-only — a successful but legitimately EMPTY historical
+    window (pre-account-creation, zero-traffic GSC days, a paused/zero-spend ad
+    period) writes no facts, so the fact watermark never moves, ``next_backfill_window``
+    returns the identical window every time, and the backfill stalls at the first
+    empty window forever (never reaching the retention floor)."""
+    stmt = select(func.min(MarketingSyncRun.window_start)).where(
+        MarketingSyncRun.connection_id == connection.id,
+        MarketingSyncRun.run_type == "backfill",
+        MarketingSyncRun.status == "success",
+    )
+    return (await session.execute(stmt)).scalar_one_or_none()
+
+
+async def _earliest_covered_date(
+    session: AsyncSession, connection: PlatformConnection
+) -> date | None:
+    """The resumable watermark: the earliest day already covered by either landed
+    facts OR a completed backfill window (min of the two, ignoring NULLs). Walking
+    backwards from here guarantees progress even across empty windows."""
+    candidates = [
+        d
+        for d in (
+            await _earliest_fact_date(session, connection),
+            await _earliest_backfilled_window_start(session, connection),
+        )
+        if d is not None
+    ]
+    return min(candidates) if candidates else None
 
 
 async def next_backfill_window(
@@ -73,13 +109,13 @@ async def next_backfill_window(
     """The next chunk to backfill, walking backwards from the watermark.
 
     Returns ``(start, end)`` for the next ≤``chunk_days`` slice older than what's
-    already stored, clamped to the retention floor — or ``None`` when the
+    already covered, clamped to the retention floor — or ``None`` when the
     connection is already backfilled to the floor (nothing left to do).
     """
     floor = retention_floor(connection, today=today)
-    earliest = await _earliest_fact_date(session, connection)
+    earliest = await _earliest_covered_date(session, connection)
 
-    # No data yet → start the most-recent chunk (yesterday backwards).
+    # Nothing covered yet → start the most-recent chunk (yesterday backwards).
     if earliest is None:
         end = today - timedelta(days=1)
     else:

@@ -228,6 +228,16 @@ def map_ga4(
     # The breakdown dimension's column index (None for the total shape).
     breakdown_name = _BREAKDOWN_DIM.get(dimension_type)
     breakdown_idx = _dim_index(payload, breakdown_name) if breakdown_name else None
+    # CRITICAL-1: a breakdown shape (page/channel) whose dimension header is
+    # renamed/dropped on a 2xx (drift) would otherwise collapse every row to
+    # dimension_value="" and land as a silent success. Require the requested
+    # breakdown column to be present (symmetric with the GSC breakdown guard). Only
+    # reached when raw_rows is non-empty, so a genuinely-empty report still → [].
+    ensure_shape(
+        breakdown_name is None or breakdown_idx is not None,
+        f"ga4 {dimension_type} report missing its '{breakdown_name}' dimension header",
+        platform="ga4",
+    )
     mi = _metric_index_map(payload)
 
     for raw in raw_rows:

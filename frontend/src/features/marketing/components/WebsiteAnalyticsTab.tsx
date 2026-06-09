@@ -1,11 +1,10 @@
-import { useQuery, type UseQueryResult } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { type ReactNode, useMemo } from 'react';
 import {
   getAnalytics,
   getSiteHealth,
   getSyncStatus,
   type AnalyticsResponse,
-  type ConnectionSyncStatus,
   type GscPage,
   type GscQuery,
   type SiteHealthResponse,
@@ -17,60 +16,12 @@ import { Card } from '../../../components/ui';
 import { EmptyState } from '../../../components/ui/EmptyState';
 import { ChartFigure } from './ChartFigure';
 import { Ga4TrendChart } from './charts/Ga4TrendChart';
-import { DataTrustBadge, type SourceFreshness } from './DataTrustBadge';
+import { DataTrustBadge } from './DataTrustBadge';
 import { KpiCard } from './KpiCard';
+import { QueryPanel } from './QueryPanel';
 import { type RangePreset, presetRange } from '../utils/dateRange';
 import { formatDecimal, formatNumber, formatPercent } from '../utils/format';
-import { platformLabel } from '../utils/platformLabel';
-
-function syncToSources(connections: ConnectionSyncStatus[]): SourceFreshness[] {
-  return connections.map((c) => ({
-    source: platformLabel(c.platform),
-    lastSyncedAt: c.last_synced_at,
-    status: c.status,
-  }));
-}
-
-/** Loading skeleton / error+retry / data for a single panel query — mirrors the
- *  QueryPanel in ReportingPage so every panel has a consistent error + retry path
- *  and charts don't pop in (CLS). */
-function QueryPanel<T>({
-  q,
-  height = 240,
-  render,
-}: {
-  q: UseQueryResult<T>;
-  height?: number;
-  render: (data: T) => ReactNode;
-}) {
-  if (q.isLoading) {
-    return (
-      <div
-        className="animate-pulse rounded-lg border border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800"
-        style={{ height }}
-        aria-hidden="true"
-      />
-    );
-  }
-  if (q.isError) {
-    return (
-      <Card padding="lg">
-        <EmptyState variant="error" title="Couldn't load this panel" description="Something went wrong." />
-        <div className="mt-3 flex justify-center">
-          <button
-            type="button"
-            onClick={() => q.refetch()}
-            className="rounded-md bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 dark:bg-gray-700 dark:text-gray-200"
-          >
-            Retry
-          </button>
-        </div>
-      </Card>
-    );
-  }
-  if (!q.data) return null;
-  return <>{render(q.data)}</>;
-}
+import { syncToSources } from '../utils/syncToSources';
 
 // Cap rendered table rows so a long query/page list can't bloat the DOM; disclose
 // the truncation rather than hiding it silently (CLAUDE.md large-list rule).
