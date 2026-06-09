@@ -117,12 +117,26 @@ class TestListUpdateDisconnect:
         conn.failure_count = 4
         await db_session.commit()
         r = await client.patch(
-            f"/api/marketing/admin/connections/{cid}",
+            f"/api/marketing/admin/companies/{test_company.id}/connections/{cid}",
             json={"access_token": "fresh-token"},
             headers=h,
         )
         assert r.status_code == 200
         assert r.json()["status"] == "pending"  # reauth cleared, retry armed
+
+    async def test_mutate_route_scoped_to_company_404_on_mismatch(
+        self, client, superuser_token, db_session, test_company
+    ):
+        # M-idor: a connection_id under the WRONG company path 404s (company scope
+        # is structural), even for a global admin.
+        h = _admin(superuser_token)
+        cid = (await _create(client, h, test_company.id)).json()["id"]
+        r = await client.patch(
+            f"/api/marketing/admin/companies/{test_company.id + 999}/connections/{cid}",
+            json={"display_name": "x"},
+            headers=h,
+        )
+        assert r.status_code == 404
 
     async def test_disconnect_purges_facts_and_disables(
         self, client, superuser_token, db_session, test_company
@@ -139,7 +153,9 @@ class TestListUpdateDisconnect:
         )
         await db_session.commit()
 
-        r = await client.delete(f"/api/marketing/admin/connections/{cid}", headers=h)
+        r = await client.delete(
+            f"/api/marketing/admin/companies/{test_company.id}/connections/{cid}", headers=h
+        )
         assert r.status_code == 204
 
         db_session.expire_all()

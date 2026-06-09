@@ -12,8 +12,10 @@ where the real-PG ``pg_session`` fixture is available.
 
 from __future__ import annotations
 
-from src.marketing.ingest import health
-from src.marketing.ingest.http_client import PermanentError, TransientError
+import httpx
+import pytest
+from src.marketing.ingest import IngestConfigError, _validate_public_url, health
+from src.marketing.ingest.http_client import PermanentError, TransientError, _parse_retry_after
 from src.marketing.models import PlatformConnection
 
 
@@ -109,3 +111,41 @@ class TestHealthStateMachine:
     def test_error_class_for_run(self):
         assert health.error_class_for_run(TransientError("x", error_class="transient_429")) == "transient_429"
         assert health.error_class_for_run(ValueError("boom")) == "ValueError"
+
+
+class TestPageSpeedUrlGuard:
+    """M-ssrf: the PageSpeed target URL is validated before it reaches the crawler."""
+
+    def test_rejects_non_public_and_malformed(self):
+        for bad in (
+            "http://localhost/admin",
+            "https://127.0.0.1/",
+            "http://169.254.169.254/latest/meta-data/",  # cloud metadata
+            "https://10.0.0.5/internal",
+            "https://db.internal/",
+            "ftp://example.com/",
+            "not-a-url",
+            "",
+        ):
+            with pytest.raises(IngestConfigError):
+                _validate_public_url(bad)
+
+    def test_allows_public_https(self):
+        assert _validate_public_url("https://www.example-client.com/") == "https://www.example-client.com/"
+
+
+class TestRetryAfterParsing:
+    """LOW-retry-after: both the delta-seconds and the HTTP-date forms are honored."""
+
+    def test_delta_seconds(self):
+        resp = httpx.Response(429, headers={"Retry-After": "30"})
+        assert _parse_retry_after(resp) == 30.0
+
+    def test_http_date_form(self):
+        # a far-future date → a positive (bounded) delay, no longer silently dropped
+        resp = httpx.Response(429, headers={"Retry-After": "Wed, 21 Oct 2099 07:28:00 GMT"})
+        val = _parse_retry_after(resp)
+        assert val is not None and val > 0
+
+    def test_missing_header(self):
+        assert _parse_retry_after(httpx.Response(429)) is None

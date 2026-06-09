@@ -192,12 +192,52 @@ async def _sync_gsc(
     return await warehouse.upsert_analytics_daily(session, analytics)
 
 
+def _validate_public_url(raw: str) -> str:
+    """Best-effort SSRF guard for the PageSpeed target (M-ssrf).
+
+    ``display_name``/``external_account_id`` is a free-text admin field handed to
+    Google's PageSpeed crawler as the audited URL. Reject non-http(s) schemes, a
+    missing host, literal private/loopback/link-local/reserved IPs, and obvious
+    internal hostnames so an admin (or a future lower-privileged role) can't point
+    the crawler at internal infrastructure. (DNS-time resolution is TOCTOU-imperfect
+    and out of scope; this blocks the obvious literal cases.)"""
+    import ipaddress
+    from urllib.parse import urlparse
+
+    parsed = urlparse((raw or "").strip())
+    host = parsed.hostname
+    if parsed.scheme not in ("http", "https") or not host:
+        raise IngestConfigError(
+            f"pagespeed url must be http(s) with a host: {raw!r}", error_class="invalid_url"
+        )
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        ip = None
+    if ip is not None and (
+        ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast
+    ):
+        raise IngestConfigError(
+            f"pagespeed url resolves to a non-public address: {host}", error_class="invalid_url"
+        )
+    low = host.lower()
+    if low == "localhost" or low.endswith((".local", ".internal", ".localhost")):
+        raise IngestConfigError(
+            f"pagespeed url host not allowed: {host}", error_class="invalid_url"
+        )
+    return raw
+
+
 async def _sync_pagespeed(
     session: AsyncSession, connection: PlatformConnection,
     run_type: str, window_start: date, window_end: date, http_client: Any | None,
 ) -> int:
+    # M-nokey: fail closed when the PageSpeed key is unset (mirrors the Ads dev
+    # token) instead of silently degrading to the throttled anonymous quota.
+    if http_client is None:
+        _require(connection, _pagespeed_api_key(), "PageSpeed API key")
     client = _pagespeed_seam(http_client)
-    url = connection.display_name or connection.external_account_id
+    url = _validate_public_url(connection.display_name or connection.external_account_id)
     total = 0
     for strategy in ("mobile", "desktop"):
         payload = await pagespeed.fetch_pagespeed(client, url=url, strategy=strategy)

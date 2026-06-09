@@ -99,14 +99,26 @@ def _full_jitter_backoff(attempt: int, retry_after: float | None) -> float:
 
 
 def _parse_retry_after(response: httpx.Response) -> float | None:
-    """Seconds from a ``Retry-After`` header (delta-seconds form only)."""
+    """Seconds from a ``Retry-After`` header — delta-seconds OR the HTTP-date form."""
     raw = response.headers.get("Retry-After")
     if not raw:
         return None
+    raw = raw.strip()
     try:
-        return float(raw.strip())
+        return float(raw)
     except ValueError:
-        return None  # HTTP-date form is ignored; jitter backoff still applies.
+        pass
+    # RFC 7231 HTTP-date form, e.g. "Wed, 21 Oct 2026 07:28:00 GMT".
+    try:
+        import time
+        from email.utils import parsedate_to_datetime
+
+        dt = parsedate_to_datetime(raw)
+        if dt is None:
+            return None
+        return max(0.0, dt.timestamp() - time.time())
+    except (TypeError, ValueError):
+        return None  # unparseable → jitter backoff still applies.
 
 
 def _is_google_resource_exhausted(response: httpx.Response) -> bool:
@@ -210,9 +222,16 @@ async def request_with_retry(
             await asyncio.sleep(_full_jitter_backoff(attempt, _parse_retry_after(response)))
             continue
 
-        # any other 4xx is a permanent client error (bad request, not found…)
+        # any other 4xx is a permanent client error (bad request, not found…).
+        # L-leak: keep the upstream body in the LOG (for triage) but NOT in the
+        # exception message, which is persisted to MarketingSyncRun.error and shown
+        # to company-scoped readers (provider bodies can echo ids/quota details).
+        logger.warning(
+            "[marketing_ingest] client error %s on %s: %s",
+            response.status_code, url, response.text[:300],
+        )
         raise PermanentError(
-            f"client error {response.status_code}: {response.text[:300]}",
+            f"client error {response.status_code}",
             status_code=response.status_code,
             error_class=f"http_{response.status_code}",
         )

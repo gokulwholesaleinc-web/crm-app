@@ -147,6 +147,20 @@ def _audit(session, connection: PlatformConnection, *, action: str, user_id: int
     )
 
 
+async def _scoped_connection(db, company_id: int, connection_id: int) -> PlatformConnection:
+    """Load a connection and assert it belongs to ``company_id`` (M-idor).
+
+    The mutate routes are nested under ``/companies/{company_id}`` so company scope
+    is structural — a connection_id from another company 404s (not 403, to avoid
+    existence disclosure). This forecloses the latent IDOR where a future
+    per-company marketing-admin role could PATCH/refresh/purge any company's
+    connection by guessing the sequential id."""
+    connection = await db.get(PlatformConnection, connection_id)
+    if connection is None or connection.company_id != company_id:
+        raise HTTPException(HTTPStatus.NOT_FOUND, "Connection not found")
+    return connection
+
+
 def _set_token(connection: PlatformConnection, access_token: str | None, refresh_token: str | None) -> None:
     """Encrypt + store pasted tokens (fail-closed). Empty string clears nothing."""
     if access_token:
@@ -229,8 +243,9 @@ async def list_connections(
     return [ConnectionAdmin.of(c) for c in rows.scalars().all()]
 
 
-@router.patch("/connections/{connection_id}", response_model=ConnectionAdmin)
+@router.patch("/companies/{company_id}/connections/{connection_id}", response_model=ConnectionAdmin)
 async def update_connection(
+    company_id: int,
     connection_id: int,
     body: ConnectionUpdate,
     current_user: AdminUser,
@@ -238,9 +253,7 @@ async def update_connection(
     _: MktgEnabled,
 ) -> ConnectionAdmin:
     """Edit config / rotate a pasted token / pause a connection."""
-    connection = await db.get(PlatformConnection, connection_id)
-    if connection is None:
-        raise HTTPException(HTTPStatus.NOT_FOUND, "Connection not found")
+    connection = await _scoped_connection(db, company_id, connection_id)
     if body.display_name is not None:
         connection.display_name = body.display_name
     if body.currency is not None:
@@ -268,8 +281,9 @@ async def update_connection(
     return ConnectionAdmin.of(connection)
 
 
-@router.post("/connections/{connection_id}/refresh", response_model=RefreshResult)
+@router.post("/companies/{company_id}/connections/{connection_id}/refresh", response_model=RefreshResult)
 async def refresh_connection(
+    company_id: int,
     connection_id: int,
     current_user: AdminUser,
     db: DBSession,
@@ -277,9 +291,7 @@ async def refresh_connection(
 ) -> RefreshResult:
     """Sync now: run the daily lookback (+ settling for ad platforms), then
     invalidate the client's cached reads so the dashboard updates immediately."""
-    connection = await db.get(PlatformConnection, connection_id)
-    if connection is None:
-        raise HTTPException(HTTPStatus.NOT_FOUND, "Connection not found")
+    connection = await _scoped_connection(db, company_id, connection_id)
 
     today = date.today()
     daily_end = today - timedelta(days=1)
@@ -310,8 +322,9 @@ async def refresh_connection(
     )
 
 
-@router.delete("/connections/{connection_id}", status_code=HTTPStatus.NO_CONTENT)
+@router.delete("/companies/{company_id}/connections/{connection_id}", status_code=HTTPStatus.NO_CONTENT)
 async def disconnect_connection(
+    company_id: int,
     connection_id: int,
     current_user: AdminUser,
     db: DBSession,
@@ -325,9 +338,7 @@ async def disconnect_connection(
     row is marked ``disabled`` with its tokens nulled. Provider-side token
     revocation is a follow-up once the OAuth connect flow lands (C3).
     """
-    connection = await db.get(PlatformConnection, connection_id)
-    if connection is None:
-        raise HTTPException(HTTPStatus.NOT_FOUND, "Connection not found")
+    connection = await _scoped_connection(db, company_id, connection_id)
 
     # Hard-delete the tokens (E7).
     connection.access_token_ciphertext = None
