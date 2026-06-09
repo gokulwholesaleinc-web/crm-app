@@ -1,0 +1,26 @@
+{
+  "rows": [
+    {
+      "keys": [ "2026-06-01", "best widgets" ],
+      "clicks": 40.0,
+      "impressions": 900.0,
+      "ctr": 0.044444,
+      "position": 3.1
+    },
+    {
+      "keys": [ "2026-06-01", "widget store near me" ],
+      "clicks": 25.0,
+      "impressions": 700.0,
+      "ctr": 0.035714,
+      "position": 5.4
+    },
+    {
+      "keys": [ "2026-06-02", "best widgets" ],
+      "clicks": 38.0,
+      "impressions": 880.0,
+      "ctr": 0.043182,
+      "position": 3.3
+    }
+  ],
+  "responseAggregationType": "byProperty"
+}

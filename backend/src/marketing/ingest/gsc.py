@@ -5,9 +5,16 @@ REST against ``sites/{siteUrl}/searchAnalytics/query`` with ``startRow`` paging
 concatenated rows under a stable ``{"rows": [...]}`` shape; ``map_gsc`` is PURE
 over that payload.
 
-GSC has no native sampling flag; metrics are clicks/impressions/ctr/position at a
-``date`` grain (``dimension_type='total'`` here — GSC's per-date row IS the total
-for the day at the site level). Empty payload → ``[]`` (E5 guard).
+Three dimension shapes are pulled (each its own request → its own landing row):
+* ``['date']`` → ``dimension_type='total'`` (GSC's per-date row IS the site-level
+  total for the day; the read layer's totals come ONLY from these, A11);
+* ``['date','query']`` → ``dimension_type='query'`` (top queries panel);
+* ``['date','page']`` → ``dimension_type='page'`` (top pages panel).
+
+The query/page shapes keep the **per-date** grain (Phase 3) so the daily rolling
+re-fetch restates each day's rows idempotently (A2/A7) — the read layer sums over
+the window. GSC has no native sampling flag; metrics are clicks/impressions/ctr/
+position. Empty payload → ``[]`` (E5 guard).
 """
 
 from __future__ import annotations
@@ -20,6 +27,9 @@ from ..rows import AnalyticsDailyRow
 from .http_client import GSC_BASE, GoogleSeam, ensure_shape
 
 _PAGE_SIZE = 25000  # D3 max rows/request
+# analytics_daily.dimension_value is String(512); a GSC page URL can exceed that,
+# so the mapper truncates to keep a long URL from failing the whole run's insert.
+_MAX_DIM_LEN = 512
 
 
 async def fetch_gsc(
@@ -28,13 +38,16 @@ async def fetch_gsc(
     site_url: str,
     window_start: date_cls,
     window_end: date_cls,
+    dimensions: tuple[str, ...] = ("date",),
     max_pages: int = 8,
 ) -> dict[str, Any]:
-    """Fetch date-grain search analytics, paging on ``startRow`` (D3).
+    """Fetch search analytics for one ``dimensions`` shape, paging on ``startRow`` (D3).
 
     ``site_url`` is the canonical property (``sc-domain:…`` or a URL-prefix; A10
-    normalized on the connection). Bounded by ``max_pages`` so a runaway property
-    can't blow the daily quota budget in one connection.
+    normalized on the connection). ``dimensions`` defaults to ``('date',)`` (the
+    total shape); pass ``('date','query')`` / ``('date','page')`` for the
+    breakdown shapes. Bounded by ``max_pages`` so a runaway property can't blow the
+    daily quota budget in one connection.
     """
     from urllib.parse import quote
 
@@ -45,7 +58,7 @@ async def fetch_gsc(
         body = {
             "startDate": window_start.isoformat(),
             "endDate": window_end.isoformat(),
-            "dimensions": ["date"],
+            "dimensions": list(dimensions),
             "rowLimit": _PAGE_SIZE,
             "startRow": start_row,
         }
@@ -82,12 +95,15 @@ def map_gsc(
     *,
     connection_id: int,
     company_id: int,
+    dimension_type: str = "total",
 ) -> list[AnalyticsDailyRow]:
-    """Pure: searchAnalytics payload → date-grain ``AnalyticsDailyRow``s.
+    """Pure: searchAnalytics payload → per-date ``AnalyticsDailyRow``s.
 
-    The ``keys`` array holds the requested dimensions in order — here just
-    ``[date]``. clicks/impressions are ints; ctr/position are ``Decimal``. Empty
-    payload → ``[]`` (E5 guard).
+    The ``keys`` array holds the requested dimensions in order: ``[date]`` for the
+    ``'total'`` shape, ``[date, query]`` / ``[date, page]`` for the breakdown
+    shapes. ``dimension_value`` is ``""`` for totals, else the second key
+    (truncated to the column width). clicks/impressions are ints; ctr/position are
+    ``Decimal``. Empty payload → ``[]`` (E5 guard).
     """
     # Envelope guard (CRITICAL-1): the fetcher always lands {"rows": [...]} (empty
     # list when the site had no search traffic). A payload without the 'rows' key is
@@ -108,14 +124,25 @@ def map_gsc(
             platform="gsc",
         )
         row_date = date_cls.fromisoformat(keys[0])
+        if dimension_type == "total":
+            dimension_value = ""
+        else:
+            # The breakdown shapes carry [date, <query|page>]; a row missing the
+            # second key is a drifted shape, not empty data → raise (CRITICAL-1).
+            ensure_shape(
+                len(keys) >= 2,
+                f"gsc {dimension_type} row missing its dimension key",
+                platform="gsc",
+            )
+            dimension_value = (keys[1] or "")[:_MAX_DIM_LEN]
         rows.append(
             AnalyticsDailyRow(
                 connection_id=connection_id,
                 company_id=company_id,
                 source="gsc",
                 date=row_date,
-                dimension_type="total",
-                dimension_value="",
+                dimension_type=dimension_type,
+                dimension_value=dimension_value,
                 clicks=int(raw.get("clicks", 0) or 0),
                 impressions=int(raw.get("impressions", 0) or 0),
                 ctr=q6(raw.get("ctr", 0) or 0),
