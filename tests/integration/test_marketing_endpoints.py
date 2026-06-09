@@ -431,3 +431,63 @@ class TestBudgetPacingNonFirstOfMonth:
         assert r.status_code == 200
         row = next(x for x in r.json()["rows"] if x["connection_id"] == conn.id)
         assert Decimal(str(row["budget"])) == Decimal("1000")  # matched despite day=15
+
+
+class TestBlendDeltaAndDayOfWeek:
+    """The two BLEND gaps the trio flagged: a multi-platform COMPARE window must not
+    fabricate an overview delta against a blended baseline, and /day-of-week must
+    withhold conversions when >1 ad platform contributes."""
+
+    async def test_overview_delta_not_fabricated_against_blended_previous(
+        self, client, auth_headers, db_session, test_company
+    ):
+        g = await _conn(db_session, test_company.id, platform="google_ads", external="g1")
+        m = await _conn(db_session, test_company.id, platform="meta_ads", external="act_1")
+        # CURRENT window: Google only (a valid single-platform conversions number)
+        await _ads(db_session, g, test_company.id, d=D1, spend=100, clicks=50, conversions=10, conversion_value=500)
+        # COMPARE window: Google + Meta both contributed (blended → non-additive)
+        cmp_day = date(2026, 5, 22)
+        await _ads(db_session, g, test_company.id, d=cmp_day, spend=90, clicks=40, conversions=5, conversion_value=250)
+        await _ads(db_session, m, test_company.id, d=cmp_day, spend=70, clicks=30, platform="meta_ads",
+                   conversions=4, conversion_value=200)
+        await db_session.commit()
+
+        r = await client.get(
+            f"/api/marketing/companies/{test_company.id}/overview",
+            params={
+                "date_from": FROM.isoformat(), "date_to": TO.isoformat(),
+                "compare_from": "2026-05-20", "compare_to": "2026-05-30",
+            },
+            headers=auth_headers,
+        )
+        assert r.status_code == 200
+        body = r.json()
+        # current is single-platform → not withheld; the value is the valid Google number
+        assert body["conversions_withheld_reason"] is None
+        assert Decimal(str(body["conversions"])) == Decimal("10")
+        # but the conversions card delta must be "new" (baseline nulled), not a
+        # fabricated % against the blended Google+Meta previous
+        conv_card = next(c for c in body["cards"] if c["key"] == "conversions")
+        assert conv_card["delta"]["is_new"] is True
+
+    async def test_day_of_week_withholds_conversions_for_multi_platform(
+        self, client, auth_headers, db_session, test_company
+    ):
+        g = await _conn(db_session, test_company.id, platform="google_ads", external="g1")
+        m = await _conn(db_session, test_company.id, platform="meta_ads", external="act_1")
+        await _ads(db_session, g, test_company.id, d=D1, spend=100, clicks=50, conversions=10, conversion_value=500)
+        await _ads(db_session, m, test_company.id, d=D1, spend=80, clicks=40, platform="meta_ads",
+                   conversions=8, conversion_value=400)
+        await db_session.commit()
+
+        r = await client.get(
+            f"/api/marketing/companies/{test_company.id}/day-of-week",
+            params={"date_from": FROM.isoformat(), "date_to": TO.isoformat()},
+            headers=auth_headers,
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["conversions_withheld_reason"] == "multi_platform_conversions"
+        day = next(d for d in body["days"] if Decimal(str(d["spend"])) > 0)
+        assert Decimal(str(day["spend"])) == Decimal("180")  # additive
+        assert day["conversions"] is None and day["roas"] is None and day["cost_per_conversion"] is None

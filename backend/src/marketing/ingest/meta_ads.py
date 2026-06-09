@@ -113,8 +113,20 @@ async def _fetch_paged(
     """Collect ``data`` across cursor pages (``paging.cursors.after``)."""
     out: list[dict[str, Any]] = []
     params = dict(base_params)
+    first = True
     for _ in range(max_pages):
         page = await client.get(url, params)
+        if first:
+            # Drift guard at the fetch boundary (CRITICAL-1): Meta list/insights edges
+            # always return {"data": [...]} (empty list = genuine no-data). A 2xx body
+            # without 'data' is drift — raise so it isn't normalized to [] and recorded
+            # as a silent zero. (OAuth-190 etc. are 4xx → already PermanentError.)
+            ensure_shape(
+                isinstance(page, dict) and "data" in page,
+                "meta_ads: unrecognized list/insights response envelope",
+                platform="meta_ads",
+            )
+            first = False
         out.extend((page or {}).get("data") or [])
         paging = (page or {}).get("paging") or {}
         after = (paging.get("cursors") or {}).get("after")

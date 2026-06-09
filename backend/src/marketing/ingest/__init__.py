@@ -228,6 +228,13 @@ def _validate_public_url(raw: str) -> str:
         ip = ipaddress.ip_address(host)
     except ValueError:
         ip = None
+    # Alternate-encoding literals (decimal "2130706433", hex "0x7f000001") don't parse
+    # as a dotted IP but Google's crawler would resolve them — block the non-public ones.
+    if ip is None:
+        try:
+            ip = ipaddress.ip_address(int(host, 0)) if (host.isdigit() or host.lower().startswith("0x")) else None
+        except (ValueError, ipaddress.AddressValueError):
+            ip = None
     if ip is not None and (
         ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast
     ):

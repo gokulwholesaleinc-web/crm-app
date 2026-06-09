@@ -121,3 +121,14 @@ class TestBackfill:
         monkeypatch.delenv(crypto.ENV_VAR, raising=False)
         with pytest.raises(crypto.MetaCryptoError):
             await backfill_meta_tokens(db_session)
+
+    async def test_empty_string_token_does_not_livelock(self, meta_key, db_session, test_superuser):
+        # '' satisfies IS NOT NULL — without the length>0 filter this row would be
+        # re-selected forever (livelock). It must terminate and leave the row untouched.
+        cred = MetaCredential(user_id=test_superuser.id, access_token="")
+        db_session.add(cred)
+        await db_session.commit()
+        result = await backfill_meta_tokens(db_session)
+        assert result["encrypted"] == 0
+        await db_session.refresh(cred)
+        assert cred.access_token_ciphertext is None

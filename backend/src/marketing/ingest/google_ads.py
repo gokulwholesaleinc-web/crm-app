@@ -68,11 +68,19 @@ async def _search(
     body = await client.post(url, {"query": gaql}, headers=headers)
     # searchStream returns a top-level array of batch objects; the seam may hand back
     # a bare list, a single non-streamed {"results": [...]}, or {"batches": [...]}.
+    # A genuinely-empty pull is a list ([]) or a batch with results: []. A 2xx whose
+    # shape is NONE of those (a renamed/error-shaped body) is DRIFT — raise here, at
+    # the fetch boundary, so it isn't normalized to [] and recorded as a silent zero
+    # (the mapper's envelope guard can't see this once we'd wrapped it, CRITICAL-1).
     if isinstance(body, list):
         return body
-    if "results" in body:
+    if isinstance(body, dict) and "results" in body:
         return [body]
-    return body.get("batches", [])
+    if isinstance(body, dict) and "batches" in body:
+        return body.get("batches") or []
+    raise UnmappableShapeError(
+        "google_ads searchStream: unrecognized response envelope", platform="google_ads"
+    )
 
 
 async def fetch_google_ads(

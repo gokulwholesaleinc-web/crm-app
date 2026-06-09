@@ -50,6 +50,17 @@ async def fetch_gsc(
             "startRow": start_row,
         }
         page = await client.post(url, body)
+        # Drift guard at the fetch boundary (CRITICAL-1): a genuinely-empty result is
+        # a dict with no/empty 'rows'; a 2xx ERROR-shaped body would otherwise be
+        # normalized to {"rows": []} and recorded as a silent zero. (GSC's empty and
+        # no-data shapes both lack 'rows', so only an explicit error envelope / a
+        # non-dict is treated as drift.)
+        if start_row == 0:
+            ensure_shape(
+                isinstance(page, dict) and "error" not in page,
+                "gsc searchAnalytics: error/unrecognized response envelope",
+                platform="gsc",
+            )
         rows = page.get("rows") or []
         all_rows.extend(rows)
         if len(rows) < _PAGE_SIZE:

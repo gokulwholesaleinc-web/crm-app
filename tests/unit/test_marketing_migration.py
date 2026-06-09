@@ -45,6 +45,7 @@ _MARKETING_TABLES = (
 _VERSIONS = Path(__file__).resolve().parents[2] / "backend" / "alembic" / "versions"
 _MIGRATION_PATH = _VERSIONS / "056_marketing_warehouse.py"
 _MIGRATION_057_PATH = _VERSIONS / "057_marketing_phase2_ga4.py"
+_MIGRATION_058_PATH = _VERSIONS / "058_meta_token_encryption.py"
 
 # Applied in order to build the full current marketing schema.
 _MIGRATION_PATHS = (_MIGRATION_PATH, _MIGRATION_057_PATH)
@@ -141,6 +142,32 @@ def test_migration_056_declares_nulls_not_distinct_on_grain_keys():
             f"{name} is missing postgresql_nulls_not_distinct=True — A2 de-dup would "
             "break on Postgres (account-level NULL-key rows would duplicate)."
         )
+
+
+def test_migration_058_meta_credentials_encryption_columns():
+    """Migration 058 (C4 expand) adds the encrypted columns + makes access_token
+    nullable on meta_credentials — exercised here so migration↔model drift can't ship
+    green (the meta_credentials table isn't in the marketing parity set)."""
+    mig = _load_migration(_MIGRATION_058_PATH)
+    engine = create_engine("sqlite:///:memory:")
+    with engine.connect() as conn:
+        # pre-058 shape: plaintext access_token NOT NULL, no ciphertext columns.
+        conn.exec_driver_sql(
+            "CREATE TABLE meta_credentials ("
+            " id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL,"
+            " access_token TEXT NOT NULL, token_expiry DATETIME,"
+            " page_access_tokens JSON, scopes TEXT, is_active BOOLEAN,"
+            " created_at DATETIME, updated_at DATETIME)"
+        )
+        ctx = MigrationContext.configure(conn)
+        with Operations.context(ctx):
+            mig.upgrade()
+        cols = {c["name"]: c for c in inspect(conn).get_columns("meta_credentials")}
+    assert "access_token_ciphertext" in cols
+    assert "token_key_version" in cols
+    # C4 expand: the legacy plaintext column must become nullable so the contract
+    # phase can stop writing it.
+    assert cols["access_token"]["nullable"] is True
 
 
 def test_migration_056_downgrade_drops_tables():

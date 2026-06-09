@@ -486,11 +486,6 @@ async def analytics(
                 func.coalesce(
                     func.max(func.cast(AnalyticsDaily.is_sampled, Integer)), 0
                 ),
-                # Portable "all golden?" — MIN of the boolean cast; 0 if ANY total-grain
-                # row had a "(other)" overflow / wasn't finalized (H3 tie-out caveat).
-                func.coalesce(
-                    func.min(func.cast(AnalyticsDaily.is_data_golden, Integer)), 1
-                ),
             ).where(
                 AnalyticsDaily.company_id == company_id,
                 AnalyticsDaily.source == "ga4",
@@ -500,7 +495,21 @@ async def analytics(
             )
         )
     ).one()
-    sessions, users, new_users, engaged_sessions, key_events, is_sampled, is_golden = ga4_total
+    sessions, users, new_users, engaged_sessions, key_events, is_sampled = ga4_total
+    # "all golden?" over ALL GA4 rows in the window (H3): the "(other)" overflow
+    # (dataLossFromOtherRow) is recorded on the channel/page breakdown rows, NOT the
+    # date-only total rows — so checking only 'total' would never surface it. 0 if any
+    # GA4 row this window overflowed / wasn't finalized.
+    is_golden = (
+        await session.execute(
+            select(func.coalesce(func.min(func.cast(AnalyticsDaily.is_data_golden, Integer)), 1)).where(
+                AnalyticsDaily.company_id == company_id,
+                AnalyticsDaily.source == "ga4",
+                AnalyticsDaily.date >= date_from,
+                AnalyticsDaily.date <= date_to,
+            )
+        )
+    ).scalar_one()
     sessions = _int(sessions)
     engaged_sessions = _int(engaged_sessions)
     ga4_totals = {

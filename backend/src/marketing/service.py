@@ -277,6 +277,13 @@ class MarketingReadService:
             for bucket in (current, previous):
                 for field in _CONVERSION_FIELDS:
                     bucket[field] = None
+        elif await self._conversions_cross_platform(company_id, cmp_from, prev_to, entity_level):
+            # Current window is single-platform (a valid number) but the COMPARE window
+            # blended >1 platform — null only the previous conversion fields so the
+            # delta renders "New"/em-dash instead of a fabricated % against a
+            # non-additive baseline (don't compare a Google number to Google+Meta).
+            for field in _CONVERSION_FIELDS:
+                previous[field] = None
 
         card_specs = list(_OVERVIEW_ADDITIVE_CARDS)
         if conv_withheld is None:

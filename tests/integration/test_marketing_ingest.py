@@ -12,10 +12,25 @@ where the real-PG ``pg_session`` fixture is available.
 
 from __future__ import annotations
 
+from datetime import date
+
 import httpx
 import pytest
-from src.marketing.ingest import IngestConfigError, _validate_public_url, health
-from src.marketing.ingest.http_client import PermanentError, TransientError, _parse_retry_after
+from src.marketing.ingest import (
+    IngestConfigError,
+    _validate_public_url,
+    ga4,
+    google_ads,
+    gsc,
+    health,
+    meta_ads,
+)
+from src.marketing.ingest.http_client import (
+    PermanentError,
+    TransientError,
+    UnmappableShapeError,
+    _parse_retry_after,
+)
 from src.marketing.models import PlatformConnection
 
 
@@ -166,3 +181,60 @@ class TestSchedulerPlatformGate:
         from src.marketing.scheduler_hook import _allowed_platforms
         monkeypatch.setattr(settings, "MKTG_META_ENABLED", True)
         assert "meta_ads" in _allowed_platforms()
+
+
+class _DriftSeam:
+    """Returns one body for every call — proves a fetcher RAISES on an unrecognized
+    2xx shape (drift) at the fetch boundary instead of normalizing it to a silent
+    zero before the mapper guard can see it (CRITICAL-1, prod path)."""
+
+    def __init__(self, body):
+        self._b = body
+
+    async def post(self, url, json=None, *, headers=None):
+        return self._b
+
+    async def get(self, url, params=None):
+        return self._b
+
+
+_W = dict(window_start=date(2026, 6, 1), window_end=date(2026, 6, 2))
+
+
+class TestFetcherDriftGuard:
+    async def test_google_ads_fetch_raises_on_drift(self):
+        with pytest.raises(UnmappableShapeError):
+            await google_ads.fetch_google_ads(
+                _DriftSeam({"error": {"code": 7}}), customer_id="1", developer_token="t",
+                login_customer_id=None, **_W,
+            )
+
+    async def test_google_ads_empty_array_is_genuine_empty(self):
+        out = await google_ads.fetch_google_ads(
+            _DriftSeam([]), customer_id="1", developer_token="t", login_customer_id=None, **_W
+        )
+        assert out == {"campaign_batches": [], "adgroup_batches": []}
+
+    async def test_ga4_fetch_raises_on_drift(self):
+        with pytest.raises(UnmappableShapeError):
+            await ga4.fetch_ga4_total(_DriftSeam({"error": {}}), property_id="p", **_W)
+
+    async def test_ga4_empty_report_is_genuine_empty(self):
+        seam = _DriftSeam({"dimensionHeaders": [], "metricHeaders": [], "rows": []})
+        out = await ga4.fetch_ga4_total(seam, property_id="p", **_W)
+        assert out.get("rows") == []
+
+    async def test_gsc_fetch_raises_on_drift(self):
+        with pytest.raises(UnmappableShapeError):
+            await gsc.fetch_gsc(_DriftSeam({"error": {}}), site_url="sc-domain:x.com", **_W)
+
+    async def test_meta_paged_raises_on_drift(self):
+        with pytest.raises(UnmappableShapeError):
+            await meta_ads._fetch_paged(_DriftSeam({"error": {"code": 190}}), "https://x/insights", {})
+
+
+class TestSsrfAlternateEncodings:
+    def test_decimal_and_hex_loopback_blocked(self):
+        for bad in ("http://2130706433/", "http://0x7f000001/"):
+            with pytest.raises(IngestConfigError):
+                _validate_public_url(bad)

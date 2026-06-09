@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import asyncio
 import logging
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.database import async_session_maker
 from src.meta import crypto
@@ -33,10 +33,10 @@ logger = logging.getLogger("backfill_meta_token_encryption")
 
 
 async def backfill_meta_tokens(session: AsyncSession, *, batch_size: int = 100) -> dict[str, int]:
-    """Encrypt plaintext tokens lacking ciphertext. Returns counts {encrypted, skipped}.
+    """Encrypt plaintext tokens lacking ciphertext. Returns {"encrypted": n}.
 
-    The caller owns the transaction boundary (this commits per batch). Idempotent:
-    re-running only processes still-unencrypted rows.
+    Commits per batch. Idempotent + resumable: only non-empty plaintext rows without
+    ciphertext are selected, so each batch strictly shrinks the work set (no livelock).
     """
     if not crypto.is_configured():
         raise crypto.MetaCryptoError(
@@ -44,7 +44,6 @@ async def backfill_meta_tokens(session: AsyncSession, *, batch_size: int = 100) 
         )
 
     encrypted = 0
-    skipped = 0
     while True:
         rows = (
             (
@@ -53,6 +52,10 @@ async def backfill_meta_tokens(session: AsyncSession, *, batch_size: int = 100) 
                     .where(
                         MetaCredential.access_token_ciphertext.is_(None),
                         MetaCredential.access_token.isnot(None),
+                        # Exclude empty strings: '' satisfies IS NOT NULL, and we skip
+                        # encrypting it, so without this filter such a row would be
+                        # re-selected every iteration → livelock. (No token to encrypt.)
+                        func.length(MetaCredential.access_token) > 0,
                     )
                     .limit(batch_size)
                 )
@@ -63,27 +66,22 @@ async def backfill_meta_tokens(session: AsyncSession, *, batch_size: int = 100) 
         if not rows:
             break
         for cred in rows:
-            if not cred.access_token:  # defensive: empty string → nothing to encrypt
-                skipped += 1
-                continue
             ct, version = crypto.encrypt_token(cred.access_token)
             cred.access_token_ciphertext = ct
             cred.token_key_version = version
             encrypted += 1
         await session.commit()
-        # progress is durable; the next loop re-queries the (now smaller) NULL set.
+        # Every selected row was encrypted, so the NULL-ciphertext set strictly
+        # shrinks each batch; the next loop re-queries the now-smaller set.
 
-    return {"encrypted": encrypted, "skipped": skipped}
+    return {"encrypted": encrypted}
 
 
 async def main() -> None:
     logging.basicConfig(level=logging.INFO)
     async with async_session_maker() as session:
         result = await backfill_meta_tokens(session)
-    logger.info(
-        "Meta token backfill complete: %d encrypted, %d skipped",
-        result["encrypted"], result["skipped"],
-    )
+    logger.info("Meta token backfill complete: %d encrypted", result["encrypted"])
 
 
 if __name__ == "__main__":
