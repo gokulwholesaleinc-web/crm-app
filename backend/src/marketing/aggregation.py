@@ -62,6 +62,36 @@ def blended_withhold_reason(
     return None
 
 
+async def contributing_ad_platforms(
+    session: AsyncSession,
+    company_id: int,
+    date_from: date,
+    date_to: date,
+    *,
+    entity_level: str = "account",
+) -> set[str]:
+    """The distinct ad platforms with fact rows in the window (BLEND guard).
+
+    Window-scoped (not merely configured): conversions are NON-ADDITIVE across
+    platforms (Google de-dups; Meta uses its own attribution window), so a blended
+    conversions/ROAS number is only meaningful when exactly one ad platform
+    contributed. The read layer withholds the conversion-derived blended fields when
+    this returns more than one platform.
+    """
+    rows = await session.execute(
+        select(AdsDailyMetric.platform)
+        .where(
+            AdsDailyMetric.company_id == company_id,
+            AdsDailyMetric.entity_level == entity_level,
+            AdsDailyMetric.date >= date_from,
+            AdsDailyMetric.date <= date_to,
+            AdsDailyMetric.platform.in_(_AD_PLATFORMS),
+        )
+        .distinct()
+    )
+    return {p for (p,) in rows.all() if p}
+
+
 async def ads_overview(
     session: AsyncSession,
     company_id: int,

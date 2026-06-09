@@ -16,6 +16,7 @@ from src.companies.models import Company
 from src.marketing.models import (
     AdsDailyMetric,
     AnalyticsDaily,
+    BudgetPeriod,
     MarketingCampaign,
     PlatformConnection,
 )
@@ -57,19 +58,20 @@ async def _conn(db, company_id, *, platform="google_ads", currency="USD", extern
     return c
 
 
-async def _ads(db, conn, company_id, *, d, spend, clicks, platform="google_ads", currency="USD"):
+async def _ads(db, conn, company_id, *, d, spend, clicks, platform="google_ads", currency="USD",
+               conversions=0, conversion_value=0, entity_level="account"):
     db.add(
         AdsDailyMetric(
             connection_id=conn.id,
             company_id=company_id,
             platform=platform,
             date=d,
-            entity_level="account",
+            entity_level=entity_level,
             spend=Decimal(str(spend)),
             impressions=1000,
             clicks=clicks,
-            conversions=Decimal("0"),
-            conversion_value=Decimal("0"),
+            conversions=Decimal(str(conversions)),
+            conversion_value=Decimal(str(conversion_value)),
             currency=currency,
         )
     )
@@ -267,3 +269,165 @@ class TestAnalytics:
         assert body["ga4_totals"]["is_data_golden"] is True
         # traffic sources come from the channel rows, not the total
         assert "Organic Search" in {s["channel"] for s in body["traffic_sources"]}
+
+
+class TestCrossPlatformConversionBlend:
+    """BLEND: once >1 ad platform contributes, conversions/ROAS are non-additive and
+    must be withheld; spend/clicks/impressions stay (additive within one currency)."""
+
+    async def _seed_two_platforms(self, db, company_id):
+        g = await _conn(db, company_id, platform="google_ads", external="g1", currency="USD")
+        m = await _conn(db, company_id, platform="meta_ads", external="act_1", currency="USD")
+        await _ads(db, g, company_id, d=D1, spend=100, clicks=50, conversions=10, conversion_value=500)
+        await _ads(db, m, company_id, d=D1, spend=80, clicks=40, platform="meta_ads",
+                   conversions=8, conversion_value=400)
+        await db.commit()
+
+    async def test_overview_withholds_conversions_keeps_spend(self, client, auth_headers, db_session, test_company):
+        await self._seed_two_platforms(db_session, test_company.id)
+        r = await client.get(
+            f"/api/marketing/companies/{test_company.id}/overview",
+            params={"date_from": FROM.isoformat(), "date_to": TO.isoformat()},
+            headers=auth_headers,
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["conversions_withheld_reason"] == "multi_platform_conversions"
+        # spend is additive across platforms within one currency → still blended (180)
+        assert Decimal(str(body["spend"])) == Decimal("180")
+        # conversion-derived blended numbers are withheld (None)
+        assert body["conversions"] is None and body["roas"] is None
+        card_keys = {c["key"] for c in body["cards"]}
+        assert "spend" in card_keys and "conversions" not in card_keys and "roas" not in card_keys
+
+    async def test_single_platform_still_shows_conversions(self, client, auth_headers, db_session, test_company):
+        g = await _conn(db_session, test_company.id, platform="google_ads", external="g1")
+        await _ads(db_session, g, test_company.id, d=D1, spend=100, clicks=50, conversions=10, conversion_value=500)
+        await db_session.commit()
+        r = await client.get(
+            f"/api/marketing/companies/{test_company.id}/overview",
+            params={"date_from": FROM.isoformat(), "date_to": TO.isoformat()},
+            headers=auth_headers,
+        )
+        body = r.json()
+        assert body["conversions_withheld_reason"] is None
+        assert Decimal(str(body["conversions"])) == Decimal("10")
+
+    async def test_series_withholds_conversions_per_point(self, client, auth_headers, db_session, test_company):
+        await self._seed_two_platforms(db_session, test_company.id)
+        r = await client.get(
+            f"/api/marketing/companies/{test_company.id}/series",
+            params={"date_from": FROM.isoformat(), "date_to": TO.isoformat()},
+            headers=auth_headers,
+        )
+        body = r.json()
+        assert body["conversions_withheld_reason"] == "multi_platform_conversions"
+        pt = next(p for p in body["points"] if p["date"] == D1.isoformat())
+        assert Decimal(str(pt["spend"])) == Decimal("180")  # additive
+        assert pt["conversions"] is None and pt["roas"] is None
+
+
+class TestMultiCurrencyWithholdOnTrends:
+    """H2: /series and /day-of-week withhold for multi-currency, matching /overview."""
+
+    async def _seed_two_currencies(self, db, company_id):
+        g = await _conn(db, company_id, platform="google_ads", external="g1", currency="USD")
+        m = await _conn(db, company_id, platform="meta_ads", external="act_1", currency="EUR")
+        await _ads(db, g, company_id, d=D1, spend=100, clicks=50)
+        await _ads(db, m, company_id, d=D1, spend=80, clicks=40, platform="meta_ads", currency="EUR")
+        await db.commit()
+
+    async def test_series_withheld_for_multi_currency(self, client, auth_headers, db_session, test_company):
+        await self._seed_two_currencies(db_session, test_company.id)
+        r = await client.get(
+            f"/api/marketing/companies/{test_company.id}/series",
+            params={"date_from": FROM.isoformat(), "date_to": TO.isoformat()},
+            headers=auth_headers,
+        )
+        body = r.json()
+        assert body["withheld_reason"] == "multi_currency"
+        assert body["points"] == []
+
+    async def test_day_of_week_withheld_for_multi_currency(self, client, auth_headers, db_session, test_company):
+        await self._seed_two_currencies(db_session, test_company.id)
+        r = await client.get(
+            f"/api/marketing/companies/{test_company.id}/day-of-week",
+            params={"date_from": FROM.isoformat(), "date_to": TO.isoformat()},
+            headers=auth_headers,
+        )
+        body = r.json()
+        assert body["withheld_reason"] == "multi_currency"
+        assert body["days"] == []
+
+
+class TestWindowAndParamValidation:
+    async def test_bad_entity_level_is_422(self, client, auth_headers, test_company):
+        r = await client.get(
+            f"/api/marketing/companies/{test_company.id}/overview",
+            params={"date_from": FROM.isoformat(), "date_to": TO.isoformat(), "entity_level": "garbage"},
+            headers=auth_headers,
+        )
+        assert r.status_code == 422  # H6: not a silent all-zero answer
+
+    async def test_inverted_range_is_422(self, client, auth_headers, test_company):
+        r = await client.get(
+            f"/api/marketing/companies/{test_company.id}/overview",
+            params={"date_from": TO.isoformat(), "date_to": FROM.isoformat()},
+            headers=auth_headers,
+        )
+        assert r.status_code == 422  # DATE-RANGE
+
+    async def test_oversized_range_is_422(self, client, auth_headers, test_company):
+        r = await client.get(
+            f"/api/marketing/companies/{test_company.id}/overview",
+            params={"date_from": "2020-01-01", "date_to": "2026-06-10"},
+            headers=auth_headers,
+        )
+        assert r.status_code == 422  # DATE-RANGE cap
+
+    async def test_one_sided_compare_is_422(self, client, auth_headers, db_session, test_company):
+        await _conn(db_session, test_company.id)
+        await db_session.commit()
+        r = await client.get(
+            f"/api/marketing/companies/{test_company.id}/overview",
+            params={"date_from": FROM.isoformat(), "date_to": TO.isoformat(), "compare_from": "2026-05-01"},
+            headers=auth_headers,
+        )
+        assert r.status_code == 422  # COMPARE-ASYM
+
+
+class TestFreshnessNeverSynced:
+    async def test_never_synced_active_connection_forces_never(self, client, auth_headers, db_session, test_company):
+        # an active (non-pending) connection that has never synced must drag freshness
+        # to "never" rather than be masked by a healthy sibling (FRESHNESS-MIN).
+        good = await _conn(db_session, test_company.id, platform="google_ads", external="g1")
+        stuck = await _conn(db_session, test_company.id, platform="meta_ads", external="act_1")
+        stuck.last_synced_at = None  # active, enabled, never synced
+        await _ads(db_session, good, test_company.id, d=D1, spend=10, clicks=5)
+        await db_session.commit()
+        r = await client.get(
+            f"/api/marketing/companies/{test_company.id}/overview",
+            params={"date_from": FROM.isoformat(), "date_to": TO.isoformat()},
+            headers=auth_headers,
+        )
+        assert r.json()["data_trust"]["last_synced_at"] is None
+
+
+class TestBudgetPacingNonFirstOfMonth:
+    async def test_budget_row_stored_with_non_first_day_still_matches(self, client, auth_headers, db_session, test_company):
+        conn = await _conn(db_session, test_company.id, platform="google_ads", external="g1")
+        await _ads(db_session, conn, test_company.id, d=D1, spend=300, clicks=100)
+        # budget row stored on the 15th, not the 1st (BUDGET-PERIODS range match)
+        db_session.add(BudgetPeriod(
+            connection_id=conn.id, company_id=test_company.id,
+            period_month=date(2026, 6, 15), amount=Decimal("1000"), currency="USD",
+        ))
+        await db_session.commit()
+        r = await client.get(
+            f"/api/marketing/companies/{test_company.id}/budget-pacing",
+            params={"as_of": "2026-06-10"},
+            headers=auth_headers,
+        )
+        assert r.status_code == 200
+        row = next(x for x in r.json()["rows"] if x["connection_id"] == conn.id)
+        assert Decimal(str(row["budget"])) == Decimal("1000")  # matched despite day=15

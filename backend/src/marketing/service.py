@@ -20,6 +20,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal
 
+from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -58,14 +59,20 @@ from .schemas import (
 # value v1; per-platform settling lives in the ingest settling-window (A7).
 PROVISIONAL_DAYS = 2
 
-# KPI cards surfaced on /overview with their display format + delta polarity key.
-_OVERVIEW_CARDS: tuple[tuple[str, str, str], ...] = (
+# KPI cards surfaced on /overview. Additive cards are truly blendable across
+# platforms (within one currency); conversion cards are withheld when >1 ad platform
+# contributes because conversions are non-additive across platforms (BLEND).
+_OVERVIEW_ADDITIVE_CARDS: tuple[tuple[str, str, str], ...] = (
     ("spend", "Total Spend", "currency"),
-    ("conversions", "Total Conversions", "number"),
     ("cpc", "Blended CPC", "currency"),
+)
+_OVERVIEW_CONVERSION_CARDS: tuple[tuple[str, str, str], ...] = (
+    ("conversions", "Total Conversions", "number"),
     ("cost_per_conversion", "Cost / Conversion", "currency"),
     ("roas", "ROAS", "ratio"),
 )
+# Conversion-derived fields withheld together when conversions can't be blended.
+_CONVERSION_FIELDS = ("conversions", "conversion_value", "cost_per_conversion", "roas")
 
 
 class MarketingReadService:
@@ -98,8 +105,27 @@ class MarketingReadService:
         """The freshness of the STALEST contributing source — the truthful headline
         (§C), never page-load time. Deliberately ``MIN`` not ``MAX``: a single dead
         connection (ads stuck while GA4 keeps succeeding) must drag the chip to
-        stale, not be masked by a healthy sibling. Disabled connections don't
-        contribute; a never-synced (NULL) source is surfaced per-source instead."""
+        stale, not be masked by a healthy sibling.
+
+        FRESHNESS-MIN: a connection that SHOULD have synced (enabled, not 'pending'
+        first-sync, not 'disabled') but has NEVER synced (last_synced_at IS NULL)
+        forces the chip to "never" — the prior ``isnot(None)`` filter excluded those,
+        so a stuck-since-creation source could be masked by a healthy sibling. A
+        brand-new 'pending' connection is excluded (no data yet is expected)."""
+        never_synced = (
+            await self.db.execute(
+                select(func.count())
+                .select_from(PlatformConnection)
+                .where(
+                    PlatformConnection.company_id == company_id,
+                    PlatformConnection.is_enabled.is_(True),
+                    PlatformConnection.status.notin_(("pending", "disabled")),
+                    PlatformConnection.last_synced_at.is_(None),
+                )
+            )
+        ).scalar_one()
+        if never_synced:
+            return None  # an active source has never produced data → "never"
         return (
             await self.db.execute(
                 select(func.min(PlatformConnection.last_synced_at)).where(
@@ -147,10 +173,29 @@ class MarketingReadService:
         compare_from: date | None,
         compare_to: date | None,
     ) -> tuple[date, date]:
-        """Use the caller's compare window or default to the prior equal period."""
+        """Use the caller's compare window or default to the prior equal period.
+
+        COMPARE-ASYM: a one-sided window (only one of compare_from/compare_to) is a
+        422, not a silent fall-through to the default — otherwise the response's
+        Timeframe would disagree with what the caller asked for."""
+        if (compare_from is None) != (compare_to is None):
+            raise HTTPException(
+                status_code=422,
+                detail="compare_from and compare_to must be provided together",
+            )
         if compare_from is not None and compare_to is not None:
             return compare_from, compare_to
         return default_compare_window(date_from, date_to)
+
+    async def _conversions_cross_platform(
+        self, company_id: int, date_from: date, date_to: date, entity_level: str
+    ) -> bool:
+        """True when >1 ad platform contributed in the window → the conversion-derived
+        blended fields must be withheld (non-additive across platforms, BLEND)."""
+        platforms = await aggregation.contributing_ad_platforms(
+            self.db, company_id, date_from, date_to, entity_level=entity_level
+        )
+        return len(platforms) > 1
 
     # ── /overview ─────────────────────────────────────────────────────────────
     async def overview(
@@ -224,10 +269,23 @@ class MarketingReadService:
             self.db, company_id, cmp_from, prev_to, entity_level=entity_level
         )
 
+        # BLEND: when >1 ad platform contributed, conversions/value/cost-per-conv/ROAS
+        # are non-additive across platforms — withhold those (keep spend/clicks/impr).
+        conv_withheld: str | None = None
+        if await self._conversions_cross_platform(company_id, date_from, cur_to, entity_level):
+            conv_withheld = "multi_platform_conversions"
+            for bucket in (current, previous):
+                for field in _CONVERSION_FIELDS:
+                    bucket[field] = None
+
+        card_specs = list(_OVERVIEW_ADDITIVE_CARDS)
+        if conv_withheld is None:
+            card_specs += list(_OVERVIEW_CONVERSION_CARDS)
+
         timeframe_label = f"vs {cmp_from.isoformat()} – {cmp_to.isoformat()}"
         cards = [
             self._card(key, label, fmt, current, previous, timeframe_label)
-            for key, label, fmt in _OVERVIEW_CARDS
+            for key, label, fmt in card_specs
         ]
 
         return OverviewResponse(
@@ -244,6 +302,7 @@ class MarketingReadService:
             cost_per_conversion=current["cost_per_conversion"],
             roas=current["roas"],
             withheld_reason=None,
+            conversions_withheld_reason=conv_withheld,
         )
 
     @staticmethod
@@ -293,6 +352,22 @@ class MarketingReadService:
     async def _series_uncached(
         self, company_id: int, date_from: date, date_to: date, entity_level: str
     ) -> SeriesResponse:
+        timeframe = Timeframe(
+            date_from=date_from, date_to=date_to, entity_level=entity_level
+        )
+        # H2: a multi-currency client's blended daily spend line is meaningless —
+        # withhold (empty points + reason), matching /overview + /allocation.
+        withheld = await self._withhold_reason(company_id)
+        if withheld is not None:
+            return SeriesResponse(
+                timeframe=timeframe,
+                data_trust=await self._data_trust(
+                    company_id, is_provisional=True, withheld_reason=withheld
+                ),
+                points=[],
+                withheld_reason=withheld,
+            )
+
         raw = await reads.series(
             self.db, company_id, date_from, date_to, entity_level=entity_level
         )
@@ -301,14 +376,23 @@ class MarketingReadService:
         )
         for point in raw:
             point["is_provisional"] = point["date"] > provisional_cutoff
+
+        # BLEND: withhold per-day conversion-derived fields when >1 ad platform
+        # contributes (spend/clicks/impressions stay — they're additive).
+        conv_withheld: str | None = None
+        if await self._conversions_cross_platform(company_id, date_from, date_to, entity_level):
+            conv_withheld = "multi_platform_conversions"
+            for point in raw:
+                for field in ("conversions", "conversion_value", "roas"):
+                    point[field] = None
+
         return SeriesResponse(
-            timeframe=Timeframe(
-                date_from=date_from, date_to=date_to, entity_level=entity_level
-            ),
+            timeframe=timeframe,
             data_trust=await self._data_trust(
                 company_id, is_provisional=True, withheld_reason=None
             ),
             points=[SeriesPoint.model_validate(p) for p in raw],
+            conversions_withheld_reason=conv_withheld,
         )
 
     # ── /allocation ───────────────────────────────────────────────────────────
@@ -386,17 +470,39 @@ class MarketingReadService:
     async def _dow_uncached(
         self, company_id: int, date_from: date, date_to: date, entity_level: str
     ) -> DayOfWeekResponse:
+        timeframe = Timeframe(
+            date_from=date_from, date_to=date_to, entity_level=entity_level
+        )
+        # H2: withhold for multi-currency (blended spend across FX is meaningless).
+        withheld = await self._withhold_reason(company_id)
+        if withheld is not None:
+            return DayOfWeekResponse(
+                timeframe=timeframe,
+                data_trust=await self._data_trust(
+                    company_id, is_provisional=True, withheld_reason=withheld
+                ),
+                days=[],
+                withheld_reason=withheld,
+            )
+
         days = await reads.day_of_week(
             self.db, company_id, date_from, date_to, entity_level=entity_level
         )
+        # BLEND: withhold conversion-derived per-DOW fields when >1 ad platform.
+        conv_withheld: str | None = None
+        if await self._conversions_cross_platform(company_id, date_from, date_to, entity_level):
+            conv_withheld = "multi_platform_conversions"
+            for day in days:
+                for field in ("conversions", "conversion_value", "cost_per_conversion", "roas"):
+                    day[field] = None
+
         return DayOfWeekResponse(
-            timeframe=Timeframe(
-                date_from=date_from, date_to=date_to, entity_level=entity_level
-            ),
+            timeframe=timeframe,
             data_trust=await self._data_trust(
                 company_id, is_provisional=True, withheld_reason=None
             ),
             days=[DayOfWeekCard.model_validate(d) for d in days],
+            conversions_withheld_reason=conv_withheld,
         )
 
     # ── /campaigns ────────────────────────────────────────────────────────────

@@ -804,6 +804,14 @@ async def budget_pacing(
     import calendar
 
     month_start = as_of.replace(day=1)
+    # First day of the NEXT month — used for a half-open [month_start, next_month)
+    # budget match so a row stored with a non-first day still pairs to its month
+    # (BUDGET-PERIODS: exact period_month == month_start silently missed such rows).
+    next_month = (
+        date(as_of.year + 1, 1, 1)
+        if as_of.month == 12
+        else date(as_of.year, as_of.month + 1, 1)
+    )
     days_in_month = calendar.monthrange(as_of.year, as_of.month)[1]
     days_elapsed = as_of.day
 
@@ -846,7 +854,8 @@ async def budget_pacing(
             )
             .where(
                 PlatformConnection.company_id == company_id,
-                BudgetPeriod.period_month == month_start,
+                BudgetPeriod.period_month >= month_start,
+                BudgetPeriod.period_month < next_month,
             )
         )
     ).all()
