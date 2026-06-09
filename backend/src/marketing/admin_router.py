@@ -18,7 +18,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, select
 
@@ -30,7 +30,7 @@ from src.core.router_utils import DBSession
 
 from . import cache, crypto
 from .identifiers import normalize_external_account_id, normalize_manager_account_id
-from .ingest import run_connection_sync, settling
+from .ingest import backfill, run_connection_sync, settling
 from .models import (
     CREDENTIAL_MODES,
     PLATFORMS,
@@ -132,6 +132,13 @@ class RefreshResult(BaseModel):
     connection_id: int
     runs: list[str]  # "daily:success", "settling:error", ...
     status: str  # worst run status: success | partial | error
+
+
+class BackfillResult(BaseModel):
+    connection_id: int
+    chunks: int  # chunks pulled this invocation
+    status: str  # not_backfillable | locked | complete | halted | more
+    last_error: str | None = None
 
 
 def _audit(session, connection: PlatformConnection, *, action: str, user_id: int, detail: str | None = None) -> None:
@@ -347,6 +354,37 @@ async def refresh_connection(
         connection_id=connection_id,
         runs=[f"{r.run_type}:{r.status}" for r in runs],
         status=_overall_status([r.status for r in runs]),
+    )
+
+
+@router.post("/companies/{company_id}/connections/{connection_id}/backfill", response_model=BackfillResult)
+async def backfill_connection(
+    company_id: int,
+    connection_id: int,
+    current_user: AdminUser,
+    db: DBSession,
+    _: MktgEnabled,
+    max_chunks: Annotated[int, Query(ge=1, le=12, description="Backfill chunks to pull this call")] = backfill.DEFAULT_MAX_CHUNKS,
+) -> BackfillResult:
+    """Advance this connection's historical (13-month) backfill now (D2).
+
+    Pulls up to ``max_chunks`` older windows (each ``DEFAULT_CHUNK_DAYS``), bounded
+    so the request can't run away on a deep backfill; ``status='more'`` means older
+    windows remain — call again (or let the daily scheduler lane finish them).
+    Skips (``status='locked'``) if the daily/refresh lane is mid-write. Credential
+    use is audited per chunk by the ingest path (B1)."""
+    connection = await _scoped_connection(db, company_id, connection_id)
+    _require_platform_enabled(connection.platform)
+    company_id_value = connection.company_id  # capture before per-chunk commits
+    progress = await backfill.run_connection_backfill(
+        db, connection, today=date.today(), max_chunks=max_chunks
+    )
+    await cache.invalidate(company_id_value)
+    return BackfillResult(
+        connection_id=connection_id,
+        chunks=progress.chunks,
+        status=progress.status,
+        last_error=progress.last_error,
     )
 
 

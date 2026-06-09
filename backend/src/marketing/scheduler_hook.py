@@ -26,7 +26,7 @@ import src.database as db_module
 from src.config import settings
 
 from . import alerts, cache
-from .ingest import SUPPORTED_PLATFORMS, health, run_connection_sync, settling
+from .ingest import SUPPORTED_PLATFORMS, backfill, health, run_connection_sync, settling
 from .models import PlatformConnection
 
 logger = logging.getLogger(__name__)
@@ -34,6 +34,11 @@ logger = logging.getLogger(__name__)
 # Short rolling spend lookback re-fetched daily (restates recent days). The longer
 # conversion-settling window is fetched separately for ad platforms (A7).
 DAILY_LOOKBACK_DAYS = 3
+
+# Backfill chunks advanced per connection per daily run (D2). Bounded so the
+# 13-month first-connect backfill is amortized over several days instead of
+# exhausting the daily API quota in one pass; resumable via the fact watermark.
+BACKFILL_CHUNKS_PER_RUN = 2
 
 # Statuses worth syncing: active (healthy), pending (first sync), error (retry — a
 # transient-tripped error may have recovered). The daily cadence is itself gentle
@@ -100,6 +105,46 @@ async def _sync_one(connection_id: int, *, today: date) -> int | None:
         return None
 
 
+async def _backfill_one(connection_id: int, *, today: date) -> int | None:
+    """Advance one connection's historical backfill in its own session (D2).
+
+    Returns the company_id when at least one chunk was pulled (so the caller can
+    invalidate that company's cache), else ``None``. Mirrors ``_sync_one``'s
+    per-connection isolation; ``run_connection_backfill`` owns its own per-chunk
+    commits and skips (``locked``) when the daily lane is mid-write."""
+    try:
+        async with db_module.async_session_maker() as session:
+            connection = await session.get(PlatformConnection, connection_id)
+            if connection is None or health.backoff_should_skip(connection):
+                return None
+            progress = await backfill.run_connection_backfill(
+                session, connection, today=today, max_chunks=BACKFILL_CHUNKS_PER_RUN,
+            )
+            return connection.company_id if progress.chunks > 0 else None
+    except Exception:
+        logger.exception("[marketing_backfill] connection_id=%s failed", connection_id)
+        return None
+
+
+async def run_backfill_lane(*, today: date | None = None) -> None:
+    """Advance the historical backfill for every syncable connection (D2). No-op
+    when disabled. Runs AFTER the daily sync so it never contends for the
+    per-connection lock with the daily/settling lane (try_lock skips if it would)."""
+    if not settings.MKTG_ENABLED:
+        return
+    today = today or date.today()
+    connections = await _syncable_connections()
+    affected: set[int] = set()
+    for connection in connections:
+        company_id = await _backfill_one(connection.id, today=today)
+        if company_id is not None:
+            affected.add(company_id)
+    for company_id in affected:
+        await cache.invalidate(company_id)
+    if affected:
+        logger.info("[marketing_backfill] advanced backfill for %d client(s)", len(affected))
+
+
 async def run_daily_marketing_sync(*, today: date | None = None) -> None:
     """Daily ingest across all syncable connections (D1). No-op when disabled."""
     if not settings.MKTG_ENABLED:
@@ -129,6 +174,11 @@ async def run_daily_marketing_sync(*, today: date | None = None) -> None:
     # flag flips; isolated so an alerting failure can't break the ingest tick.
     if settings.MKTG_ALERTS_ENABLED:
         await _run_stale_sync_alerts()
+
+    # D2: advance the throttled historical backfill AFTER the daily sync (so it
+    # never contends for the per-connection lock). Bounded per connection +
+    # resumable; isolated so a backfill error can't break the daily tick.
+    await run_backfill_lane(today=today)
 
 
 async def _run_stale_sync_alerts() -> None:
