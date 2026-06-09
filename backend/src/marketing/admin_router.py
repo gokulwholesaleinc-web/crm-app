@@ -43,6 +43,7 @@ from .models import (
     MarketingSyncRun,
     PlatformConnection,
     SiteHealthSnapshot,
+    SocialDailyMetric,
 )
 
 # Warehouse data tables purged on disconnect (E7) — facts, landing + dims. Audit,
@@ -51,6 +52,7 @@ _PURGE_MODELS = (
     AdsDailyMetric,
     AnalyticsDaily,
     SiteHealthSnapshot,
+    SocialDailyMetric,
     MarketingRawPayload,
     MarketingCampaign,
     MarketingAdGroup,

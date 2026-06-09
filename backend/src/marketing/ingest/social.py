@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from datetime import date as date_cls
 from datetime import timedelta
-from typing import Any
+from typing import Any, cast
 
 from ..money import q6
 from ..rows import SocialDailyRow
@@ -97,20 +97,40 @@ def map_social_insights(
     for metric in payload["data"]:
         name = metric.get("name") if isinstance(metric, dict) else None
         ensure_shape(bool(name), "social insights metric missing 'name'", platform=platform)
-        for v in metric.get("values") or []:
+        # CRITICAL-1: a renamed/absent 'values' key (a Graph version rename like
+        # values→value) is DRIFT, not a no-data metric — raise rather than silently
+        # emit zero rows and land a green 'success' on data that was never ingested.
+        # A genuinely empty list is legitimate no-data (E5 → no row).
+        values = metric.get("values")
+        ensure_shape(
+            isinstance(values, list),
+            f"social insights metric '{name}' missing 'values' list",
+            platform=platform,
+        )
+        # `or []` is dead after the ensure_shape above (values is a list) — it only
+        # narrows the static type off `Any | None` for the checker.
+        for v in values or []:
             if not isinstance(v, dict):
                 continue
-            end_time = v.get("end_time")
             value = v.get("value")
-            # Skip breakdown-shaped values (dict) — scalar daily metrics only.
-            if not end_time or isinstance(value, dict):
+            # Breakdown-shaped values (a dict) → skip; this fact stores scalars only.
+            if isinstance(value, dict):
                 continue
+            # The date grain depends on end_time — a scalar point missing it is drift
+            # (a renamed end_time→endTime), not empty data → raise (symmetric with the
+            # GSC/GA4 inner-field guards), never a silently-dropped point.
+            end_time = v.get("end_time")
+            ensure_shape(
+                bool(end_time),
+                "social insights value missing 'end_time'",
+                platform=platform,
+            )
             rows.append(
                 SocialDailyRow(
                     connection_id=connection_id,
                     company_id=company_id,
                     platform=platform,
-                    date=_insights_date(end_time),
+                    date=_insights_date(cast("str", end_time)),
                     metric_key=str(name)[:64],
                     value=q6(value or 0),
                 )
