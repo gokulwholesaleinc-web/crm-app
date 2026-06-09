@@ -407,6 +407,9 @@ class MarketingSyncRun(Base):
     status: Mapped[str] = mapped_column(String(16), nullable=False)
     window_start: Mapped[date | None] = mapped_column(Date)
     window_end: Mapped[date | None] = mapped_column(Date)
+    # Rows TOUCHED by the upsert (inserts + ON CONFLICT updates), not net-new — a
+    # steady-state re-sync restates the whole window, so this equals the window size,
+    # not the number of changed rows. It is an activity/diagnostic counter only.
     rows_upserted: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()

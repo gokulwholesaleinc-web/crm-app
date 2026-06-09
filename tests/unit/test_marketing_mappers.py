@@ -16,6 +16,7 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
+from src.marketing import money
 from src.marketing.ingest import ga4, google_ads, gsc, pagespeed
 from src.marketing.ingest.http_client import UnmappableShapeError
 
@@ -26,34 +27,64 @@ def _load(name: str) -> dict:
     return json.loads((FIXTURES / name).read_text())
 
 
+class TestMoneyGuards:
+    def test_bool_is_rejected_not_coerced(self):
+        # bool is an int subclass; a stray JSON true/false must NOT become $1.00/$0.00.
+        for bad in (True, False):
+            with pytest.raises(TypeError):
+                money.to_money(bad)
+            with pytest.raises(TypeError):
+                money.from_micros(bad)
+
+    def test_real_numbers_still_parse(self):
+        assert money.to_money("5.00") == money.from_micros(5_000_000)
+
+
 # ── Google Ads (A4 micros, A3 dims, A2 entity_level) ─────────────────────────
 class TestGoogleAdsMapper:
-    def test_emits_adgroup_campaign_and_account_rollups(self):
+    def test_emits_adgroup_campaign_and_account_levels(self):
         ads, campaigns, adgroups = google_ads.map_google_ads(
             _load("google_ads_searchstream.json"), connection_id=7, company_id=3, currency="USD"
         )
         levels = {r.entity_level for r in ads}
-        # ad-group (GAQL grain) + campaign roll-up + account roll-up — three distinct
-        # entity_levels so reads.{adgroups,campaigns,overview} each filter to one (A2).
+        # campaign grain (FROM campaign, PMax-inclusive) + account roll-up + ad-group
+        # grain (FROM ad_group) — three distinct entity_levels so reads each filter to
+        # exactly one (A2).
         assert levels == {"adgroup", "campaign", "account"}
-        assert sum(r.entity_level == "adgroup" for r in ads) == 3
+        assert sum(r.entity_level == "campaign" for r in ads) == 3  # 111, 222, 333
+        assert sum(r.entity_level == "adgroup" for r in ads) == 3  # 911, 912, 921
         account = [r for r in ads if r.entity_level == "account"]
         assert len(account) == 1
-        # account row has NULL campaign/adgroup ids (A2 NULL grain)
-        assert account[0].campaign_id is None and account[0].adgroup_id is None
-        # campaign roll-ups carry campaign_id, NULL adgroup_id (A2), and re-sum to the
-        # account total (every ad-group belongs to a campaign).
+        assert account[0].campaign_id is None and account[0].adgroup_id is None  # A2 NULL grain
         camp_rows = [r for r in ads if r.entity_level == "campaign"]
-        assert camp_rows and all(r.campaign_id and r.adgroup_id is None for r in camp_rows)
+        assert all(r.campaign_id and r.adgroup_id is None for r in camp_rows)
+        # account is summed from the campaign grain (PMax-inclusive)
         assert sum((r.spend for r in camp_rows), Decimal("0")) == account[0].spend
+
+    def test_c1_account_total_includes_pmax_campaign_without_adgroups(self):
+        # C1: Performance Max campaign 333 has NO ad_group rows, yet its spend MUST be
+        # in the account total — which is summed from the PMax-inclusive campaign grain.
+        ads, campaigns, adgroups = google_ads.map_google_ads(
+            _load("google_ads_searchstream.json"), connection_id=7, company_id=3, currency="USD"
+        )
+        account = next(r for r in ads if r.entity_level == "account")
+        assert account.spend == Decimal("25.75")  # 7.50 + 10.25 + 8.00 (PMax)
+        camp_ids = {r.campaign_id for r in ads if r.entity_level == "campaign"}
+        assert "333" in camp_ids
+        assert {c.campaign_id for c in campaigns} == {"111", "222", "333"}
+        assert all(a.campaign_id != "333" for a in adgroups)  # PMax has no ad groups
+        # the old ad-group-only sum silently undercounted to 17.75 (the C1 bug)
+        adgroup_spend = sum((r.spend for r in ads if r.entity_level == "adgroup"), Decimal("0"))
+        assert adgroup_spend == Decimal("17.75")
+        assert adgroup_spend < account.spend
 
     def test_micros_normalized_to_decimal_currency(self):
         ads, _, _ = google_ads.map_google_ads(
             _load("google_ads_searchstream.json"), connection_id=7, company_id=3, currency="USD"
         )
         account = next(r for r in ads if r.entity_level == "account")
-        # 5,000,000 + 2,500,000 + 10,250,000 micros ÷ 1e6 = 17.75 (A4)
-        assert account.spend == Decimal("17.75")
+        # 7,500,000 + 10,250,000 + 8,000,000 micros ÷ 1e6 = 25.75 (A4)
+        assert account.spend == Decimal("25.75")
         assert isinstance(account.spend, Decimal)
 
     def test_conversions_are_fractional_decimal(self):
@@ -61,17 +92,27 @@ class TestGoogleAdsMapper:
             _load("google_ads_searchstream.json"), connection_id=7, company_id=3
         )
         account = next(r for r in ads if r.entity_level == "account")
-        # 3.5 + 1.0 + 6.25 = 10.75 — Integer would truncate to 10 (A4)
-        assert account.conversions == Decimal("10.75")
-        assert account.conversion_value == Decimal("515.75")  # 420.75 + 95.0 + 0.0
+        # 4.5 + 6.25 + 12.0 = 22.75 — Integer would truncate (A4)
+        assert account.conversions == Decimal("22.75")
+        assert account.conversion_value == Decimal("1514.75")  # 515.75 + 0.0 + 999.0
 
     def test_account_rollup_sums_volume(self):
         ads, _, _ = google_ads.map_google_ads(
             _load("google_ads_searchstream.json"), connection_id=7, company_id=3
         )
         account = next(r for r in ads if r.entity_level == "account")
-        assert account.clicks == 80 + 20 + 210
-        assert account.impressions == 1200 + 640 + 5400
+        assert account.clicks == 100 + 210 + 150
+        assert account.impressions == 1840 + 5400 + 3000
+
+    def test_settling_payload_without_adgroups_yields_campaign_account_only(self):
+        # include_adgroups=False (settling, A7) → empty adgroup_batches; the mapper
+        # still emits campaign + account rows (conversion restatement) and no ad-groups.
+        payload = _load("google_ads_searchstream.json")
+        payload["adgroup_batches"] = []
+        ads, _, adgroups = google_ads.map_google_ads(payload, connection_id=7, company_id=3)
+        assert {r.entity_level for r in ads} == {"campaign", "account"}
+        assert adgroups == []
+        assert next(r for r in ads if r.entity_level == "account").spend == Decimal("25.75")
 
     def test_campaign_dims_carry_normalized_status(self):
         _, campaigns, _ = google_ads.map_google_ads(
@@ -81,6 +122,7 @@ class TestGoogleAdsMapper:
         assert by_id["111"].status == "enabled" and by_id["111"].raw_status == "ENABLED"
         assert by_id["222"].status == "removed" and by_id["222"].raw_status == "REMOVED"
         assert by_id["111"].name == "Brand Search"
+        assert by_id["333"].name == "Performance Max - Retail"
 
     def test_adgroup_dims_link_to_campaign(self):
         _, _, adgroups = google_ads.map_google_ads(
@@ -91,12 +133,13 @@ class TestGoogleAdsMapper:
         assert by_id["912"].status == "paused"
 
     def test_empty_results_guard(self):
-        # GENUINE empty (E5): the fetcher always lands {"batches": [...]} — an empty
-        # batch list, or a batch with no results, is zero data, not drift → [].
-        for empty in ({"batches": []}, {"batches": [{"results": []}]}):
-            ads, campaigns, adgroups = google_ads.map_google_ads(
-                empty, connection_id=7, company_id=3
-            )
+        # GENUINE empty (E5): the fetcher always lands campaign_batches/adgroup_batches;
+        # empty batch lists are zero data, not drift → [].
+        for empty in (
+            {"campaign_batches": [], "adgroup_batches": []},
+            {"campaign_batches": [{"results": []}], "adgroup_batches": [{"results": []}]},
+        ):
+            ads, campaigns, adgroups = google_ads.map_google_ads(empty, connection_id=7, company_id=3)
             assert ads == [] and campaigns == [] and adgroups == []
 
 
@@ -228,15 +271,15 @@ class TestMapperDriftGuard:
     'partial') instead of mapping to [] and being recorded as a healthy zero. This
     is distinct from a genuinely-empty result (covered by each mapper's E5 test)."""
 
-    def test_google_ads_missing_batches_envelope_raises(self):
-        # An error body / renamed envelope (no 'batches' list) — the fetcher always
-        # produces {"batches": [...]}, so its absence is a contract break, not empty.
-        for drifted in ({}, {"error": {"code": 7}}, {"batches": {"results": []}}):
+    def test_google_ads_missing_campaign_envelope_raises(self):
+        # An error body / renamed envelope (no 'campaign_batches' list) — the fetcher
+        # always produces it, so its absence is a contract break, not empty.
+        for drifted in ({}, {"error": {"code": 7}}, {"campaign_batches": {"results": []}}):
             with pytest.raises(UnmappableShapeError):
                 google_ads.map_google_ads(drifted, connection_id=7, company_id=3)
 
     def test_google_ads_result_missing_date_segment_raises(self):
-        drifted = {"batches": [{"results": [{"campaign": {"id": "1"}, "metrics": {}}]}]}
+        drifted = {"campaign_batches": [{"results": [{"campaign": {"id": "1"}, "metrics": {}}]}]}
         with pytest.raises(UnmappableShapeError):
             google_ads.map_google_ads(drifted, connection_id=7, company_id=3)
 

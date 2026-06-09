@@ -87,6 +87,7 @@ async def _dispatch(
     session: AsyncSession,
     connection: PlatformConnection,
     *,
+    run_type: str,
     window_start: date,
     window_end: date,
     http_client: Any | None,
@@ -96,14 +97,15 @@ async def _dispatch(
     Delegates to a per-platform handler so each owns its own typed seam; injecting
     ``http_client`` keeps the orchestrator testable without the network (C1) while
     never mocking business logic. When ``None``, a real client is constructed from
-    the connection's decrypted credentials inside the handler.
+    the connection's decrypted credentials inside the handler. ``run_type`` lets a
+    handler vary by lane (e.g. the settling re-fetch skips the ad-group grain, A7).
     """
     handler = _HANDLERS.get(connection.platform)
     if handler is None:
         raise IngestConfigError(
             f"unsupported platform '{connection.platform}'", error_class="unsupported_platform"
         )
-    return await handler(session, connection, window_start, window_end, http_client)
+    return await handler(session, connection, run_type, window_start, window_end, http_client)
 
 
 def _google_seam(connection: PlatformConnection, http_client: Any | None) -> GoogleSeam:
@@ -116,10 +118,14 @@ def _pagespeed_seam(http_client: Any | None) -> PageSpeedSeam:
 
 async def _sync_google_ads(
     session: AsyncSession, connection: PlatformConnection,
-    window_start: date, window_end: date, http_client: Any | None,
+    run_type: str, window_start: date, window_end: date, http_client: Any | None,
 ) -> int:
     client = _google_seam(connection, http_client)
     dev_token = _require(connection, _ads_developer_token(), "developer token")
+    # A7: the settling re-fetch is conversion-scoped — re-pull only the
+    # campaign/account grain over the conversion window, NOT the heavier ad-group
+    # grain (which the daily 3-day lookback already restates for recent days).
+    include_adgroups = run_type != "settling"
     payload = await google_ads.fetch_google_ads(
         client,
         customer_id=connection.external_account_id,
@@ -127,6 +133,7 @@ async def _sync_google_ads(
         login_customer_id=connection.manager_account_id,
         window_start=window_start,
         window_end=window_end,
+        include_adgroups=include_adgroups,
     )
     await warehouse.insert_raw_payload(
         session, connection_id=connection.id, platform="google_ads", endpoint="googleAds:searchStream",
@@ -145,7 +152,7 @@ async def _sync_google_ads(
 
 async def _sync_ga4(
     session: AsyncSession, connection: PlatformConnection,
-    window_start: date, window_end: date, http_client: Any | None,
+    run_type: str, window_start: date, window_end: date, http_client: Any | None,
 ) -> int:
     client = _google_seam(connection, http_client)
     cid, company = connection.id, connection.company_id
@@ -169,7 +176,7 @@ async def _sync_ga4(
 
 async def _sync_gsc(
     session: AsyncSession, connection: PlatformConnection,
-    window_start: date, window_end: date, http_client: Any | None,
+    run_type: str, window_start: date, window_end: date, http_client: Any | None,
 ) -> int:
     client = _google_seam(connection, http_client)
     payload = await gsc.fetch_gsc(
@@ -187,7 +194,7 @@ async def _sync_gsc(
 
 async def _sync_pagespeed(
     session: AsyncSession, connection: PlatformConnection,
-    window_start: date, window_end: date, http_client: Any | None,
+    run_type: str, window_start: date, window_end: date, http_client: Any | None,
 ) -> int:
     client = _pagespeed_seam(http_client)
     url = connection.display_name or connection.external_account_id
@@ -282,7 +289,7 @@ async def run_connection_sync(
             detail=f"{run_type} {window_start}..{window_end}",
         )
         rows = await _dispatch(
-            session, connection,
+            session, connection, run_type=run_type,
             window_start=window_start, window_end=window_end, http_client=http_client,
         )
         run.rows_upserted = rows

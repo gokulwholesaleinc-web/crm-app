@@ -36,14 +36,21 @@ WINDOW_END = date(2026, 6, 7)
 
 
 class _FixtureGoogleSeam:
-    """A GoogleSeam that returns a captured payload — no network, no business
-    logic mocked (the mapper still runs for real over real captured JSON)."""
+    """A GoogleSeam that replays a captured payload — no network, no business logic
+    mocked (the mapper still runs for real over real captured JSON).
+
+    The Google Ads fetcher now issues TWO searchStream POSTs (FROM campaign and FROM
+    ad_group); route by the GAQL so each query gets its own captured batch list,
+    exactly as the real searchStream endpoint would respond per query."""
 
     def __init__(self, payload: dict[str, Any]):
-        self._payload = payload
+        self._payload = payload  # merged {"campaign_batches": [...], "adgroup_batches": [...]}
 
-    async def post(self, url: str, json: dict[str, Any], *, headers: dict[str, str] | None = None) -> dict[str, Any]:
-        return self._payload
+    async def post(self, url: str, json: dict[str, Any], *, headers: dict[str, str] | None = None) -> list[Any]:
+        query = json.get("query", "") if isinstance(json, dict) else ""
+        if "FROM ad_group" in query:
+            return self._payload.get("adgroup_batches", [])
+        return self._payload.get("campaign_batches", [])
 
     async def get(self, url: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         return self._payload
