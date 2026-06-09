@@ -115,6 +115,40 @@ async def test_rerun_restates_not_duplicates(pg_session, monkeypatch):
     assert rows == 6  # restated on the (connection,date,platform,metric_key) grain, not duplicated
 
 
+async def test_read_aggregates_across_same_platform_connections(pg_session):
+    # A company can hold two IG accounts (the connection unique key is
+    # (company, platform, external_account_id)). The read must return ONE
+    # deterministic point per day (the total), not duplicate same-date points.
+    company = Company(name="Two-IG Co", status="customer")
+    pg_session.add(company)
+    await pg_session.flush()
+    ig_a = PlatformConnection(
+        company_id=company.id, platform="instagram", external_account_id="111", credential_mode="system_user",
+    )
+    ig_b = PlatformConnection(
+        company_id=company.id, platform="instagram", external_account_id="222", credential_mode="system_user",
+    )
+    pg_session.add_all([ig_a, ig_b])
+    await pg_session.flush()
+    for conn, base in ((ig_a, 1000), (ig_b, 50)):
+        for d, delta in ((date(2026, 6, 2), 0), (date(2026, 6, 3), 5)):
+            pg_session.add(
+                SocialDailyMetric(
+                    connection_id=conn.id, company_id=company.id, platform="instagram",
+                    date=d, metric_key="follower_count", value=Decimal(base + delta),
+                )
+            )
+    await pg_session.commit()
+
+    data = await reads.social(pg_session, company.id, WINDOW_START, WINDOW_END)
+    ig = next(p for p in data["platforms"] if p["platform"] == "instagram")
+    fc = next(m for m in ig["metrics"] if m["metric_key"] == "follower_count")
+    # one point per day (not four), each summed across the two accounts.
+    assert [pt["date"] for pt in fc["series"]] == [date(2026, 6, 2), date(2026, 6, 3)]
+    assert fc["series"][0]["value"] == Decimal("1050")  # 1000 + 50 (2026-06-02)
+    assert fc["latest"] == Decimal("1060")  # (1000+5) + (50+5) (2026-06-03)
+
+
 async def test_social_dark_when_flag_off(pg_session, monkeypatch):
     # The single ingest entry point keeps social dark even if a connection exists:
     # the run is a flag_disabled ERROR (truthful), never a silent success.

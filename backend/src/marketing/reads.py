@@ -745,6 +745,12 @@ async def social(
     change): for each platform, each metric carries its daily series (date-asc) plus
     its ``latest`` value (the most recent day in the window). Values are raw measures
     (follower counts / reach / views / engagement), never derived ratios.
+
+    Aggregated per ``(platform, metric_key, date)`` with ``SUM`` so a company holding
+    more than one account of the same platform (two IG business accounts) yields ONE
+    deterministic point per day (the total across its accounts) instead of duplicate
+    same-date points + a nondeterministic ``latest`` — consistent with how every
+    other read collapses across connections.
     """
     rows = (
         await session.execute(
@@ -752,12 +758,17 @@ async def social(
                 SocialDailyMetric.platform,
                 SocialDailyMetric.metric_key,
                 SocialDailyMetric.date,
-                SocialDailyMetric.value,
+                func.coalesce(func.sum(SocialDailyMetric.value), 0),
             )
             .where(
                 SocialDailyMetric.company_id == company_id,
                 SocialDailyMetric.date >= date_from,
                 SocialDailyMetric.date <= date_to,
+            )
+            .group_by(
+                SocialDailyMetric.platform,
+                SocialDailyMetric.metric_key,
+                SocialDailyMetric.date,
             )
             .order_by(
                 SocialDailyMetric.platform,
