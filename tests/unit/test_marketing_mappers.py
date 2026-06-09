@@ -438,6 +438,63 @@ class TestGscMapper:
         assert len(rows[0].dimension_value) == 512
 
 
+# ── Social (organic IG/FB) ────────────────────────────────────────────────────
+class TestSocialMapper:
+    def test_maps_insights_to_per_metric_per_date_rows(self):
+        from src.marketing.ingest import social
+
+        rows = social.map_social_insights(
+            _load("instagram_insights.json"), connection_id=3, company_id=7, platform="instagram"
+        )
+        # 3 metrics × 2 days = 6 rows; all tagged with the platform.
+        assert len(rows) == 6
+        assert all(r.platform == "instagram" and r.connection_id == 3 for r in rows)
+        # follower_count is per-date (the daily series), latest day = 5412.
+        fc = sorted((r for r in rows if r.metric_key == "follower_count"), key=lambda r: r.date)
+        assert [r.date for r in fc] == [date(2026, 6, 2), date(2026, 6, 3)]
+        assert fc[-1].value == Decimal("5412")
+
+    def test_facebook_metrics_map(self):
+        from src.marketing.ingest import social
+
+        rows = social.map_social_insights(
+            _load("facebook_insights.json"), connection_id=4, company_id=7, platform="facebook"
+        )
+        assert {r.metric_key for r in rows} == {
+            "page_impressions_unique", "page_post_engagements", "page_fans", "page_views_total"
+        }
+
+    def test_missing_data_envelope_raises_drift(self):
+        from src.marketing.ingest import social
+        from src.marketing.ingest.http_client import UnmappableShapeError
+
+        with pytest.raises(UnmappableShapeError):
+            social.map_social_insights(
+                {"error": {"code": 190}}, connection_id=3, company_id=7, platform="instagram"
+            )
+
+    def test_skips_breakdown_shaped_values(self):
+        from src.marketing.ingest import social
+
+        payload = {
+            "data": [
+                {"name": "reach", "period": "day", "values": [
+                    {"value": {"city": 5}, "end_time": "2026-06-02T07:00:00+0000"},  # breakdown dict → skipped
+                    {"value": 100, "end_time": "2026-06-03T07:00:00+0000"},
+                ]},
+            ]
+        }
+        rows = social.map_social_insights(payload, connection_id=3, company_id=7, platform="instagram")
+        assert len(rows) == 1 and rows[0].value == Decimal("100")
+
+    def test_empty_data_returns_empty(self):
+        from src.marketing.ingest import social
+
+        assert social.map_social_insights(
+            {"data": []}, connection_id=3, company_id=7, platform="instagram"
+        ) == []
+
+
 # ── PageSpeed ────────────────────────────────────────────────────────────────
 class TestPageSpeedMapper:
     def test_scores_scaled_0_100(self):

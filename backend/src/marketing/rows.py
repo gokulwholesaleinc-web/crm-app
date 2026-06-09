@@ -105,6 +105,23 @@ class SiteHealthRow:
 
 
 @dataclass(frozen=True, slots=True)
+class SocialDailyRow:
+    """One ``social_daily_metrics`` grain (organic IG/FB/…) — generic long-format.
+
+    ``value`` is the raw measure (follower count / reach / impressions / views /
+    engagement) as ``Decimal`` — never a derived ratio. One row per
+    ``(connection, date, platform, metric_key)``.
+    """
+
+    connection_id: int
+    company_id: int
+    platform: str
+    date: date
+    metric_key: str
+    value: Decimal
+
+
+@dataclass(frozen=True, slots=True)
 class CampaignDimRow:
     """One ``marketing_campaigns`` dimension row (A3): name + current status.
 

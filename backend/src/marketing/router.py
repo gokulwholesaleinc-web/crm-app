@@ -38,6 +38,7 @@ from src.marketing.schemas import (
     OverviewResponse,
     SeriesResponse,
     SiteHealthResponse,
+    SocialResponse,
     SyncStatusResponse,
 )
 from src.marketing.service import MarketingReadService
@@ -245,6 +246,22 @@ async def get_analytics(
     """GA4 + GSC website analytics (totals from dimension_type='total' only)."""
     await _require_company_access(db, company_id, current_user, data_scope)
     return await MarketingReadService(db).analytics(company_id, date_from, date_to)
+
+
+@router.get("/companies/{company_id}/social", response_model=SocialResponse)
+async def get_social(
+    company_id: int,
+    current_user: CurrentUser,
+    db: DBSession,
+    data_scope: ScopeDep,
+    _: MktgEnabled,
+    _w: WindowGuard,
+    date_from: DateFrom,
+    date_to: DateTo,
+) -> SocialResponse:
+    """Organic social (Instagram + Facebook) daily metrics per platform."""
+    await _require_company_access(db, company_id, current_user, data_scope)
+    return await MarketingReadService(db).social(company_id, date_from, date_to)
 
 
 @router.get("/companies/{company_id}/site-health", response_model=SiteHealthResponse)

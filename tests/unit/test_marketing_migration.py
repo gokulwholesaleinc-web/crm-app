@@ -33,6 +33,7 @@ _MARKETING_TABLES = (
     "budget_periods",
     "marketing_credential_audit",
     "marketing_sync_runs",
+    "social_daily_metrics",
     "site_health_snapshots",
     "analytics_daily",
     "ads_daily_metrics",
@@ -46,9 +47,12 @@ _VERSIONS = Path(__file__).resolve().parents[2] / "backend" / "alembic" / "versi
 _MIGRATION_PATH = _VERSIONS / "056_marketing_warehouse.py"
 _MIGRATION_057_PATH = _VERSIONS / "057_marketing_phase2_ga4.py"
 _MIGRATION_058_PATH = _VERSIONS / "058_meta_token_encryption.py"
+_MIGRATION_059_PATH = _VERSIONS / "059_marketing_social.py"
 
-# Applied in order to build the full current marketing schema.
-_MIGRATION_PATHS = (_MIGRATION_PATH, _MIGRATION_057_PATH)
+# Applied in order to build the full current marketing schema. 058 is omitted (it
+# only adds meta_credentials columns, not a marketing-warehouse table); 059 creates
+# the social_daily_metrics fact and so is part of the parity set.
+_MIGRATION_PATHS = (_MIGRATION_PATH, _MIGRATION_057_PATH, _MIGRATION_059_PATH)
 
 
 def _load_migration(path: Path = _MIGRATION_PATH):

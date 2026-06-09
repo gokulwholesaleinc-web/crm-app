@@ -21,6 +21,7 @@ from src.marketing.models import (
     MarketingCampaign,
     PlatformConnection,
     SiteHealthSnapshot,
+    SocialDailyMetric,
 )
 
 D1 = date(2026, 6, 1)
@@ -271,6 +272,33 @@ class TestAnalytics:
         assert body["ga4_totals"]["is_data_golden"] is True
         # traffic sources come from the channel rows, not the total
         assert "Organic Search" in {s["channel"] for s in body["traffic_sources"]}
+
+
+class TestSocial:
+    async def test_social_groups_by_platform_with_latest_and_series(
+        self, client, auth_headers, db_session, test_company
+    ):
+        conn = await _conn(db_session, test_company.id, platform="instagram", external="17841400000000000")
+        for d, val in ((D1, 5400), (D2, 5412)):
+            db_session.add(
+                SocialDailyMetric(
+                    connection_id=conn.id, company_id=test_company.id, platform="instagram",
+                    date=d, metric_key="follower_count", value=Decimal(str(val)),
+                )
+            )
+        await db_session.flush()
+
+        r = await client.get(
+            f"/api/marketing/companies/{test_company.id}/social",
+            params={"date_from": "2026-06-01", "date_to": "2026-06-02"},
+            headers=auth_headers,
+        )
+        assert r.status_code == 200
+        body = r.json()
+        ig = next(p for p in body["platforms"] if p["platform"] == "instagram")
+        fc = next(m for m in ig["metrics"] if m["metric_key"] == "follower_count")
+        assert str(fc["latest"]) in ("5412", "5412.000000")  # most recent day
+        assert len(fc["series"]) == 2
 
 
 class TestCrossPlatformConversionBlend:

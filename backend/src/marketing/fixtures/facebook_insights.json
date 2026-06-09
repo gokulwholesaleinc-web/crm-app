@@ -1,0 +1,37 @@
+{
+  "data": [
+    {
+      "name": "page_impressions_unique",
+      "period": "day",
+      "values": [
+        { "value": 3200, "end_time": "2026-06-02T07:00:00+0000" },
+        { "value": 3010, "end_time": "2026-06-03T07:00:00+0000" }
+      ]
+    },
+    {
+      "name": "page_post_engagements",
+      "period": "day",
+      "values": [
+        { "value": 210, "end_time": "2026-06-02T07:00:00+0000" },
+        { "value": 245, "end_time": "2026-06-03T07:00:00+0000" }
+      ]
+    },
+    {
+      "name": "page_fans",
+      "period": "day",
+      "values": [
+        { "value": 8800, "end_time": "2026-06-02T07:00:00+0000" },
+        { "value": 8815, "end_time": "2026-06-03T07:00:00+0000" }
+      ]
+    },
+    {
+      "name": "page_views_total",
+      "period": "day",
+      "values": [
+        { "value": 540, "end_time": "2026-06-02T07:00:00+0000" },
+        { "value": 505, "end_time": "2026-06-03T07:00:00+0000" }
+      ]
+    }
+  ],
+  "paging": {}
+}

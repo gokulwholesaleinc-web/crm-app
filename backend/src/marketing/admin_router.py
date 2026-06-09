@@ -182,6 +182,11 @@ def _require_platform_enabled(platform: str) -> None:
             HTTPStatus.UNPROCESSABLE_ENTITY,
             "meta_ads is not enabled yet (MKTG_META_ENABLED is off)",
         )
+    if platform in ("instagram", "facebook") and not settings.MKTG_SOCIAL_ENABLED:
+        raise HTTPException(
+            HTTPStatus.UNPROCESSABLE_ENTITY,
+            f"{platform} is not enabled yet (MKTG_SOCIAL_ENABLED is off)",
+        )
 
 
 async def _scoped_connection(db, company_id: int, connection_id: int) -> PlatformConnection:

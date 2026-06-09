@@ -32,7 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .. import crypto, warehouse
 from ..models import MarketingCredentialAudit, MarketingSyncRun, PlatformConnection
-from . import ga4, google_ads, gsc, health, meta_ads, pagespeed
+from . import ga4, google_ads, gsc, health, meta_ads, pagespeed, social
 from .http_client import (
     GoogleClient,
     GoogleSeam,
@@ -47,10 +47,14 @@ from .http_client import (
 
 logger = logging.getLogger(__name__)
 
-# Platforms with a wired fetch/map handler. meta_ads is here (handler exists) but
-# stays dark behind MKTG_META_ENABLED — gated in run_connection_sync + the scheduler
-# selection + the admin create/refresh routes (social platforms have no handler yet).
-SUPPORTED_PLATFORMS = frozenset({"google_ads", "ga4", "gsc", "pagespeed", "meta_ads"})
+# Platforms with a wired fetch/map handler. meta_ads (MKTG_META_ENABLED) and the
+# organic-social pair instagram/facebook (MKTG_SOCIAL_ENABLED) are wired but stay
+# dark behind their phase flags — gated in run_connection_sync + the scheduler
+# selection + the admin create/refresh routes. tiktok/linkedin are enum-valid but
+# have NO handler (App-Review-gated), so they can't sync.
+SUPPORTED_PLATFORMS = frozenset(
+    {"google_ads", "ga4", "gsc", "pagespeed", "meta_ads", "instagram", "facebook"}
+)
 
 
 class IngestConfigError(PermanentError):
@@ -318,6 +322,47 @@ async def _sync_meta_ads(
     return rows
 
 
+async def _sync_social(
+    session: AsyncSession, connection: PlatformConnection, platform: str,
+    metrics: tuple[str, ...], window_start: date, window_end: date, http_client: Any | None,
+) -> int:
+    """Shared organic-social ingest (IG/FB): fetch Graph insights → land → pure
+    map → upsert generic social_daily_metrics rows. Reuses the Meta Graph seam."""
+    client = _meta_seam(connection, http_client)
+    payload = await social.fetch_social_insights(
+        client, object_id=connection.external_account_id, metrics=metrics,
+        window_start=window_start, window_end=window_end, platform=platform,
+    )
+    await warehouse.insert_raw_payload(
+        session, connection_id=connection.id, platform=platform, endpoint="insights:day",
+        window_start=window_start, window_end=window_end,
+        request_fingerprint=f"{platform}:{connection.external_account_id}:{window_start}:{window_end}",
+        payload=payload,
+    )
+    rows = social.map_social_insights(
+        payload, connection_id=connection.id, company_id=connection.company_id, platform=platform
+    )
+    return await warehouse.upsert_social_daily(session, rows)
+
+
+async def _sync_instagram(
+    session: AsyncSession, connection: PlatformConnection,
+    run_type: str, window_start: date, window_end: date, http_client: Any | None,
+) -> int:
+    return await _sync_social(
+        session, connection, "instagram", social.IG_METRICS, window_start, window_end, http_client
+    )
+
+
+async def _sync_facebook(
+    session: AsyncSession, connection: PlatformConnection,
+    run_type: str, window_start: date, window_end: date, http_client: Any | None,
+) -> int:
+    return await _sync_social(
+        session, connection, "facebook", social.FB_METRICS, window_start, window_end, http_client
+    )
+
+
 # platform → handler; the only place that knows the per-platform fetch/map/upsert.
 _HANDLERS = {
     "google_ads": _sync_google_ads,
@@ -325,6 +370,8 @@ _HANDLERS = {
     "gsc": _sync_gsc,
     "pagespeed": _sync_pagespeed,
     "meta_ads": _sync_meta_ads,
+    "instagram": _sync_instagram,
+    "facebook": _sync_facebook,
 }
 
 
@@ -340,14 +387,20 @@ def _require(connection: PlatformConnection, value: str | None, what: str) -> st
 def _require_platform_enabled(platform: str) -> None:
     """Keep a platform dark behind its phase flag even if a connection exists.
 
-    meta_ads ships behind MKTG_META_ENABLED (Business-Verification gated). The
-    scheduler + admin routes also gate this, but enforcing it at the single ingest
-    entry point means no path can sync Meta while it's off."""
+    meta_ads ships behind MKTG_META_ENABLED (Business-Verification gated); organic
+    social (instagram/facebook) behind MKTG_SOCIAL_ENABLED (App-Review gated). The
+    scheduler + admin routes also gate these, but enforcing it at the single ingest
+    entry point means no path can sync a dark platform while its flag is off."""
     from src.config import settings
 
     if platform == "meta_ads" and not settings.MKTG_META_ENABLED:
         raise IngestConfigError(
             "meta_ads ingest is disabled (MKTG_META_ENABLED is off)",
+            error_class="flag_disabled",
+        )
+    if platform in ("instagram", "facebook") and not settings.MKTG_SOCIAL_ENABLED:
+        raise IngestConfigError(
+            f"{platform} ingest is disabled (MKTG_SOCIAL_ENABLED is off)",
             error_class="flag_disabled",
         )
 

@@ -98,9 +98,12 @@ async def detect_stale_syncs(
     for conn in conns:
         if conn.status in _SKIP_STATUSES:
             continue
-        # A phase-gated platform (meta_ads while MKTG_META_ENABLED is off) is dark by
-        # design — the scheduler never syncs it, so don't flag it as a stuck source.
+        # A phase-gated platform (meta_ads behind MKTG_META_ENABLED, organic social
+        # behind MKTG_SOCIAL_ENABLED) is dark by design — the scheduler never syncs
+        # it, so don't flag it as a stuck source.
         if conn.platform == "meta_ads" and not settings.MKTG_META_ENABLED:
+            continue
+        if conn.platform in ("instagram", "facebook") and not settings.MKTG_SOCIAL_ENABLED:
             continue
         last = conn.last_synced_at
         # Postgres returns tz-aware (DateTime(timezone=True)); the SQLite test
