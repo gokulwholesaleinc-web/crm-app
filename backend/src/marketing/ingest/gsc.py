@@ -56,9 +56,17 @@ async def fetch_gsc(
         # no-data shapes both lack 'rows', so only an explicit error envelope / a
         # non-dict is treated as drift.)
         if start_row == 0:
+            # GSC has no single positive key (a genuine no-data day legitimately omits
+            # 'rows'), so require a RECOGNIZABLE success shape: an empty dict {} or a
+            # dict carrying 'rows' or 'responseAggregationType' (GSC returns the latter
+            # on every successful query). An explicit 'error', or a non-empty dict with
+            # none of those (a renamed/alien envelope, e.g. rows→entries), is drift →
+            # raise rather than normalize to a silent zero (CRITICAL-1).
             ensure_shape(
-                isinstance(page, dict) and "error" not in page,
-                "gsc searchAnalytics: error/unrecognized response envelope",
+                isinstance(page, dict)
+                and "error" not in page
+                and (len(page) == 0 or "rows" in page or "responseAggregationType" in page),
+                "gsc searchAnalytics: unrecognized response envelope",
                 platform="gsc",
             )
         rows = page.get("rows") or []

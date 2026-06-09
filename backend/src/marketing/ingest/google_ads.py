@@ -9,9 +9,10 @@ gRPC dep (C1). TWO GAQL grains are pulled and merged into one landing dict:
   campaign rows, so PMax spend/conversions are no longer silently dropped. (The
   prior bug synthesized account+campaign totals from ``FROM ad_group``, which omits
   every ad-group-less campaign → headline spend undercounted with no error.)
-* **FROM ad_group** — ad-group grain only. Skipped on conversion-settling runs
-  (``include_adgroups=False``, A7) so settling re-fetches just the campaign/account
-  conversion window without re-pulling the heavier ad-group grain.
+* **FROM ad_group** — ad-group grain only. ``include_adgroups`` toggles this pull;
+  the daily + settling lanes both fetch it so late conversions restate at the
+  ad-group grain too (an account/campaign-only settle would leave the ad-group
+  drill-down undercounting vs the campaign totals, A7).
 
 ``map_google_ads`` is PURE over the merged payload. Money is reported as **micros**
 → ``money.from_micros`` (÷1e6) before any row (A4). ``conversions``/value are

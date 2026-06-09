@@ -79,17 +79,19 @@ async def _run_paged(client: GoogleSeam, url: str, body: dict[str, Any]) -> dict
     offset = 0
     for _ in range(_MAX_PAGES):
         page = await client.post(url, {**body, "offset": offset})
+        # Validate EVERY page at the fetch boundary (CRITICAL-1): a valid runReport
+        # always carries report structure (headers/metadata) even with zero rows; a
+        # 2xx error/renamed body has none. Checking every page (not just the first)
+        # means a mid-pagination drift raises instead of silently truncating to the
+        # rows collected so far (the merge below injects a 'rows' key the mapper guard
+        # would otherwise accept).
+        ensure_shape(
+            isinstance(page, dict)
+            and any(k in page for k in ("rows", "dimensionHeaders", "metricHeaders", "metadata")),
+            "ga4 runReport: unrecognized response envelope",
+            platform="ga4",
+        )
         if first is None:
-            # Validate at the fetch boundary (CRITICAL-1): a valid runReport always
-            # carries report structure (headers/metadata) even with zero rows; a 2xx
-            # error/renamed body has none. Raise here so the merge below (which injects
-            # a 'rows' key) can't mask the drift from the mapper guard → silent zero.
-            ensure_shape(
-                isinstance(page, dict)
-                and any(k in page for k in ("rows", "dimensionHeaders", "metricHeaders", "metadata")),
-                "ga4 runReport: unrecognized response envelope",
-                platform="ga4",
-            )
             first = page
             quota = page.get("propertyQuota") if isinstance(page, dict) else None
             if quota:

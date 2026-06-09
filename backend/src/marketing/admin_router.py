@@ -156,7 +156,9 @@ def _overall_status(statuses: list[str]) -> str:
     runs error → 'error'; any error OR partial (but not all-error) → 'partial';
     otherwise 'success'.
     """
-    if statuses and all(s == "error" for s in statuses):
+    if not statuses:
+        return "error"  # no runs is NOT success (absence must never read as success)
+    if all(s == "error" for s in statuses):
         return "error"
     if any(s in ("error", "partial") for s in statuses):
         return "partial"

@@ -230,4 +230,4 @@ def test_overall_status_never_reports_partial_as_success():
     assert _overall_status(["success", "success"]) == "success"
     assert _overall_status(["error", "error"]) == "error"
     assert _overall_status(["error", "success"]) == "partial"
-    assert _overall_status([]) == "success"
+    assert _overall_status([]) == "error"  # no runs is not success

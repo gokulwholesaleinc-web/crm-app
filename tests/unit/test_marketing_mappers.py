@@ -174,6 +174,11 @@ class TestMetaAdsMapper:
         # 3 (omni) + 1 (purchase) + 2 (omni) = 6 — landing_page_view is NOT counted
         assert account.conversions == Decimal("6")
         assert account.conversion_value == Decimal("390.00")  # 150 + 40 + 200
+        # adset 21 carries BOTH omni_purchase(2/200) and purchase(5/333): the priority
+        # pick takes omni only — never summed (would be 7 / 533).
+        adset21 = next(r for r in ads if r.entity_level == "adgroup" and r.adgroup_id == "21")
+        assert adset21.conversions == Decimal("2")
+        assert adset21.conversion_value == Decimal("200")
 
     def test_reach_only_at_adset_grain_not_rolled_up(self):
         ads, _, _ = meta_ads.map_meta_ads(

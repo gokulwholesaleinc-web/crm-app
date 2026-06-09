@@ -17,8 +17,10 @@ from src.marketing.models import (
     AdsDailyMetric,
     AnalyticsDaily,
     BudgetPeriod,
+    MarketingAdGroup,
     MarketingCampaign,
     PlatformConnection,
+    SiteHealthSnapshot,
 )
 
 D1 = date(2026, 6, 1)
@@ -522,3 +524,67 @@ class TestOverviewDeltaPlatformMix:
         assert Decimal(str(body["conversions"])) == Decimal("10")  # valid Meta number
         conv_card = next(c for c in body["cards"] if c["key"] == "conversions")
         assert conv_card["delta"]["is_new"] is True  # not a Meta-vs-Google fabricated %
+
+
+class TestRemainingReadEndpoints:
+    """HTTP-level coverage for /breakdown, /adgroups, /site-health (RBAC/flag/window
+    wiring + serialization), closing a carried-over Phase-1 gap."""
+
+    async def test_breakdown_rows_are_per_date_platform(self, client, auth_headers, db_session, test_company):
+        g = await _conn(db_session, test_company.id, platform="google_ads", external="g1")
+        m = await _conn(db_session, test_company.id, platform="meta_ads", external="act_1")
+        await _ads(db_session, g, test_company.id, d=D1, spend=100, clicks=50)
+        await _ads(db_session, m, test_company.id, d=D1, spend=80, clicks=40, platform="meta_ads")
+        await db_session.commit()
+        r = await client.get(
+            f"/api/marketing/companies/{test_company.id}/breakdown",
+            params={"date_from": FROM.isoformat(), "date_to": TO.isoformat()},
+            headers=auth_headers,
+        )
+        assert r.status_code == 200
+        platforms = {row["platform"] for row in r.json()["rows"]}
+        assert platforms == {"google_ads", "meta_ads"}  # per-(date, platform)
+
+    async def test_adgroups_returns_adgroup_grain(self, client, auth_headers, db_session, test_company):
+        conn = await _conn(db_session, test_company.id, platform="google_ads", external="g1")
+        db_session.add(AdsDailyMetric(
+            connection_id=conn.id, company_id=test_company.id, platform="google_ads", date=D1,
+            entity_level="adgroup", campaign_id="c1", adgroup_id="ag1", spend=Decimal("10"),
+            impressions=100, clicks=5, conversions=Decimal("1"), conversion_value=Decimal("20"), currency="USD",
+        ))
+        db_session.add(MarketingAdGroup(
+            connection_id=conn.id, adgroup_id="ag1", campaign_id="c1", name="Exact", status="enabled",
+        ))
+        await db_session.commit()
+        r = await client.get(
+            f"/api/marketing/companies/{test_company.id}/adgroups",
+            params={"date_from": FROM.isoformat(), "date_to": TO.isoformat()},
+            headers=auth_headers,
+        )
+        assert r.status_code == 200
+        rows = r.json()["adgroups"]
+        assert any(a["adgroup_id"] == "ag1" and a["name"] == "Exact" for a in rows)
+
+    async def test_site_health_returns_latest_snapshot(self, client, auth_headers, db_session, test_company):
+        conn = await _conn(db_session, test_company.id, platform="pagespeed", external="https://x.test/")
+        db_session.add(SiteHealthSnapshot(
+            connection_id=conn.id, company_id=test_company.id, captured_date=D1, strategy="mobile",
+            url="https://x.test/", performance_score=Decimal("74"),
+        ))
+        await db_session.commit()
+        r = await client.get(
+            f"/api/marketing/companies/{test_company.id}/site-health",
+            params={"date_from": FROM.isoformat(), "date_to": TO.isoformat()},
+            headers=auth_headers,
+        )
+        assert r.status_code == 200
+
+    async def test_breakdown_dark_by_default_404(self, client, auth_headers, test_company, monkeypatch):
+        from src.config import settings
+        monkeypatch.setattr(settings, "MKTG_ENABLED", False)
+        r = await client.get(
+            f"/api/marketing/companies/{test_company.id}/breakdown",
+            params={"date_from": FROM.isoformat(), "date_to": TO.isoformat()},
+            headers=auth_headers,
+        )
+        assert r.status_code == 404

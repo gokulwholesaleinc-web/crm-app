@@ -50,10 +50,12 @@
       "reach": "350",
       "actions": [
         {"action_type": "omni_purchase", "value": "2"},
+        {"action_type": "purchase", "value": "5"},
         {"action_type": "landing_page_view", "value": "10"}
       ],
       "action_values": [
-        {"action_type": "omni_purchase", "value": "200.00"}
+        {"action_type": "omni_purchase", "value": "200.00"},
+        {"action_type": "purchase", "value": "333.00"}
       ]
     }
   ],
