@@ -42,20 +42,23 @@ _MARKETING_TABLES = (
     "platform_connections",
 )
 
-_MIGRATION_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "backend"
-    / "alembic"
-    / "versions"
-    / "056_marketing_warehouse.py"
-)
+_VERSIONS = Path(__file__).resolve().parents[2] / "backend" / "alembic" / "versions"
+_MIGRATION_PATH = _VERSIONS / "056_marketing_warehouse.py"
+_MIGRATION_057_PATH = _VERSIONS / "057_marketing_phase2_ga4.py"
+
+# Applied in order to build the full current marketing schema.
+_MIGRATION_PATHS = (_MIGRATION_PATH, _MIGRATION_057_PATH)
 
 
-def _load_migration():
-    spec = importlib.util.spec_from_file_location("mig056", _MIGRATION_PATH)
+def _load_migration(path: Path = _MIGRATION_PATH):
+    spec = importlib.util.spec_from_file_location(path.stem, path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def _load_migrations() -> list:
+    return [_load_migration(p) for p in _MIGRATION_PATHS]
 
 
 def _snapshot(inspector, table: str) -> dict:
@@ -86,20 +89,21 @@ def _drop_marketing(conn) -> None:
 
 
 def test_migration_056_matches_create_all():
-    """Running migration 056 yields the same DDL as create_all for all 13 tables."""
+    """Running migrations 056→057 yields the same DDL as create_all for all 13 tables."""
     ref_engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(ref_engine)
     ref_insp = inspect(ref_engine)
     reference = {t: _snapshot(ref_insp, t) for t in _MARKETING_TABLES}
 
-    mig = _load_migration()
+    migs = _load_migrations()
     mig_engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(mig_engine)
     with mig_engine.connect() as conn:
         _drop_marketing(conn)
         ctx = MigrationContext.configure(conn)
         with Operations.context(ctx):
-            mig.upgrade()
+            for mig in migs:
+                mig.upgrade()
         mig_insp = inspect(conn)
         candidate = {t: _snapshot(mig_insp, t) for t in _MARKETING_TABLES}
 
@@ -140,16 +144,18 @@ def test_migration_056_declares_nulls_not_distinct_on_grain_keys():
 
 
 def test_migration_056_downgrade_drops_tables():
-    """downgrade() removes all marketing tables (round-trip)."""
-    mig = _load_migration()
+    """upgrade 056→057 then downgrade 057→056 round-trips cleanly."""
+    migs = _load_migrations()
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
     with engine.connect() as conn:
         _drop_marketing(conn)
         ctx = MigrationContext.configure(conn)
         with Operations.context(ctx):
-            mig.upgrade()
+            for mig in migs:
+                mig.upgrade()
             assert set(_MARKETING_TABLES).issubset(set(inspect(conn).get_table_names()))
-            mig.downgrade()
+            for mig in reversed(migs):
+                mig.downgrade()
         remaining = set(inspect(conn).get_table_names())
     assert not set(_MARKETING_TABLES).intersection(remaining)

@@ -335,6 +335,8 @@ class AnalyticsDaily(Base, TimestampMixin):
     position: Mapped[float | None] = mapped_column(Numeric(9, 4))
 
     is_sampled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=false())
+    # H3: golden = no "(other)" overflow + finalized. False surfaces a tie-out caveat.
+    is_data_golden: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=true())
 
     __table_args__ = (
         UniqueConstraint(
@@ -345,6 +347,13 @@ class AnalyticsDaily(Base, TimestampMixin):
         CheckConstraint(_in("source", ANALYTICS_SOURCES), name="source"),
         CheckConstraint(_in("dimension_type", DIMENSION_TYPES), name="dimension_type"),
         Index("ix_analytics_daily_company_source_date", "company_id", "source", "date"),
+        # LOW-IDX: every channel/page/query read filters on dimension_type — this
+        # composite matches the (=company_id, =source, =dimension_type, date BETWEEN)
+        # access pattern so those reads don't filter-discard other dimension_types.
+        Index(
+            "ix_analytics_daily_company_source_dim_date",
+            "company_id", "source", "dimension_type", "date",
+        ),
     )
 
 

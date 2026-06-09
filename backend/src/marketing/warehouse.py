@@ -54,7 +54,7 @@ _ADS_MEASURES = (
 _ANALYTICS_MEASURES = (
     "sessions", "users", "new_users", "engaged_sessions", "engagement_rate",
     "bounce_rate", "conversions", "key_events", "avg_session_duration",
-    "impressions", "clicks", "ctr", "position", "is_sampled",
+    "impressions", "clicks", "ctr", "position", "is_sampled", "is_data_golden",
 )
 _SITE_HEALTH_MEASURES = (
     "performance_score", "seo_score", "accessibility_score",

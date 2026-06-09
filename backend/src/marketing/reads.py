@@ -482,10 +482,14 @@ async def analytics(
                 func.coalesce(func.sum(AnalyticsDaily.new_users), 0),
                 func.coalesce(func.sum(AnalyticsDaily.engaged_sessions), 0),
                 func.coalesce(func.sum(AnalyticsDaily.key_events), 0),
-                func.coalesce(func.sum(AnalyticsDaily.conversions), 0),
                 # Portable "any sampled?" — max of the boolean cast (PG + SQLite).
                 func.coalesce(
                     func.max(func.cast(AnalyticsDaily.is_sampled, Integer)), 0
+                ),
+                # Portable "all golden?" — MIN of the boolean cast; 0 if ANY total-grain
+                # row had a "(other)" overflow / wasn't finalized (H3 tie-out caveat).
+                func.coalesce(
+                    func.min(func.cast(AnalyticsDaily.is_data_golden, Integer)), 1
                 ),
             ).where(
                 AnalyticsDaily.company_id == company_id,
@@ -496,7 +500,7 @@ async def analytics(
             )
         )
     ).one()
-    sessions, users, new_users, engaged_sessions, key_events, ga4_conversions, is_sampled = ga4_total
+    sessions, users, new_users, engaged_sessions, key_events, is_sampled, is_golden = ga4_total
     sessions = _int(sessions)
     engaged_sessions = _int(engaged_sessions)
     ga4_totals = {
@@ -504,11 +508,13 @@ async def analytics(
         "users": _int(users),
         "new_users": _int(new_users),
         "engaged_sessions": engaged_sessions,
+        # H7: key_events IS GA4's conversion metric (no separate `conversions` — that
+        # is for ad platforms; carrying both was a duplicated, double-count-inviting value).
         "key_events": q6(key_events or 0),
-        "conversions": q6(ga4_conversions or 0),
         # Engagement rate as ratio-of-sums (engaged / total sessions).
         "engagement_rate": _ratio(engaged_sessions, sessions),
         "is_sampled": bool(is_sampled),
+        "is_data_golden": bool(is_golden),
     }
 
     # GA4 daily sessions/users trend (totals only).

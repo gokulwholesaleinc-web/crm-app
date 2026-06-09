@@ -206,10 +206,12 @@ class Ga4Totals(BaseModel):
     users: int
     new_users: int
     engaged_sessions: int
+    # key_events IS GA4's conversion metric (H7) — no separate `conversions` field;
+    # ad-platform conversions live on the Paid Media surfaces, not here.
     key_events: Decimal
-    conversions: Decimal
     engagement_rate: Decimal | None = None
     is_sampled: bool = False  # A11: surface sampling, never hide it
+    is_data_golden: bool = True  # H3: False ⇒ "(other)" overflow / not finalized → may not tie out
 
 
 class Ga4SeriesPoint(BaseModel):

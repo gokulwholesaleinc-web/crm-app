@@ -233,7 +233,7 @@ class TestCampaigns:
 
 
 class TestAnalytics:
-    async def test_ga4_totals_only_from_total_rows_and_conversions_surfaced(
+    async def test_ga4_totals_only_from_total_rows_and_key_events_surfaced(
         self, client, auth_headers, db_session, test_company
     ):
         conn = await _conn(db_session, test_company.id, platform="ga4", external="prop")
@@ -242,7 +242,7 @@ class TestAnalytics:
         db_session.add(AnalyticsDaily(
             connection_id=conn.id, company_id=test_company.id, source="ga4", date=D1,
             dimension_type="total", dimension_value="", sessions=1000, users=800,
-            new_users=300, engaged_sessions=700, conversions=Decimal("37"), key_events=Decimal("37"),
+            new_users=300, engaged_sessions=700, key_events=Decimal("37"),
         ))
         db_session.add(AnalyticsDaily(
             connection_id=conn.id, company_id=test_company.id, source="ga4", date=D1,
@@ -260,7 +260,10 @@ class TestAnalytics:
         assert body["ga4_configured"] is True
         # A11: sessions total is ONLY the 'total' row (1000), not total+channel (1600)
         assert body["ga4_totals"]["sessions"] == 1000
-        # M1: GA4 conversions are surfaced (keyEvents → conversions), no longer 0
-        assert Decimal(str(body["ga4_totals"]["conversions"])) == Decimal("37")
+        # H7: GA4's conversion metric is surfaced as key_events (no separate, duplicated
+        # `conversions` field that could blend with ad-platform conversions).
+        assert Decimal(str(body["ga4_totals"]["key_events"])) == Decimal("37")
+        assert "conversions" not in body["ga4_totals"]
+        assert body["ga4_totals"]["is_data_golden"] is True
         # traffic sources come from the channel rows, not the total
         assert "Organic Search" in {s["channel"] for s in body["traffic_sources"]}

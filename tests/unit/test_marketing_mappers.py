@@ -157,9 +157,10 @@ class TestGa4Mapper:
         assert first.engaged_sessions == 910
         assert first.engagement_rate == Decimal("0.689394")
         assert first.key_events == Decimal("37")
-        # GA4 keyEvents IS the modern "conversions" — carried into the conversions
-        # column too, so reads.analytics doesn't report a permanent 0 (M1).
-        assert first.conversions == Decimal("37")
+        # H7: keyEvents is GA4's conversion metric, carried in key_events ONLY — the
+        # `conversions` column (for ad platforms) stays None so the two never blend.
+        assert first.conversions is None
+        assert first.is_data_golden is True  # H3: the fixture is golden
         assert first.source == "ga4"
 
     def test_total_query_is_not_sampled(self):
@@ -199,6 +200,54 @@ class TestGa4Mapper:
             )
             == []
         )
+
+    def test_data_loss_from_other_row_marks_not_golden(self):
+        # H3: a "(other)" overflow (dataLossFromOtherRow) flags every row not-golden
+        # so the read layer can disclose the breakdown may not tie out to totals.
+        payload = _load("ga4_runreport_channels.json")
+        payload.setdefault("metadata", {})["dataLossFromOtherRow"] = True
+        rows = ga4.map_ga4(payload, connection_id=5, company_id=9, dimension_type="channel")
+        assert rows and all(r.is_data_golden is False for r in rows)
+
+    def test_data_golden_false_marks_not_golden(self):
+        payload = _load("ga4_runreport_total.json")
+        payload.setdefault("metadata", {})["dataGolden"] = False
+        rows = ga4.map_ga4(payload, connection_id=5, company_id=9, dimension_type="total")
+        assert rows and all(r.is_data_golden is False for r in rows)
+
+
+class TestGa4Fetch:
+    class _PagingSeam:
+        """Returns queued pages so the offset loop (H4) can be exercised offline."""
+
+        def __init__(self, pages: list[dict]):
+            self._pages = pages
+            self.calls = 0
+
+        async def post(self, url, json, *, headers=None):
+            page = self._pages[min(self.calls, len(self._pages) - 1)]
+            self.calls += 1
+            return page
+
+        async def get(self, url, params=None):  # pragma: no cover - unused
+            return {}
+
+    async def test_offset_loop_concatenates_pages(self):
+        full = [{"dimensionValues": [{"value": "20260601"}], "metricValues": [{"value": "1"}]}] * ga4._PAGE_LIMIT
+        tail = [{"dimensionValues": [{"value": "20260602"}], "metricValues": [{"value": "1"}]}]
+        seam = self._PagingSeam([
+            {"dimensionHeaders": [{"name": "date"}], "metricHeaders": [{"name": "sessions"}], "rows": full},
+            {"dimensionHeaders": [{"name": "date"}], "metricHeaders": [{"name": "sessions"}], "rows": tail},
+        ])
+        merged = await ga4.fetch_ga4_total(
+            seam, property_id="P", window_start=date(2026, 6, 1), window_end=date(2026, 6, 2)
+        )
+        assert len(merged["rows"]) == ga4._PAGE_LIMIT + 1  # both pages concatenated
+        assert seam.calls == 2  # stopped after the short page
+
+    async def test_body_requests_property_quota(self):
+        body = ga4._body(["sessions"], [{"name": "date"}], date(2026, 6, 1), date(2026, 6, 2))
+        assert body["returnPropertyQuota"] is True  # H8
 
 
 # ── GSC ──────────────────────────────────────────────────────────────────────
