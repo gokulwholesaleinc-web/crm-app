@@ -16,9 +16,11 @@ import { EmptyState } from '../../components/ui/EmptyState';
 import { AllocationDonut } from './components/charts/AllocationDonut';
 import { DayOfWeekChart } from './components/charts/DayOfWeekChart';
 import { SpendTrendChart } from './components/charts/SpendTrendChart';
+import { CampaignsTab } from './components/CampaignsTab';
 import { DailyBreakdownTable } from './components/DailyBreakdownTable';
 import { DataTrustBadge, type SourceFreshness } from './components/DataTrustBadge';
 import { KpiCard } from './components/KpiCard';
+import { WebsiteAnalyticsTab } from './components/WebsiteAnalyticsTab';
 import { formatCardValue, toKpiDelta } from './utils/cardMapping';
 import { isValidPreset, PRESET_LABELS, presetRange, type RangePreset } from './utils/dateRange';
 import { platformLabel } from './utils/platformLabel';
@@ -118,13 +120,10 @@ export default function ReportingPage() {
         <EmptyState title="No client selected" description="Choose a client to view their marketing analytics." />
       ) : tab === 'paid' ? (
         <PaidMediaTab companyId={effectiveCompanyId} preset={preset} />
+      ) : tab === 'analytics' ? (
+        <WebsiteAnalyticsTab companyId={effectiveCompanyId} preset={preset} />
       ) : (
-        <Card padding="lg">
-          <EmptyState
-            title={`${TABS.find((t) => t.key === tab)?.label} view`}
-            description="Connect this client's GA4 / Ads / Meta accounts in the admin panel to populate this section."
-          />
-        </Card>
+        <CampaignsTab companyId={effectiveCompanyId} preset={preset} />
       )}
     </div>
   );
