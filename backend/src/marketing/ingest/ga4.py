@@ -21,7 +21,7 @@ from typing import Any
 
 from ..money import q6
 from ..rows import AnalyticsDailyRow
-from .http_client import GA4_BASE, GoogleSeam
+from .http_client import GA4_BASE, GoogleSeam, ensure_shape
 
 # Metrics requested for the total shape (engagement needs sessions+engaged).
 _TOTAL_METRICS = [
@@ -114,6 +114,17 @@ def map_ga4(
     sums dimension rows to fabricate a total (A11). Sampling is propagated to
     every emitted row. Empty payload → ``[]`` (E5 guard).
     """
+    # Envelope guard (CRITICAL-1): a valid runReport always carries report
+    # structure (headers/metadata) even with zero traffic. A payload with none of
+    # those is an error body / drifted shape, not a genuinely-empty report — raise
+    # so the run is 'partial' rather than a silent zero recorded as success.
+    ensure_shape(
+        isinstance(payload, dict)
+        and any(k in payload for k in ("rows", "dimensionHeaders", "metricHeaders", "metadata")),
+        "ga4 payload missing runReport structure (headers/metadata)",
+        platform="ga4",
+    )
+
     rows: list[AnalyticsDailyRow] = []
     raw_rows = payload.get("rows") or []
     if not raw_rows:

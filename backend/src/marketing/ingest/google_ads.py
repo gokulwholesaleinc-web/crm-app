@@ -24,7 +24,7 @@ from typing import Any
 
 from ..money import from_micros, q6
 from ..rows import AdGroupDimRow, AdsDailyRow, CampaignDimRow
-from .http_client import GOOGLE_ADS_BASE, GoogleSeam
+from .http_client import GOOGLE_ADS_BASE, GoogleSeam, ensure_shape
 
 # Normalize the platform's verbatim status into the dim's canonical token.
 _STATUS_MAP = {"ENABLED": "enabled", "PAUSED": "paused", "REMOVED": "removed"}
@@ -99,6 +99,15 @@ def map_google_ads(
     the account grain — and none double-counts. Money normalized via
     ``from_micros`` (A4); empty payload → empty lists.
     """
+    # Envelope guard (CRITICAL-1): the fetcher always normalizes to {"batches": [...]}.
+    # A payload missing that envelope is a drifted/degraded shape, NOT an empty
+    # result — raise so the run is recorded 'partial' instead of a silent zero.
+    ensure_shape(
+        isinstance(payload, dict) and isinstance(payload.get("batches"), list),
+        "google_ads payload missing 'batches' list envelope",
+        platform="google_ads",
+    )
+
     ads: list[AdsDailyRow] = []
     campaigns: dict[str, CampaignDimRow] = {}
     adgroups: dict[str, AdGroupDimRow] = {}
@@ -112,6 +121,13 @@ def map_google_ads(
 
     for result in _iter_results(payload):
         seg = result.get("segments", {})
+        # A result row that lacks its date segment can't be grained — that is a
+        # shape drift (the GAQL always selects segments.date), not empty data.
+        ensure_shape(
+            isinstance(seg, dict) and bool(seg.get("date")),
+            "google_ads result row missing segments.date",
+            platform="google_ads",
+        )
         row_date = date_cls.fromisoformat(seg["date"])
         campaign = result.get("campaign", {})
         ad_group = result.get("adGroup", {})

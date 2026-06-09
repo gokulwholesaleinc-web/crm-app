@@ -17,7 +17,7 @@ from typing import Any
 
 from ..money import q6
 from ..rows import AnalyticsDailyRow
-from .http_client import GSC_BASE, GoogleSeam
+from .http_client import GSC_BASE, GoogleSeam, ensure_shape
 
 _PAGE_SIZE = 25000  # D3 max rows/request
 
@@ -70,11 +70,24 @@ def map_gsc(
     ``[date]``. clicks/impressions are ints; ctr/position are ``Decimal``. Empty
     payload → ``[]`` (E5 guard).
     """
+    # Envelope guard (CRITICAL-1): the fetcher always lands {"rows": [...]} (empty
+    # list when the site had no search traffic). A payload without the 'rows' key is
+    # an error body / drifted shape — raise so the run is 'partial', not a silent
+    # zero. A row missing its date key is likewise a shape drift, not empty data.
+    ensure_shape(
+        isinstance(payload, dict) and isinstance(payload.get("rows"), list),
+        "gsc payload missing 'rows' list envelope",
+        platform="gsc",
+    )
+
     rows: list[AnalyticsDailyRow] = []
-    for raw in payload.get("rows") or []:
+    for raw in payload["rows"]:
         keys = raw.get("keys") or []
-        if not keys:
-            continue
+        ensure_shape(
+            bool(keys),
+            "gsc row missing 'keys' (date dimension)",
+            platform="gsc",
+        )
         row_date = date_cls.fromisoformat(keys[0])
         rows.append(
             AnalyticsDailyRow(

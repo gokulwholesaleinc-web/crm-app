@@ -59,6 +59,33 @@ class PermanentError(IngestHTTPError):
     """Non-retryable: auth revocation, bad request, permission. Health acts now (B5)."""
 
 
+class UnmappableShapeError(IngestHTTPError):
+    """A 2xx payload whose STRUCTURE the mapper cannot recognize (CRITICAL-1).
+
+    Distinct from a legitimately-empty result (E5 → ``[]``): this is raised only
+    when the envelope itself is wrong — a renamed/absent top-level key, an error
+    body where data was expected, or a row missing the structural fields the grain
+    depends on. A drifted/degraded API shape that a mapper would otherwise map to
+    ``[]`` and have recorded as ``success`` (freshness green, silent zero) instead
+    raises this, and ``run_connection_sync`` records the run as ``partial`` — the
+    data was NOT refreshed, and freshness stays truthful. Carries ``error_class``
+    ``"unmappable_shape"``; the health machine treats it as a hard failure so
+    persistent drift escalates rather than masquerading as a healthy zero.
+    """
+
+    def __init__(self, message: str, *, platform: str | None = None):
+        super().__init__(message, error_class="unmappable_shape")
+        self.platform = platform
+
+
+def ensure_shape(ok: bool, message: str, *, platform: str | None = None) -> None:
+    """Raise :class:`UnmappableShapeError` when a mapper's structural precondition
+    fails. The single chokepoint mappers use to turn 'silent [] on drift' into a
+    truthful ``partial`` run (CRITICAL-1)."""
+    if not ok:
+        raise UnmappableShapeError(message, platform=platform)
+
+
 def _full_jitter_backoff(attempt: int, retry_after: float | None) -> float:
     """Exponential backoff with full jitter, honoring an explicit ``Retry-After``.
 

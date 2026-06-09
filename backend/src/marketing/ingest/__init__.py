@@ -40,6 +40,7 @@ from .http_client import (
     PageSpeedClient,
     PageSpeedSeam,
     PermanentError,
+    UnmappableShapeError,
 )
 
 logger = logging.getLogger(__name__)
@@ -287,6 +288,21 @@ async def run_connection_sync(
         run.rows_upserted = rows
         run.status = "success"
         health.apply_success(connection)
+    except UnmappableShapeError as exc:
+        # CRITICAL-1: the API returned 2xx but the mapper could not recognize the
+        # shape (drifted/degraded). The mapper aborted BEFORE any upsert, so the
+        # facts were NOT refreshed. Record 'partial' (truthful — distinct from a
+        # 'success' silent zero and from an 'error' fetch failure) and let health
+        # count it (apply_failure does NOT stamp last_synced_at, so freshness stays
+        # honest and persistent drift escalates).
+        health.apply_failure(connection, exc)
+        run.status = "partial"
+        run.error = str(exc)[:2000]
+        run.error_class = "unmappable_shape"
+        logger.warning(
+            "[marketing_ingest] connection=%s platform=%s unmappable shape (partial): %s",
+            connection.id, connection.platform, exc,
+        )
     except Exception as exc:  # noqa: BLE001 — isolation boundary (mirrors scheduler)
         outcome = health.apply_failure(connection, exc)
         run.status = "error"

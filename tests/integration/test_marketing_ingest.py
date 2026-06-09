@@ -55,6 +55,26 @@ class TestHealthStateMachine:
         assert outcome is health.Outcome.REAUTH
         assert conn.status == "needs_reauth"
 
+    def test_sustained_transient_escalates_to_error(self):
+        # CRITICAL-2: a few transient failures keep the connection active, but
+        # sustained throttling eventually escalates so it can't read 'active' forever.
+        conn = _conn(status="active", failure_count=health.TRANSIENT_ESCALATION_THRESHOLD - 2)
+        health.apply_failure(conn, TransientError("429", error_class="transient_429"))
+        assert conn.status == "active"  # one short of the escalation threshold
+        assert conn.failure_count == health.TRANSIENT_ESCALATION_THRESHOLD - 1
+        health.apply_failure(conn, TransientError("429", error_class="transient_429"))
+        assert conn.status == "error"  # sustained throttling finally escalates
+        assert conn.failure_count == health.TRANSIENT_ESCALATION_THRESHOLD
+        # escalation threshold stays well above the hard-failure one (transient is
+        # the more forgiving class).
+        assert health.TRANSIENT_ESCALATION_THRESHOLD > health.HARD_FAILURE_THRESHOLD
+
+    def test_success_after_transient_resets_below_escalation(self):
+        # a recovery resets the counter so intermittent throttling never escalates.
+        conn = _conn(status="active", failure_count=health.TRANSIENT_ESCALATION_THRESHOLD - 1)
+        health.apply_success(conn)
+        assert conn.failure_count == 0 and conn.status == "active"
+
     def test_n_consecutive_hard_failures_trip_error(self):
         conn = _conn(status="active", failure_count=health.HARD_FAILURE_THRESHOLD - 2)
         # one hard failure short of the threshold → still active

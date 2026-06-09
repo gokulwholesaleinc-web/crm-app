@@ -15,7 +15,9 @@ from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
+import pytest
 from src.marketing.ingest import ga4, google_ads, gsc, pagespeed
+from src.marketing.ingest.http_client import UnmappableShapeError
 
 FIXTURES = Path(__file__).resolve().parents[2] / "backend" / "src" / "marketing" / "fixtures"
 
@@ -88,17 +90,14 @@ class TestGoogleAdsMapper:
         assert by_id["911"].campaign_id == "111"
         assert by_id["912"].status == "paused"
 
-    def test_empty_payload_guard(self):
-        ads, campaigns, adgroups = google_ads.map_google_ads(
-            {"batches": []}, connection_id=7, company_id=3
-        )
-        assert ads == [] and campaigns == [] and adgroups == []
-
-    def test_streamed_list_shape_is_handled(self):
-        # searchStream can hand back a bare list of batches; the mapper reads
-        # ``batches`` only, so the fetcher's normalization is what wraps it.
-        ads, _, _ = google_ads.map_google_ads({}, connection_id=7, company_id=3)
-        assert ads == []
+    def test_empty_results_guard(self):
+        # GENUINE empty (E5): the fetcher always lands {"batches": [...]} — an empty
+        # batch list, or a batch with no results, is zero data, not drift → [].
+        for empty in ({"batches": []}, {"batches": [{"results": []}]}):
+            ads, campaigns, adgroups = google_ads.map_google_ads(
+                empty, connection_id=7, company_id=3
+            )
+            assert ads == [] and campaigns == [] and adgroups == []
 
 
 # ── GA4 (A11 total-vs-dimension, sampling) ───────────────────────────────────
@@ -147,8 +146,16 @@ class TestGa4Mapper:
         assert {r.date for r in rows} == {date(2026, 6, 1), date(2026, 6, 2)}
 
     def test_empty_payload_guard(self):
+        # GENUINE empty (E5): a valid runReport envelope (headers/metadata present)
+        # with zero rows is no-traffic, not drift → [].
         assert ga4.map_ga4({"rows": []}, connection_id=5, company_id=9, dimension_type="total") == []
-        assert ga4.map_ga4({}, connection_id=5, company_id=9, dimension_type="total") == []
+        assert (
+            ga4.map_ga4(
+                {"metadata": {}, "dimensionHeaders": [], "metricHeaders": []},
+                connection_id=5, company_id=9, dimension_type="total",
+            )
+            == []
+        )
 
 
 # ── GSC ──────────────────────────────────────────────────────────────────────
@@ -167,8 +174,9 @@ class TestGscMapper:
         assert all(isinstance(r.clicks, int) and isinstance(r.impressions, int) for r in rows)
 
     def test_empty_payload_guard(self):
+        # GENUINE empty (E5): the fetcher always lands {"rows": [...]}; an empty list
+        # is a site with no search traffic that day, not drift → [].
         assert gsc.map_gsc({"rows": []}, connection_id=2, company_id=4) == []
-        assert gsc.map_gsc({}, connection_id=2, company_id=4) == []
 
 
 # ── PageSpeed ────────────────────────────────────────────────────────────────
@@ -197,10 +205,13 @@ class TestPageSpeedMapper:
         assert snap.cls == Decimal("0.041")
         assert snap.url == "https://www.example-client.com/"
 
-    def test_missing_lighthouse_result_guard(self):
-        assert pagespeed.map_pagespeed(
-            {}, connection_id=8, company_id=1, captured_date=date(2026, 6, 2), strategy="mobile"
-        ) == []
+    def test_missing_lighthouse_result_raises_drift(self):
+        # PageSpeed has no legitimately-empty case (a reachable URL always scores),
+        # so a payload without lighthouseResult is an error/drift → partial, not [].
+        with pytest.raises(UnmappableShapeError):
+            pagespeed.map_pagespeed(
+                {}, connection_id=8, company_id=1, captured_date=date(2026, 6, 2), strategy="mobile"
+            )
 
     def test_missing_category_yields_none(self):
         payload = {"lighthouseResult": {"finalUrl": "https://x.test/", "categories": {}, "audits": {}}}
@@ -209,3 +220,49 @@ class TestPageSpeedMapper:
         )
         assert rows[0].performance_score is None
         assert rows[0].lcp_ms is None and rows[0].cls is None
+
+
+# ── Drift guard (CRITICAL-1): drifted/degraded ENVELOPE raises, never silent [] ──
+class TestMapperDriftGuard:
+    """A drifted/degraded API shape must RAISE UnmappableShapeError (→ run.status
+    'partial') instead of mapping to [] and being recorded as a healthy zero. This
+    is distinct from a genuinely-empty result (covered by each mapper's E5 test)."""
+
+    def test_google_ads_missing_batches_envelope_raises(self):
+        # An error body / renamed envelope (no 'batches' list) — the fetcher always
+        # produces {"batches": [...]}, so its absence is a contract break, not empty.
+        for drifted in ({}, {"error": {"code": 7}}, {"batches": {"results": []}}):
+            with pytest.raises(UnmappableShapeError):
+                google_ads.map_google_ads(drifted, connection_id=7, company_id=3)
+
+    def test_google_ads_result_missing_date_segment_raises(self):
+        drifted = {"batches": [{"results": [{"campaign": {"id": "1"}, "metrics": {}}]}]}
+        with pytest.raises(UnmappableShapeError):
+            google_ads.map_google_ads(drifted, connection_id=7, company_id=3)
+
+    def test_ga4_error_body_raises(self):
+        # A GA4 error envelope carries none of rows/headers/metadata.
+        for drifted in ({}, {"error": {"status": "INVALID_ARGUMENT"}}):
+            with pytest.raises(UnmappableShapeError):
+                ga4.map_ga4(drifted, connection_id=5, company_id=9, dimension_type="total")
+
+    def test_gsc_missing_rows_envelope_raises(self):
+        for drifted in ({}, {"error": {"code": 403}}):
+            with pytest.raises(UnmappableShapeError):
+                gsc.map_gsc(drifted, connection_id=2, company_id=4)
+
+    def test_pagespeed_error_body_raises(self):
+        with pytest.raises(UnmappableShapeError):
+            pagespeed.map_pagespeed(
+                {"error": {"code": 500}}, connection_id=8, company_id=1,
+                captured_date=date(2026, 6, 2), strategy="mobile",
+            )
+
+    def test_drift_error_carries_platform_and_class(self):
+        try:
+            gsc.map_gsc({}, connection_id=2, company_id=4)
+        except UnmappableShapeError as exc:
+            assert exc.platform == "gsc"
+            assert exc.error_class == "unmappable_shape"
+        else:  # pragma: no cover - the call must raise
+            raise AssertionError("expected UnmappableShapeError")
