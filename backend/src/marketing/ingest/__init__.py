@@ -32,11 +32,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .. import crypto, warehouse
 from ..models import MarketingCredentialAudit, MarketingSyncRun, PlatformConnection
-from . import ga4, google_ads, gsc, health, pagespeed
+from . import ga4, google_ads, gsc, health, meta_ads, pagespeed
 from .http_client import (
     GoogleClient,
     GoogleSeam,
     IngestHTTPError,
+    MetaClient,
+    MetaSeam,
     PageSpeedClient,
     PageSpeedSeam,
     PermanentError,
@@ -45,8 +47,10 @@ from .http_client import (
 
 logger = logging.getLogger(__name__)
 
-# Platforms this slice ingests (Phase 1 = Google-only; Meta/social ship dark).
-SUPPORTED_PLATFORMS = frozenset({"google_ads", "ga4", "gsc", "pagespeed"})
+# Platforms with a wired fetch/map handler. meta_ads is here (handler exists) but
+# stays dark behind MKTG_META_ENABLED — gated in run_connection_sync + the scheduler
+# selection + the admin create/refresh routes (social platforms have no handler yet).
+SUPPORTED_PLATFORMS = frozenset({"google_ads", "ga4", "gsc", "pagespeed", "meta_ads"})
 
 
 class IngestConfigError(PermanentError):
@@ -114,6 +118,16 @@ def _google_seam(connection: PlatformConnection, http_client: Any | None) -> Goo
 
 def _pagespeed_seam(http_client: Any | None) -> PageSpeedSeam:
     return http_client if http_client is not None else PageSpeedClient(_pagespeed_api_key())
+
+
+def _meta_seam(connection: PlatformConnection, http_client: Any | None) -> MetaSeam:
+    if http_client is not None:
+        return http_client
+    from src.config import settings
+
+    # appsecret_proof needs the app secret; if unset Meta calls go without proof
+    # (works unless the app requires proof — flagged as a deploy gate in the report).
+    return MetaClient(_access_token(connection), settings.META_APP_SECRET or None)
 
 
 async def _sync_google_ads(
@@ -255,12 +269,39 @@ async def _sync_pagespeed(
     return total
 
 
+async def _sync_meta_ads(
+    session: AsyncSession, connection: PlatformConnection,
+    run_type: str, window_start: date, window_end: date, http_client: Any | None,
+) -> int:
+    client = _meta_seam(connection, http_client)
+    payload = await meta_ads.fetch_meta_ads(
+        client,
+        account_id=connection.external_account_id,
+        window_start=window_start,
+        window_end=window_end,
+    )
+    await warehouse.insert_raw_payload(
+        session, connection_id=connection.id, platform="meta_ads", endpoint="insights:async",
+        window_start=window_start, window_end=window_end,
+        request_fingerprint=f"meta:{connection.external_account_id}:{window_start}:{window_end}",
+        payload=payload,
+    )
+    ads, campaigns, adgroups = meta_ads.map_meta_ads(
+        payload, connection_id=connection.id, company_id=connection.company_id, currency=connection.currency
+    )
+    rows = await warehouse.upsert_ads_daily(session, ads)
+    await warehouse.upsert_campaigns(session, campaigns)
+    await warehouse.upsert_adgroups(session, adgroups)
+    return rows
+
+
 # platform → handler; the only place that knows the per-platform fetch/map/upsert.
 _HANDLERS = {
     "google_ads": _sync_google_ads,
     "ga4": _sync_ga4,
     "gsc": _sync_gsc,
     "pagespeed": _sync_pagespeed,
+    "meta_ads": _sync_meta_ads,
 }
 
 
@@ -271,6 +312,21 @@ def _require(connection: PlatformConnection, value: str | None, what: str) -> st
             error_class="missing_config",
         )
     return value
+
+
+def _require_platform_enabled(platform: str) -> None:
+    """Keep a platform dark behind its phase flag even if a connection exists.
+
+    meta_ads ships behind MKTG_META_ENABLED (Business-Verification gated). The
+    scheduler + admin routes also gate this, but enforcing it at the single ingest
+    entry point means no path can sync Meta while it's off."""
+    from src.config import settings
+
+    if platform == "meta_ads" and not settings.MKTG_META_ENABLED:
+        raise IngestConfigError(
+            "meta_ads ingest is disabled (MKTG_META_ENABLED is off)",
+            error_class="flag_disabled",
+        )
 
 
 def _ads_developer_token() -> str | None:
@@ -322,6 +378,7 @@ async def run_connection_sync(
                 f"platform '{connection.platform}' not ingestible in this slice",
                 error_class="unsupported_platform",
             )
+        _require_platform_enabled(connection.platform)
         # D2: serialize this connection's writers (daily/settling/backfill).
         await warehouse.lock_connection(session, connection.id)
         await _write_audit(

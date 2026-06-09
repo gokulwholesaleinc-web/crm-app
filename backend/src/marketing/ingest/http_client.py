@@ -20,6 +20,8 @@ Design:
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import hmac
 import logging
 import random
 from typing import Any, Protocol, runtime_checkable
@@ -28,10 +30,15 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-# REST bases (E5 version pins; verify at build — Ads v20 sunsets ~2026-06-10).
+# REST bases (E5 version pins; verify at build).
 GA4_BASE = "https://analyticsdata.googleapis.com/v1beta"
 GSC_BASE = "https://www.googleapis.com/webmasters/v3"
-GOOGLE_ADS_BASE = "https://googleads.googleapis.com/v20"
+# Google Ads v20 reached EOL June 2026 → pinned to v24 (current, ~1yr runway). The
+# GAQL fields used (segments.date, campaign/ad_group ids, metrics.cost_micros…) are
+# version-stable. Verify/bump at deploy.
+GOOGLE_ADS_BASE = "https://googleads.googleapis.com/v24"
+# Meta Graph v25.0 (current as of 2026-02; v19 was EOL-bound). Verify/bump at deploy.
+META_GRAPH_BASE = "https://graph.facebook.com/v25.0"
 PAGESPEED_URL = "https://www.googleapis.com/pagespeedonline/v5/runPagespeed"
 
 _DEFAULT_TIMEOUT = httpx.Timeout(connect=10.0, read=60.0, write=30.0, pool=10.0)
@@ -258,6 +265,18 @@ class PageSpeedSeam(Protocol):
     async def run(self, params: dict[str, Any]) -> dict[str, Any]: ...
 
 
+@runtime_checkable
+class MetaSeam(Protocol):
+    """The typed Meta Graph network seam (C1). ``MetaClient`` is the production impl;
+    a test injects a fixture-replay object satisfying this shape. Unlike Google,
+    Meta sends params as query params on both GET and POST (the async-report submit
+    is a POST), so both methods take ``params``."""
+
+    async def get(self, url: str, params: dict[str, Any] | None = None) -> dict[str, Any]: ...
+
+    async def post(self, url: str, params: dict[str, Any] | None = None) -> dict[str, Any]: ...
+
+
 class GoogleClient:
     """Bearer-auth REST client for GA4 / GSC / Google Ads (one OAuth access token).
 
@@ -316,3 +335,44 @@ class PageSpeedClient:
         if self._api_key:
             merged["key"] = self._api_key
         return await request_with_retry(self._client, "GET", PAGESPEED_URL, params=merged)
+
+
+class MetaClient:
+    """Graph API client for the Meta Ads insights flow (one access token + app secret).
+
+    Every call carries ``access_token`` and, when an app secret is configured,
+    ``appsecret_proof`` = HMAC-SHA256(app_secret, access_token) — required by apps
+    with the proof setting on. Reuses ``request_with_retry`` (429/5xx/Retry-After
+    backoff + Meta OAuth-190 → needs_reauth classification for free)."""
+
+    def __init__(self, access_token: str, app_secret: str | None = None, *, client: httpx.AsyncClient | None = None):
+        self._token = access_token
+        self._secret = app_secret
+        self._client = client or httpx.AsyncClient(timeout=_DEFAULT_TIMEOUT)
+        self._owns_client = client is None
+
+    async def __aenter__(self) -> MetaClient:
+        return self
+
+    async def __aexit__(self, *exc: object) -> None:
+        await self.aclose()
+
+    async def aclose(self) -> None:
+        if self._owns_client:
+            await self._client.aclose()
+
+    def _auth(self, params: dict[str, Any] | None) -> dict[str, Any]:
+        merged = dict(params or {})
+        merged["access_token"] = self._token
+        if self._secret:
+            merged["appsecret_proof"] = hmac.new(
+                self._secret.encode("utf-8"), self._token.encode("utf-8"), hashlib.sha256
+            ).hexdigest()
+        return merged
+
+    async def get(self, url: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        return await request_with_retry(self._client, "GET", url, params=self._auth(params))
+
+    async def post(self, url: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        # Meta accepts POST params as query params (the async-report submit).
+        return await request_with_retry(self._client, "POST", url, params=self._auth(params))

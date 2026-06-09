@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 from src.marketing import money
-from src.marketing.ingest import ga4, google_ads, gsc, pagespeed
+from src.marketing.ingest import ga4, google_ads, gsc, meta_ads, pagespeed
 from src.marketing.ingest.http_client import UnmappableShapeError
 
 FIXTURES = Path(__file__).resolve().parents[2] / "backend" / "src" / "marketing" / "fixtures"
@@ -141,6 +141,74 @@ class TestGoogleAdsMapper:
         ):
             ads, campaigns, adgroups = google_ads.map_google_ads(empty, connection_id=7, company_id=3)
             assert ads == [] and campaigns == [] and adgroups == []
+
+
+# ── Meta Ads (to_money not micros, adset→campaign→account rollup, purchases) ──
+class TestMetaAdsMapper:
+    def test_emits_adgroup_campaign_account_levels(self):
+        ads, campaigns, adgroups = meta_ads.map_meta_ads(
+            _load("meta_ads_insights.json"), connection_id=7, company_id=3, currency="USD"
+        )
+        levels = {r.entity_level for r in ads}
+        assert levels == {"adgroup", "campaign", "account"}
+        assert sum(r.entity_level == "adgroup" for r in ads) == 3  # 3 ad sets
+        assert sum(r.entity_level == "campaign" for r in ads) == 2  # campaigns 100, 200
+        account = [r for r in ads if r.entity_level == "account"]
+        assert len(account) == 1
+        assert account[0].campaign_id is None and account[0].adgroup_id is None  # A2
+
+    def test_spend_is_currency_decimal_not_micros(self):
+        ads, _, _ = meta_ads.map_meta_ads(
+            _load("meta_ads_insights.json"), connection_id=7, company_id=3, currency="USD"
+        )
+        account = next(r for r in ads if r.entity_level == "account")
+        # 10.00 + 5.50 + 8.00 parsed as currency (NOT divided by 1e6, A4)
+        assert account.spend == Decimal("23.50")
+        assert account.spend == money.to_money("23.50")
+
+    def test_purchases_picked_by_priority_never_summed(self):
+        ads, _, _ = meta_ads.map_meta_ads(
+            _load("meta_ads_insights.json"), connection_id=7, company_id=3, currency="USD"
+        )
+        account = next(r for r in ads if r.entity_level == "account")
+        # 3 (omni) + 1 (purchase) + 2 (omni) = 6 — landing_page_view is NOT counted
+        assert account.conversions == Decimal("6")
+        assert account.conversion_value == Decimal("390.00")  # 150 + 40 + 200
+
+    def test_reach_only_at_adset_grain_not_rolled_up(self):
+        ads, _, _ = meta_ads.map_meta_ads(
+            _load("meta_ads_insights.json"), connection_id=7, company_id=3, currency="USD"
+        )
+        adset = next(r for r in ads if r.entity_level == "adgroup" and r.adgroup_id == "11")
+        assert adset.reach == 800 and adset.purchases == Decimal("3")
+        # reach is non-additive → None on the campaign + account roll-ups
+        assert all(r.reach is None for r in ads if r.entity_level in ("campaign", "account"))
+
+    def test_dims_normalized_status(self):
+        _, campaigns, adgroups = meta_ads.map_meta_ads(
+            _load("meta_ads_insights.json"), connection_id=7, company_id=3
+        )
+        camp = {c.campaign_id: c for c in campaigns}
+        assert camp["100"].status == "active" and camp["100"].name == "Prospecting"
+        assert camp["200"].status == "paused" and camp["200"].raw_status == "PAUSED"
+        ag = {a.adgroup_id: a for a in adgroups}
+        assert ag["12"].status == "paused" and ag["12"].campaign_id == "100"  # ADSET_PAUSED → paused
+
+    def test_empty_result_guard(self):
+        ads, campaigns, adgroups = meta_ads.map_meta_ads(
+            _load("meta_ads_insights_empty.json"), connection_id=7, company_id=3
+        )
+        assert ads == [] and campaigns == [] and adgroups == []
+
+    def test_missing_insights_envelope_raises_drift(self):
+        for drifted in ({}, {"error": {"code": 190}}, {"insights": {"data": []}}):
+            with pytest.raises(UnmappableShapeError):
+                meta_ads.map_meta_ads(drifted, connection_id=7, company_id=3)
+
+    def test_row_missing_adset_id_raises_drift(self):
+        drifted = {"insights": [{"date_start": "2026-06-01", "campaign_id": "100", "spend": "1.00"}]}
+        with pytest.raises(UnmappableShapeError):
+            meta_ads.map_meta_ads(drifted, connection_id=7, company_id=3)
 
 
 # ── GA4 (A11 total-vs-dimension, sampling) ───────────────────────────────────
