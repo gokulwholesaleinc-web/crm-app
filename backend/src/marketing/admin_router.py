@@ -148,6 +148,21 @@ def _audit(session, connection: PlatformConnection, *, action: str, user_id: int
     )
 
 
+def _overall_status(statuses: list[str]) -> str:
+    """Worst-status rollup for a refresh's runs: success | partial | error.
+
+    A drifted run is recorded 'partial' (data NOT refreshed) — it must NEVER roll up
+    to 'success' (the silent-success-on-drift sin this whole change set fixes). All
+    runs error → 'error'; any error OR partial (but not all-error) → 'partial';
+    otherwise 'success'.
+    """
+    if statuses and all(s == "error" for s in statuses):
+        return "error"
+    if any(s in ("error", "partial") for s in statuses):
+        return "partial"
+    return "success"
+
+
 def _require_platform_enabled(platform: str) -> None:
     """Block create/refresh of a phase-gated platform while it's dark.
 
@@ -326,14 +341,10 @@ async def refresh_connection(
     await db.commit()
     await cache.invalidate(connection.company_id)
 
-    statuses = [r.status for r in runs]
-    overall = "error" if all(s == "error" for s in statuses) else (
-        "partial" if "error" in statuses else "success"
-    )
     return RefreshResult(
         connection_id=connection_id,
         runs=[f"{r.run_type}:{r.status}" for r in runs],
-        status=overall,
+        status=_overall_status([r.status for r in runs]),
     )
 
 

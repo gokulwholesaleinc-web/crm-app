@@ -54,6 +54,10 @@ def _body(metrics: list[str], dimensions: list[dict[str, str]], window_start: da
         "metrics": [{"name": m} for m in metrics],
         "dateRanges": [{"startDate": window_start.isoformat(), "endDate": window_end.isoformat()}],
         "keepEmptyRows": False,
+        # Deterministic order so offset paging (_run_paged) is stable across pages —
+        # GA4 doesn't guarantee row order without an explicit orderBys (date is always
+        # a selected dimension here).
+        "orderBys": [{"dimension": {"dimensionName": "date"}}],
         "limit": _PAGE_LIMIT,
         # H8: ask GA4 to report its token-bucket consumption so backfills can be
         # paced against the property quota instead of only reacting to 429s.

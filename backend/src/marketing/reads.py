@@ -872,6 +872,11 @@ async def budget_pacing(
     out: list[dict] = []
     seen: set[int] = set()
     for conn_id, amount, budget_ccy, platform, display_name, conn_ccy in budget_rows:
+        # The half-open month match can return >1 budget row for a connection if two
+        # rows fall in the same month (schema permits distinct days) — emit one pace
+        # row per connection (first wins) rather than double-listing it.
+        if conn_id in seen:
+            continue
         seen.add(conn_id)
         _, mtd = spend_by_conn.get(conn_id, (platform, Decimal(0)))
         out.append(

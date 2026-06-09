@@ -25,6 +25,8 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.config import settings
+
 from .models import MarketingAlert, PlatformConnection
 
 logger = logging.getLogger(__name__)
@@ -37,8 +39,12 @@ STALE_AFTER_HOURS = 48
 
 _ALERT_TYPE = "stale_sync"
 
-# Operator-silenced / already-surfaced statuses: don't double-alarm.
-_SKIP_STATUSES = ("disabled", "needs_reauth")
+# Statuses that don't get a stale_sync alert:
+#  - disabled / needs_reauth: operator-silenced or already surfaced by their status.
+#  - pending: first sync hasn't completed yet (last_synced_at NULL ⇒ would alarm on
+#    day one); a never-synced connection that's actually stuck escalates to 'error'
+#    (CRITICAL-2) and is surfaced that way instead.
+_SKIP_STATUSES = ("disabled", "needs_reauth", "pending")
 
 
 def stale_sync_dedup_key(connection_id: int) -> str:
@@ -91,6 +97,10 @@ async def detect_stale_syncs(
     fired = 0
     for conn in conns:
         if conn.status in _SKIP_STATUSES:
+            continue
+        # A phase-gated platform (meta_ads while MKTG_META_ENABLED is off) is dark by
+        # design — the scheduler never syncs it, so don't flag it as a stuck source.
+        if conn.platform == "meta_ads" and not settings.MKTG_META_ENABLED:
             continue
         last = conn.last_synced_at
         # Postgres returns tz-aware (DateTime(timezone=True)); the SQLite test

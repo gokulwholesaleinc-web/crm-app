@@ -220,3 +220,14 @@ class TestMetaPhaseGate:
             headers=_admin(superuser_token),
         )
         assert r.status_code == 422
+
+
+def test_overall_status_never_reports_partial_as_success():
+    # A drifted 'partial' run must NOT roll up to 'success' (silent-success-on-drift).
+    from src.marketing.admin_router import _overall_status
+    assert _overall_status(["partial"]) == "partial"
+    assert _overall_status(["success", "partial"]) == "partial"
+    assert _overall_status(["success", "success"]) == "success"
+    assert _overall_status(["error", "error"]) == "error"
+    assert _overall_status(["error", "success"]) == "partial"
+    assert _overall_status([]) == "success"

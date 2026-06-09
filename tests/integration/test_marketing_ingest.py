@@ -234,7 +234,18 @@ class TestFetcherDriftGuard:
 
 
 class TestSsrfAlternateEncodings:
-    def test_decimal_and_hex_loopback_blocked(self):
-        for bad in ("http://2130706433/", "http://0x7f000001/"):
+    def test_legacy_loopback_encodings_blocked(self):
+        # decimal, full-hex, short-dotted, octal-dotted, mixed-hex — all == 127.0.0.1
+        for bad in (
+            "http://2130706433/",
+            "http://0x7f000001/",
+            "http://127.1/",
+            "http://0177.0.0.1/",
+            "http://0x7f.0.0.1/",
+        ):
             with pytest.raises(IngestConfigError):
                 _validate_public_url(bad)
+
+    def test_public_host_and_ip_allowed(self):
+        assert _validate_public_url("https://www.example.com/") == "https://www.example.com/"
+        assert _validate_public_url("https://8.8.8.8/") == "https://8.8.8.8/"

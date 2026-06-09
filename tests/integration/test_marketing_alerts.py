@@ -82,3 +82,21 @@ class TestStaleSyncAlerts:
         )
         assert await alerts.detect_stale_syncs(db_session, now=_NOW) == 0
         assert await _alerts(db_session) == []
+
+
+class TestStaleSyncSkips:
+    async def test_pending_first_sync_not_flagged(self, db_session, test_company):
+        # a brand-new pending connection (never synced) must NOT alarm on day one
+        await _conn(db_session, test_company.id, status="pending", last_synced_at=None)
+        assert await alerts.detect_stale_syncs(db_session, now=_NOW) == 0
+        assert await _alerts(db_session) == []
+
+    async def test_dark_meta_platform_not_flagged(self, db_session, test_company, monkeypatch):
+        # meta_ads is dark (MKTG_META_ENABLED off) → never synced by design → no alarm
+        from src.config import settings
+        monkeypatch.setattr(settings, "MKTG_META_ENABLED", False)
+        await _conn(
+            db_session, test_company.id, platform="meta_ads",
+            external_account_id="act_9", status="active", last_synced_at=None,
+        )
+        assert await alerts.detect_stale_syncs(db_session, now=_NOW) == 0

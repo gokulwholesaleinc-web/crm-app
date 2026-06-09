@@ -136,10 +136,11 @@ async def _sync_google_ads(
 ) -> int:
     client = _google_seam(connection, http_client)
     dev_token = _require(connection, _ads_developer_token(), "developer token")
-    # A7: the settling re-fetch is conversion-scoped — re-pull only the
-    # campaign/account grain over the conversion window, NOT the heavier ad-group
-    # grain (which the daily 3-day lookback already restates for recent days).
-    include_adgroups = run_type != "settling"
+    # A7: settling restates ALL grains (incl. ad-group) over the conversion window.
+    # An account/campaign-only settle would leave ad-group drill-down conversions
+    # undercounting vs the campaign totals for late conversions arriving outside the
+    # 3-day daily lookback. The extra grain is the cost of consistent conversions.
+    include_adgroups = True
     payload = await google_ads.fetch_google_ads(
         client,
         customer_id=connection.external_account_id,
@@ -216,6 +217,7 @@ def _validate_public_url(raw: str) -> str:
     the crawler at internal infrastructure. (DNS-time resolution is TOCTOU-imperfect
     and out of scope; this blocks the obvious literal cases.)"""
     import ipaddress
+    import socket
     from urllib.parse import urlparse
 
     parsed = urlparse((raw or "").strip())
@@ -228,12 +230,14 @@ def _validate_public_url(raw: str) -> str:
         ip = ipaddress.ip_address(host)
     except ValueError:
         ip = None
-    # Alternate-encoding literals (decimal "2130706433", hex "0x7f000001") don't parse
-    # as a dotted IP but Google's crawler would resolve them — block the non-public ones.
+    # Legacy/alternate IPv4 encodings a resolver accepts but ipaddress.ip_address()
+    # rejects — decimal "2130706433", hex "0x7f000001", short "127.1", octal
+    # "0177.0.0.1", mixed "0x7f.0.0.1". inet_aton normalizes them all; re-check so
+    # none slips past the literal-IP block (Google's crawler would resolve them).
     if ip is None:
         try:
-            ip = ipaddress.ip_address(int(host, 0)) if (host.isdigit() or host.lower().startswith("0x")) else None
-        except (ValueError, ipaddress.AddressValueError):
+            ip = ipaddress.ip_address(socket.inet_aton(host))
+        except (OSError, ValueError):
             ip = None
     if ip is not None and (
         ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast

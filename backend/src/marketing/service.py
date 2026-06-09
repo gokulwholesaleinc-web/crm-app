@@ -269,19 +269,25 @@ class MarketingReadService:
             self.db, company_id, cmp_from, prev_to, entity_level=entity_level
         )
 
-        # BLEND: when >1 ad platform contributed, conversions/value/cost-per-conv/ROAS
-        # are non-additive across platforms — withhold those (keep spend/clicks/impr).
+        # BLEND: conversions/value/cost-per-conv/ROAS are non-additive across platforms.
+        # Compare the contributing-platform SET of BOTH windows: a current window with
+        # >1 platform is itself unblendable (withhold). A single-platform current with a
+        # DIFFERENT compare mix (blended OR a different single platform) would compute a
+        # delta across unlike platforms — null only the previous baseline so it reads
+        # "New" while the valid current value is kept.
         conv_withheld: str | None = None
-        if await self._conversions_cross_platform(company_id, date_from, cur_to, entity_level):
+        cur_platforms = await aggregation.contributing_ad_platforms(
+            self.db, company_id, date_from, cur_to, entity_level=entity_level
+        )
+        prev_platforms = await aggregation.contributing_ad_platforms(
+            self.db, company_id, cmp_from, prev_to, entity_level=entity_level
+        )
+        if len(cur_platforms) > 1:
             conv_withheld = "multi_platform_conversions"
             for bucket in (current, previous):
                 for field in _CONVERSION_FIELDS:
                     bucket[field] = None
-        elif await self._conversions_cross_platform(company_id, cmp_from, prev_to, entity_level):
-            # Current window is single-platform (a valid number) but the COMPARE window
-            # blended >1 platform — null only the previous conversion fields so the
-            # delta renders "New"/em-dash instead of a fabricated % against a
-            # non-additive baseline (don't compare a Google number to Google+Meta).
+        elif prev_platforms and prev_platforms != cur_platforms:
             for field in _CONVERSION_FIELDS:
                 previous[field] = None
 

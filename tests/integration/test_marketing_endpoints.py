@@ -491,3 +491,34 @@ class TestBlendDeltaAndDayOfWeek:
         day = next(d for d in body["days"] if Decimal(str(d["spend"])) > 0)
         assert Decimal(str(day["spend"])) == Decimal("180")  # additive
         assert day["conversions"] is None and day["roas"] is None and day["cost_per_conversion"] is None
+
+
+class TestOverviewDeltaPlatformMix:
+    async def test_delta_is_new_when_compare_window_is_a_different_platform(
+        self, client, auth_headers, db_session, test_company
+    ):
+        # current window: Meta only; compare window: Google only. Each window is
+        # single-platform, but they're DIFFERENT platforms — the delta must read
+        # 'New' (baseline nulled), not compare Meta vs Google conversions.
+        g = await _conn(db_session, test_company.id, platform="google_ads", external="g1")
+        m = await _conn(db_session, test_company.id, platform="meta_ads", external="act_1")
+        await _ads(db_session, m, test_company.id, d=D1, spend=100, clicks=50, platform="meta_ads",
+                   conversions=10, conversion_value=500)
+        cmp_day = date(2026, 5, 22)
+        await _ads(db_session, g, test_company.id, d=cmp_day, spend=90, clicks=40, conversions=5, conversion_value=250)
+        await db_session.commit()
+
+        r = await client.get(
+            f"/api/marketing/companies/{test_company.id}/overview",
+            params={
+                "date_from": FROM.isoformat(), "date_to": TO.isoformat(),
+                "compare_from": "2026-05-20", "compare_to": "2026-05-30",
+            },
+            headers=auth_headers,
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["conversions_withheld_reason"] is None  # current is single-platform
+        assert Decimal(str(body["conversions"])) == Decimal("10")  # valid Meta number
+        conv_card = next(c for c in body["cards"] if c["key"] == "conversions")
+        assert conv_card["delta"]["is_new"] is True  # not a Meta-vs-Google fabricated %

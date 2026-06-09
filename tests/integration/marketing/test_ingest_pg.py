@@ -163,3 +163,76 @@ async def test_rerun_is_idempotent(pg_session, monkeypatch):
     ).scalar_one()
 
     assert after_first == after_second  # restated, not duplicated (A2)
+
+
+class _DriftGoogleSeam:
+    """A 2xx whose shape isn't a searchStream array/batch — proves run_connection_sync
+    records 'partial' (not a silent zero) for a drifted production path (CRITICAL-1)."""
+
+    async def post(self, url, json=None, *, headers=None):
+        return {"error": {"code": 7, "message": "drifted"}}
+
+    async def get(self, url, params=None):
+        return {"error": {}}
+
+
+async def test_drift_records_partial_and_keeps_freshness_honest(pg_session, monkeypatch):
+    monkeypatch.setattr(settings, "GOOGLE_ADS_DEVELOPER_TOKEN", "dev-token")
+    _company, conn = await _seed(pg_session)
+    run = await run_connection_sync(
+        pg_session, conn, run_type="daily",
+        window_start=WINDOW_START, window_end=WINDOW_END, http_client=_DriftGoogleSeam(),
+    )
+    await pg_session.commit()
+    assert run.status == "partial"  # NOT success, NOT a silent zero
+    assert run.error_class == "unmappable_shape"
+    await pg_session.refresh(conn)
+    assert conn.last_synced_at is None  # a drifted run did not refresh → freshness honest
+    assert conn.failure_count == 1
+
+
+async def test_c1_account_includes_pmax_on_pg(pg_session, monkeypatch):
+    monkeypatch.setattr(settings, "GOOGLE_ADS_DEVELOPER_TOKEN", "dev-token")
+    _company, conn = await _seed(pg_session)
+    await run_connection_sync(
+        pg_session, conn, run_type="daily",
+        window_start=WINDOW_START, window_end=WINDOW_END, http_client=_seam(),
+    )
+    await pg_session.commit()
+
+    async def _level_spend(level):
+        return (
+            await pg_session.execute(
+                select(func.coalesce(func.sum(AdsDailyMetric.spend), 0)).where(
+                    AdsDailyMetric.connection_id == conn.id,
+                    AdsDailyMetric.entity_level == level,
+                )
+            )
+        ).scalar_one()
+
+    from decimal import Decimal
+    # account is summed from the PMax-inclusive campaign grain → exceeds the
+    # ad-group-only sum (the C1 undercount the fix closes), on real Postgres.
+    assert await _level_spend("account") == Decimal("25.750000")
+    assert await _level_spend("adgroup") == Decimal("17.750000")
+
+
+async def test_settling_restates_adgroup_grain(pg_session, monkeypatch):
+    monkeypatch.setattr(settings, "GOOGLE_ADS_DEVELOPER_TOKEN", "dev-token")
+    _company, conn = await _seed(pg_session)
+    # settling must restate ALL grains (incl. ad-group) so late conversions don't
+    # leave the ad-group drill-down undercounting vs the campaign totals.
+    await run_connection_sync(
+        pg_session, conn, run_type="settling",
+        window_start=WINDOW_START, window_end=WINDOW_END, http_client=_seam(),
+    )
+    await pg_session.commit()
+    adgroup_rows = (
+        await pg_session.execute(
+            select(func.count()).select_from(AdsDailyMetric).where(
+                AdsDailyMetric.connection_id == conn.id,
+                AdsDailyMetric.entity_level == "adgroup",
+            )
+        )
+    ).scalar_one()
+    assert adgroup_rows > 0
