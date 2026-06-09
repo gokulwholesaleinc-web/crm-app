@@ -1,0 +1,35 @@
+{
+  "dimensionHeaders": [
+    { "name": "date" },
+    { "name": "sessionDefaultChannelGroup" }
+  ],
+  "metricHeaders": [
+    { "name": "sessions", "type": "TYPE_INTEGER" },
+    { "name": "totalUsers", "type": "TYPE_INTEGER" },
+    { "name": "newUsers", "type": "TYPE_INTEGER" },
+    { "name": "engagedSessions", "type": "TYPE_INTEGER" }
+  ],
+  "rows": [
+    {
+      "dimensionValues": [ { "value": "20260601" }, { "value": "Organic Search" } ],
+      "metricValues": [ { "value": "540" }, { "value": "470" }, { "value": "300" }, { "value": "390" } ]
+    },
+    {
+      "dimensionValues": [ { "value": "20260601" }, { "value": "Paid Search" } ],
+      "metricValues": [ { "value": "410" }, { "value": "360" }, { "value": "280" }, { "value": "300" } ]
+    },
+    {
+      "dimensionValues": [ { "value": "20260601" }, { "value": "Direct" } ],
+      "metricValues": [ { "value": "370" }, { "value": "320" }, { "value": "162" }, { "value": "220" } ]
+    }
+  ],
+  "metadata": {
+    "currencyCode": "USD",
+    "timeZone": "America/Chicago",
+    "samplingMetadatas": [
+      { "samplesReadCount": "480000", "samplingSpaceSize": "1250000" }
+    ]
+  },
+  "rowCount": 3,
+  "kind": "analyticsData#runReport"
+}

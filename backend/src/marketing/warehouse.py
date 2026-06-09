@@ -118,7 +118,7 @@ async def _upsert(
     if not values:
         return 0
     stmt = pg_insert(model).values(values)
-    set_ = {col: stmt.excluded[col] for col in measures}
+    set_: dict[str, Any] = {col: stmt.excluded[col] for col in measures}
     if touch:
         set_[touch] = func.now()
     stmt = stmt.on_conflict_do_update(constraint=constraint, set_=set_)

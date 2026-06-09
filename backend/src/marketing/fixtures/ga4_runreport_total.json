@@ -1,0 +1,49 @@
+{
+  "dimensionHeaders": [
+    { "name": "date" }
+  ],
+  "metricHeaders": [
+    { "name": "sessions", "type": "TYPE_INTEGER" },
+    { "name": "totalUsers", "type": "TYPE_INTEGER" },
+    { "name": "newUsers", "type": "TYPE_INTEGER" },
+    { "name": "engagedSessions", "type": "TYPE_INTEGER" },
+    { "name": "engagementRate", "type": "TYPE_FLOAT" },
+    { "name": "bounceRate", "type": "TYPE_FLOAT" },
+    { "name": "keyEvents", "type": "TYPE_FLOAT" },
+    { "name": "averageSessionDuration", "type": "TYPE_SECONDS" }
+  ],
+  "rows": [
+    {
+      "dimensionValues": [ { "value": "20260601" } ],
+      "metricValues": [
+        { "value": "1320" },
+        { "value": "1105" },
+        { "value": "742" },
+        { "value": "910" },
+        { "value": "0.689394" },
+        { "value": "0.310606" },
+        { "value": "37" },
+        { "value": "112.45" }
+      ]
+    },
+    {
+      "dimensionValues": [ { "value": "20260602" } ],
+      "metricValues": [
+        { "value": "1188" },
+        { "value": "990" },
+        { "value": "651" },
+        { "value": "812" },
+        { "value": "0.683502" },
+        { "value": "0.316498" },
+        { "value": "29" },
+        { "value": "105.10" }
+      ]
+    }
+  ],
+  "metadata": {
+    "currencyCode": "USD",
+    "timeZone": "America/Chicago"
+  },
+  "rowCount": 2,
+  "kind": "analyticsData#runReport"
+}

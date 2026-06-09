@@ -160,7 +160,7 @@ def upgrade() -> None:
     # ── marketing_raw_payloads (landing, no mixin) ─────────────────────────
     op.create_table(
         "marketing_raw_payloads",
-        sa.Column("id", sa.BigInteger(), nullable=False),
+        sa.Column("id", sa.BigInteger().with_variant(sa.Integer(), "sqlite"), nullable=False),
         sa.Column("connection_id", sa.Integer(), nullable=False),
         sa.Column("platform", sa.String(length=32), nullable=False),
         sa.Column("endpoint", sa.String(length=128), nullable=False),
@@ -189,7 +189,7 @@ def upgrade() -> None:
     # ── ads_daily_metrics (fact, TimestampMixin) ───────────────────────────
     op.create_table(
         "ads_daily_metrics",
-        sa.Column("id", sa.BigInteger(), nullable=False),
+        sa.Column("id", sa.BigInteger().with_variant(sa.Integer(), "sqlite"), nullable=False),
         sa.Column("connection_id", sa.Integer(), nullable=False),
         sa.Column("company_id", sa.Integer(), nullable=False),
         sa.Column("platform", sa.String(length=32), nullable=False),
@@ -231,7 +231,7 @@ def upgrade() -> None:
     # ── analytics_daily (fact, TimestampMixin) ─────────────────────────────
     op.create_table(
         "analytics_daily",
-        sa.Column("id", sa.BigInteger(), nullable=False),
+        sa.Column("id", sa.BigInteger().with_variant(sa.Integer(), "sqlite"), nullable=False),
         sa.Column("connection_id", sa.Integer(), nullable=False),
         sa.Column("company_id", sa.Integer(), nullable=False),
         sa.Column("source", sa.String(length=8), nullable=False),
@@ -310,7 +310,7 @@ def upgrade() -> None:
     # ── marketing_sync_runs (ops, no mixin) ────────────────────────────────
     op.create_table(
         "marketing_sync_runs",
-        sa.Column("id", sa.BigInteger(), nullable=False),
+        sa.Column("id", sa.BigInteger().with_variant(sa.Integer(), "sqlite"), nullable=False),
         sa.Column("connection_id", sa.Integer(), nullable=False),
         sa.Column("company_id", sa.Integer(), nullable=False),
         sa.Column("platform", sa.String(length=32), nullable=False),
@@ -346,7 +346,7 @@ def upgrade() -> None:
     # ── marketing_credential_audit (append-only, no mixin) ─────────────────
     op.create_table(
         "marketing_credential_audit",
-        sa.Column("id", sa.BigInteger(), nullable=False),
+        sa.Column("id", sa.BigInteger().with_variant(sa.Integer(), "sqlite"), nullable=False),
         sa.Column("connection_id", sa.Integer(), nullable=False),
         sa.Column("company_id", sa.Integer(), nullable=False),
         sa.Column("platform", sa.String(length=32), nullable=False),
@@ -438,7 +438,7 @@ def upgrade() -> None:
     # ── marketing_alerts (TimestampMixin, dormant) ─────────────────────────
     op.create_table(
         "marketing_alerts",
-        sa.Column("id", sa.BigInteger(), nullable=False),
+        sa.Column("id", sa.BigInteger().with_variant(sa.Integer(), "sqlite"), nullable=False),
         sa.Column("company_id", sa.Integer(), nullable=False),
         sa.Column("connection_id", sa.Integer(), nullable=True),
         sa.Column("alert_type", sa.String(length=32), nullable=False),

@@ -218,7 +218,9 @@ class MarketingRawPayload(Base):
 
     __tablename__ = "marketing_raw_payloads"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer(), "sqlite"), primary_key=True
+    )
     connection_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("platform_connections.id", ondelete="CASCADE", name="fk_marketing_raw_payloads_connection_id"),
@@ -259,7 +261,9 @@ class AdsDailyMetric(Base, TimestampMixin):
 
     __tablename__ = "ads_daily_metrics"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer(), "sqlite"), primary_key=True
+    )
     connection_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("platform_connections.id", ondelete="CASCADE", name="fk_ads_daily_metrics_connection_id"),
@@ -300,7 +304,9 @@ class AnalyticsDaily(Base, TimestampMixin):
 
     __tablename__ = "analytics_daily"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer(), "sqlite"), primary_key=True
+    )
     connection_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("platform_connections.id", ondelete="CASCADE", name="fk_analytics_daily_connection_id"),
@@ -387,7 +393,9 @@ class MarketingSyncRun(Base):
 
     __tablename__ = "marketing_sync_runs"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer(), "sqlite"), primary_key=True
+    )
     connection_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("platform_connections.id", ondelete="CASCADE", name="fk_marketing_sync_runs_connection_id"),
@@ -419,7 +427,9 @@ class MarketingCredentialAudit(Base):
 
     __tablename__ = "marketing_credential_audit"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer(), "sqlite"), primary_key=True
+    )
     connection_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("platform_connections.id", ondelete="CASCADE", name="fk_marketing_credential_audit_connection_id"),
@@ -497,7 +507,9 @@ class MarketingAlert(Base, TimestampMixin):
 
     __tablename__ = "marketing_alerts"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer(), "sqlite"), primary_key=True
+    )
     company_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("companies.id", ondelete="CASCADE", name="fk_marketing_alerts_company_id_companies"),
