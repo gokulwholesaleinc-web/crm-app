@@ -29,6 +29,13 @@ jobs:
       DATABASE_URL: postgresql+asyncpg://crm_user:crm_password@localhost:5432/crm_test_db
       SECRET_KEY: test-secret-key-for-ci
       ALGORITHM: HS256
+      # C2: point the marketing real-Postgres tier (the Cluster-A acceptance gate +
+      # e2e ingest tests) at the CI Postgres service so it actually RUNS — it was
+      # skipping silently because this was unset. MARKETING_REQUIRE_PG makes the
+      # fixture FAIL (not skip) if the URL ever goes missing again, so the gate
+      # can never silently vanish.
+      MARKETING_TEST_PG_URL: postgresql+asyncpg://crm_user:crm_password@localhost:5432/crm_test_db
+      MARKETING_REQUIRE_PG: "1"
 
     steps:
       - uses: actions/checkout@v4

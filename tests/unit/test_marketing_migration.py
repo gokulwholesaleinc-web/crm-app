@@ -110,6 +110,35 @@ def test_migration_056_matches_create_all():
         )
 
 
+def test_migration_056_declares_nulls_not_distinct_on_grain_keys():
+    """The 4 grain uniques must carry postgresql_nulls_not_distinct=True (A2 / H5).
+
+    SQLite drops the kwarg and the structural snapshot can't see it, so a dropped/
+    typo'd flag in the MIGRATION (even if the model still has it) would ship a
+    duplicate-causing constraint with create_all-based tests green. This source-level
+    guard closes that migration-only-drift gap; the real-PG introspection test
+    (test_schema_pg.py) locks the model side on Postgres.
+    """
+    source = _MIGRATION_PATH.read_text()
+    grain_constraints = (
+        "uq_ads_daily_metrics_grain",
+        "uq_analytics_daily_grain",
+        "uq_site_health_snapshots_grain",
+        "uq_marketing_raw_payloads_key",
+    )
+    for name in grain_constraints:
+        # name + the kwarg are declared on the same line in 056.
+        line = next(
+            (ln for ln in source.splitlines() if f'name="{name}"' in ln),
+            None,
+        )
+        assert line is not None, f"{name} not found in migration 056"
+        assert "postgresql_nulls_not_distinct=True" in line, (
+            f"{name} is missing postgresql_nulls_not_distinct=True — A2 de-dup would "
+            "break on Postgres (account-level NULL-key rows would duplicate)."
+        )
+
+
 def test_migration_056_downgrade_drops_tables():
     """downgrade() removes all marketing tables (round-trip)."""
     mig = _load_migration()
