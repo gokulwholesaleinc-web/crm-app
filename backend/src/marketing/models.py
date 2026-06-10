@@ -335,6 +335,8 @@ class AnalyticsDaily(Base, TimestampMixin):
     position: Mapped[float | None] = mapped_column(Numeric(9, 4))
 
     is_sampled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=false())
+    # H3: golden = no "(other)" overflow + finalized. False surfaces a tie-out caveat.
+    is_data_golden: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=true())
 
     __table_args__ = (
         UniqueConstraint(
@@ -345,6 +347,13 @@ class AnalyticsDaily(Base, TimestampMixin):
         CheckConstraint(_in("source", ANALYTICS_SOURCES), name="source"),
         CheckConstraint(_in("dimension_type", DIMENSION_TYPES), name="dimension_type"),
         Index("ix_analytics_daily_company_source_date", "company_id", "source", "date"),
+        # LOW-IDX: every channel/page/query read filters on dimension_type — this
+        # composite matches the (=company_id, =source, =dimension_type, date BETWEEN)
+        # access pattern so those reads don't filter-discard other dimension_types.
+        Index(
+            "ix_analytics_daily_company_source_dim_date",
+            "company_id", "source", "dimension_type", "date",
+        ),
     )
 
 
@@ -407,6 +416,9 @@ class MarketingSyncRun(Base):
     status: Mapped[str] = mapped_column(String(16), nullable=False)
     window_start: Mapped[date | None] = mapped_column(Date)
     window_end: Mapped[date | None] = mapped_column(Date)
+    # Rows TOUCHED by the upsert (inserts + ON CONFLICT updates), not net-new — a
+    # steady-state re-sync restates the whole window, so this equals the window size,
+    # not the number of changed rows. It is an activity/diagnostic counter only.
     rows_upserted: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()

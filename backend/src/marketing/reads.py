@@ -482,7 +482,6 @@ async def analytics(
                 func.coalesce(func.sum(AnalyticsDaily.new_users), 0),
                 func.coalesce(func.sum(AnalyticsDaily.engaged_sessions), 0),
                 func.coalesce(func.sum(AnalyticsDaily.key_events), 0),
-                func.coalesce(func.sum(AnalyticsDaily.conversions), 0),
                 # Portable "any sampled?" — max of the boolean cast (PG + SQLite).
                 func.coalesce(
                     func.max(func.cast(AnalyticsDaily.is_sampled, Integer)), 0
@@ -496,7 +495,21 @@ async def analytics(
             )
         )
     ).one()
-    sessions, users, new_users, engaged_sessions, key_events, ga4_conversions, is_sampled = ga4_total
+    sessions, users, new_users, engaged_sessions, key_events, is_sampled = ga4_total
+    # "all golden?" over ALL GA4 rows in the window (H3): the "(other)" overflow
+    # (dataLossFromOtherRow) is recorded on the channel/page breakdown rows, NOT the
+    # date-only total rows — so checking only 'total' would never surface it. 0 if any
+    # GA4 row this window overflowed / wasn't finalized.
+    is_golden = (
+        await session.execute(
+            select(func.coalesce(func.min(func.cast(AnalyticsDaily.is_data_golden, Integer)), 1)).where(
+                AnalyticsDaily.company_id == company_id,
+                AnalyticsDaily.source == "ga4",
+                AnalyticsDaily.date >= date_from,
+                AnalyticsDaily.date <= date_to,
+            )
+        )
+    ).scalar_one()
     sessions = _int(sessions)
     engaged_sessions = _int(engaged_sessions)
     ga4_totals = {
@@ -504,11 +517,13 @@ async def analytics(
         "users": _int(users),
         "new_users": _int(new_users),
         "engaged_sessions": engaged_sessions,
+        # H7: key_events IS GA4's conversion metric (no separate `conversions` — that
+        # is for ad platforms; carrying both was a duplicated, double-count-inviting value).
         "key_events": q6(key_events or 0),
-        "conversions": q6(ga4_conversions or 0),
         # Engagement rate as ratio-of-sums (engaged / total sessions).
         "engagement_rate": _ratio(engaged_sessions, sessions),
         "is_sampled": bool(is_sampled),
+        "is_data_golden": bool(is_golden),
     }
 
     # GA4 daily sessions/users trend (totals only).
@@ -747,6 +762,11 @@ async def breakdown(
             select(
                 AdsDailyMetric.date,
                 AdsDailyMetric.platform,
+                # FE-1: group by currency too so each (date, platform) row carries its
+                # own currency — the breakdown is the only paid panel rendered under a
+                # multi-currency client, so it must label money correctly (mirrors
+                # allocation's per-slice currency), not with one client-wide currency.
+                AdsDailyMetric.currency,
                 func.coalesce(func.sum(AdsDailyMetric.spend), 0),
                 func.coalesce(func.sum(AdsDailyMetric.impressions), 0),
                 func.coalesce(func.sum(AdsDailyMetric.clicks), 0),
@@ -759,17 +779,18 @@ async def breakdown(
                 AdsDailyMetric.date >= date_from,
                 AdsDailyMetric.date <= date_to,
             )
-            .group_by(AdsDailyMetric.date, AdsDailyMetric.platform)
+            .group_by(AdsDailyMetric.date, AdsDailyMetric.platform, AdsDailyMetric.currency)
             .order_by(AdsDailyMetric.date.desc(), AdsDailyMetric.platform)
         )
     ).all()
 
     out: list[dict] = []
-    for d, platform, spend, impressions, clicks, conversions, conversion_value in rows:
+    for d, platform, currency, spend, impressions, clicks, conversions, conversion_value in rows:
         out.append(
             {
                 "date": d,
                 "platform": platform,
+                "currency": currency,
                 **_ads_metrics(
                     spend, impressions, clicks, conversions, conversion_value,
                     cost_per_conversion=True,
@@ -798,6 +819,14 @@ async def budget_pacing(
     import calendar
 
     month_start = as_of.replace(day=1)
+    # First day of the NEXT month — used for a half-open [month_start, next_month)
+    # budget match so a row stored with a non-first day still pairs to its month
+    # (BUDGET-PERIODS: exact period_month == month_start silently missed such rows).
+    next_month = (
+        date(as_of.year + 1, 1, 1)
+        if as_of.month == 12
+        else date(as_of.year, as_of.month + 1, 1)
+    )
     days_in_month = calendar.monthrange(as_of.year, as_of.month)[1]
     days_elapsed = as_of.day
 
@@ -840,7 +869,8 @@ async def budget_pacing(
             )
             .where(
                 PlatformConnection.company_id == company_id,
-                BudgetPeriod.period_month == month_start,
+                BudgetPeriod.period_month >= month_start,
+                BudgetPeriod.period_month < next_month,
             )
         )
     ).all()
@@ -848,6 +878,11 @@ async def budget_pacing(
     out: list[dict] = []
     seen: set[int] = set()
     for conn_id, amount, budget_ccy, platform, display_name, conn_ccy in budget_rows:
+        # The half-open month match can return >1 budget row for a connection if two
+        # rows fall in the same month (schema permits distinct days) — emit one pace
+        # row per connection (first wins) rather than double-listing it.
+        if conn_id in seen:
+            continue
         seen.add(conn_id)
         _, mtd = spend_by_conn.get(conn_id, (platform, Decimal(0)))
         out.append(

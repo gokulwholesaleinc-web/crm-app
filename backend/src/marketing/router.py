@@ -17,8 +17,8 @@ those to the ingest side. This router is read-only.
 
 from __future__ import annotations
 
-from datetime import date
-from typing import Annotated
+from datetime import date, timedelta
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -87,8 +87,33 @@ DateFrom = Annotated[date, Query(description="Window start (inclusive)")]
 DateTo = Annotated[date, Query(description="Window end (inclusive)")]
 CompareFrom = Annotated[date | None, Query(description="Compare window start")]
 CompareTo = Annotated[date | None, Query(description="Compare window end")]
-EntityLevel = Annotated[str, Query(description="account | campaign | adgroup")]
+# H6: a Literal makes FastAPI 422 on a bad value instead of silently returning an
+# all-zero "no spend" answer — and bounds the cache to 3 keys, not unbounded strings.
+EntityLevel = Annotated[
+    Literal["account", "campaign", "adgroup"], Query(description="account | campaign | adgroup")
+]
 ScopeDep = Annotated[DataScope, Depends(get_data_scope)]
+
+# DATE-RANGE: cap a window so an inverted/huge range can't silent-zero or trigger an
+# unbounded scan + a giant cached payload. ~15 months covers YoY comparisons.
+MAX_RANGE_DAYS = 460
+
+
+def validate_window(date_from: DateFrom, date_to: DateTo) -> None:
+    """422 on an inverted or oversized date window (runs before the service/cache/DB)."""
+    if date_from > date_to:
+        raise HTTPException(
+            status_code=HTTPStatus.UNPROCESSABLE_ENTITY, detail="date_from must be <= date_to"
+        )
+    if (date_to - date_from) > timedelta(days=MAX_RANGE_DAYS):
+        raise HTTPException(
+            status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
+            detail=f"date range exceeds the {MAX_RANGE_DAYS}-day maximum",
+        )
+
+
+# Applied to every dated endpoint so a bad window is rejected before any DB work.
+WindowGuard = Annotated[None, Depends(validate_window)]
 
 
 @router.get("/companies/{company_id}/overview", response_model=OverviewResponse)
@@ -98,6 +123,7 @@ async def get_overview(
     db: DBSession,
     data_scope: ScopeDep,
     _: MktgEnabled,
+    _w: WindowGuard,
     date_from: DateFrom,
     date_to: DateTo,
     compare_from: CompareFrom = None,
@@ -123,6 +149,7 @@ async def get_series(
     db: DBSession,
     data_scope: ScopeDep,
     _: MktgEnabled,
+    _w: WindowGuard,
     date_from: DateFrom,
     date_to: DateTo,
     entity_level: EntityLevel = "account",
@@ -141,6 +168,7 @@ async def get_allocation(
     db: DBSession,
     data_scope: ScopeDep,
     _: MktgEnabled,
+    _w: WindowGuard,
     date_from: DateFrom,
     date_to: DateTo,
     entity_level: EntityLevel = "account",
@@ -159,6 +187,7 @@ async def get_day_of_week(
     db: DBSession,
     data_scope: ScopeDep,
     _: MktgEnabled,
+    _w: WindowGuard,
     date_from: DateFrom,
     date_to: DateTo,
     entity_level: EntityLevel = "account",
@@ -177,6 +206,7 @@ async def get_campaigns(
     db: DBSession,
     data_scope: ScopeDep,
     _: MktgEnabled,
+    _w: WindowGuard,
     date_from: DateFrom,
     date_to: DateTo,
 ) -> CampaignsResponse:
@@ -192,6 +222,7 @@ async def get_adgroups(
     db: DBSession,
     data_scope: ScopeDep,
     _: MktgEnabled,
+    _w: WindowGuard,
     date_from: DateFrom,
     date_to: DateTo,
 ) -> AdGroupsResponse:
@@ -207,6 +238,7 @@ async def get_analytics(
     db: DBSession,
     data_scope: ScopeDep,
     _: MktgEnabled,
+    _w: WindowGuard,
     date_from: DateFrom,
     date_to: DateTo,
 ) -> AnalyticsResponse:
@@ -222,6 +254,7 @@ async def get_site_health(
     db: DBSession,
     data_scope: ScopeDep,
     _: MktgEnabled,
+    _w: WindowGuard,
     date_from: DateFrom,
     date_to: DateTo,
 ) -> SiteHealthResponse:
@@ -237,6 +270,7 @@ async def get_breakdown(
     db: DBSession,
     data_scope: ScopeDep,
     _: MktgEnabled,
+    _w: WindowGuard,
     date_from: DateFrom,
     date_to: DateTo,
     entity_level: EntityLevel = "account",

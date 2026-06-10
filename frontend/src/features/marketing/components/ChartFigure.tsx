@@ -14,8 +14,14 @@ export interface ChartFigureProps {
   subtitle?: string;
   children: ReactNode;
   /** The same aggregated data behind the chart, exposed as an accessible table
-   *  (WCAG: a non-visual path to the data; doubles as the PDF data source). */
-  table?: { columns: ChartTableColumn[]; rows: Array<Record<string, ReactNode>> };
+   *  (WCAG: a non-visual path to the data; doubles as the PDF data source).
+   *  `rowKey` yields a stable React key per row (avoids index-as-key reconciliation
+   *  glitches); defaults to the row index. */
+  table?: {
+    columns: ChartTableColumn[];
+    rows: Array<Record<string, ReactNode>>;
+    rowKey?: (row: Record<string, ReactNode>, index: number) => string;
+  };
   className?: string;
 }
 
@@ -64,42 +70,49 @@ export function ChartFigure({ title, subtitle, children, table, className }: Cha
 
       {table && (
         <div id={tableId} className={clsx('overflow-x-auto', showTable ? 'block' : 'hidden')}>
-          <table className="min-w-full text-sm">
-            <caption className="sr-only">{title}</caption>
-            <thead>
-              <tr className="border-b border-gray-200 dark:border-gray-700">
-                {table.columns.map((col) => (
-                  <th
-                    key={col.key}
-                    scope="col"
-                    className={clsx(
-                      'px-3 py-2 font-medium text-gray-500',
-                      col.numeric ? 'text-right' : 'text-left',
-                    )}
-                  >
-                    {col.label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {table.rows.map((row, i) => (
-                <tr key={i} className="border-b border-gray-100 dark:border-gray-700/50">
+          {/* Rows render only while expanded so a long table (e.g. the 'All' preset)
+              isn't kept in the DOM alongside the chart (CLAUDE.md large-list rule). */}
+          {showTable && (
+            <table className="min-w-full text-sm">
+              <caption className="sr-only">{title}</caption>
+              <thead>
+                <tr className="border-b border-gray-200 dark:border-gray-700">
                   {table.columns.map((col) => (
-                    <td
+                    <th
                       key={col.key}
+                      scope="col"
                       className={clsx(
-                        'px-3 py-2 text-gray-700 dark:text-gray-300',
-                        col.numeric ? 'text-right tabular-nums' : 'text-left',
+                        'px-3 py-2 font-medium text-gray-500',
+                        col.numeric ? 'text-right' : 'text-left',
                       )}
                     >
-                      {row[col.key]}
-                    </td>
+                      {col.label}
+                    </th>
                   ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {table.rows.map((row, i) => (
+                  <tr
+                    key={table.rowKey ? table.rowKey(row, i) : i}
+                    className="border-b border-gray-100 dark:border-gray-700/50"
+                  >
+                    {table.columns.map((col) => (
+                      <td
+                        key={col.key}
+                        className={clsx(
+                          'px-3 py-2 text-gray-700 dark:text-gray-300',
+                          col.numeric ? 'text-right tabular-nums' : 'text-left',
+                        )}
+                      >
+                        {row[col.key]}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       )}
     </figure>

@@ -32,20 +32,25 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .. import crypto, warehouse
 from ..models import MarketingCredentialAudit, MarketingSyncRun, PlatformConnection
-from . import ga4, google_ads, gsc, health, pagespeed
+from . import ga4, google_ads, gsc, health, meta_ads, pagespeed
 from .http_client import (
     GoogleClient,
     GoogleSeam,
     IngestHTTPError,
+    MetaClient,
+    MetaSeam,
     PageSpeedClient,
     PageSpeedSeam,
     PermanentError,
+    UnmappableShapeError,
 )
 
 logger = logging.getLogger(__name__)
 
-# Platforms this slice ingests (Phase 1 = Google-only; Meta/social ship dark).
-SUPPORTED_PLATFORMS = frozenset({"google_ads", "ga4", "gsc", "pagespeed"})
+# Platforms with a wired fetch/map handler. meta_ads is here (handler exists) but
+# stays dark behind MKTG_META_ENABLED — gated in run_connection_sync + the scheduler
+# selection + the admin create/refresh routes (social platforms have no handler yet).
+SUPPORTED_PLATFORMS = frozenset({"google_ads", "ga4", "gsc", "pagespeed", "meta_ads"})
 
 
 class IngestConfigError(PermanentError):
@@ -86,6 +91,7 @@ async def _dispatch(
     session: AsyncSession,
     connection: PlatformConnection,
     *,
+    run_type: str,
     window_start: date,
     window_end: date,
     http_client: Any | None,
@@ -95,14 +101,15 @@ async def _dispatch(
     Delegates to a per-platform handler so each owns its own typed seam; injecting
     ``http_client`` keeps the orchestrator testable without the network (C1) while
     never mocking business logic. When ``None``, a real client is constructed from
-    the connection's decrypted credentials inside the handler.
+    the connection's decrypted credentials inside the handler. ``run_type`` lets a
+    handler vary by lane (e.g. the settling re-fetch skips the ad-group grain, A7).
     """
     handler = _HANDLERS.get(connection.platform)
     if handler is None:
         raise IngestConfigError(
             f"unsupported platform '{connection.platform}'", error_class="unsupported_platform"
         )
-    return await handler(session, connection, window_start, window_end, http_client)
+    return await handler(session, connection, run_type, window_start, window_end, http_client)
 
 
 def _google_seam(connection: PlatformConnection, http_client: Any | None) -> GoogleSeam:
@@ -113,12 +120,29 @@ def _pagespeed_seam(http_client: Any | None) -> PageSpeedSeam:
     return http_client if http_client is not None else PageSpeedClient(_pagespeed_api_key())
 
 
+def _meta_seam(connection: PlatformConnection, http_client: Any | None) -> MetaSeam:
+    if http_client is not None:
+        return http_client
+    from src.config import settings
+
+    # Fail closed: appsecret_proof needs the app secret. Since meta_ads only ingests
+    # when MKTG_META_ENABLED, require it here rather than silently calling Meta without
+    # the proof (an app with the proof setting on would reject every call).
+    app_secret = _require(connection, settings.META_APP_SECRET, "Meta app secret")
+    return MetaClient(_access_token(connection), app_secret)
+
+
 async def _sync_google_ads(
     session: AsyncSession, connection: PlatformConnection,
-    window_start: date, window_end: date, http_client: Any | None,
+    run_type: str, window_start: date, window_end: date, http_client: Any | None,
 ) -> int:
     client = _google_seam(connection, http_client)
     dev_token = _require(connection, _ads_developer_token(), "developer token")
+    # A7: settling restates ALL grains (incl. ad-group) over the conversion window.
+    # An account/campaign-only settle would leave ad-group drill-down conversions
+    # undercounting vs the campaign totals for late conversions arriving outside the
+    # 3-day daily lookback. The extra grain is the cost of consistent conversions.
+    include_adgroups = True
     payload = await google_ads.fetch_google_ads(
         client,
         customer_id=connection.external_account_id,
@@ -126,6 +150,7 @@ async def _sync_google_ads(
         login_customer_id=connection.manager_account_id,
         window_start=window_start,
         window_end=window_end,
+        include_adgroups=include_adgroups,
     )
     await warehouse.insert_raw_payload(
         session, connection_id=connection.id, platform="google_ads", endpoint="googleAds:searchStream",
@@ -144,7 +169,7 @@ async def _sync_google_ads(
 
 async def _sync_ga4(
     session: AsyncSession, connection: PlatformConnection,
-    window_start: date, window_end: date, http_client: Any | None,
+    run_type: str, window_start: date, window_end: date, http_client: Any | None,
 ) -> int:
     client = _google_seam(connection, http_client)
     cid, company = connection.id, connection.company_id
@@ -168,7 +193,7 @@ async def _sync_ga4(
 
 async def _sync_gsc(
     session: AsyncSession, connection: PlatformConnection,
-    window_start: date, window_end: date, http_client: Any | None,
+    run_type: str, window_start: date, window_end: date, http_client: Any | None,
 ) -> int:
     client = _google_seam(connection, http_client)
     payload = await gsc.fetch_gsc(
@@ -184,12 +209,62 @@ async def _sync_gsc(
     return await warehouse.upsert_analytics_daily(session, analytics)
 
 
+def _validate_public_url(raw: str) -> str:
+    """Best-effort SSRF guard for the PageSpeed target (M-ssrf).
+
+    ``display_name``/``external_account_id`` is a free-text admin field handed to
+    Google's PageSpeed crawler as the audited URL. Reject non-http(s) schemes, a
+    missing host, literal private/loopback/link-local/reserved IPs, and obvious
+    internal hostnames so an admin (or a future lower-privileged role) can't point
+    the crawler at internal infrastructure. (DNS-time resolution is TOCTOU-imperfect
+    and out of scope; this blocks the obvious literal cases.)"""
+    import ipaddress
+    import socket
+    from urllib.parse import urlparse
+
+    parsed = urlparse((raw or "").strip())
+    host = parsed.hostname
+    if parsed.scheme not in ("http", "https") or not host:
+        raise IngestConfigError(
+            f"pagespeed url must be http(s) with a host: {raw!r}", error_class="invalid_url"
+        )
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        ip = None
+    # Legacy/alternate IPv4 encodings a resolver accepts but ipaddress.ip_address()
+    # rejects — decimal "2130706433", hex "0x7f000001", short "127.1", octal
+    # "0177.0.0.1", mixed "0x7f.0.0.1". inet_aton normalizes them all; re-check so
+    # none slips past the literal-IP block (Google's crawler would resolve them).
+    if ip is None:
+        try:
+            ip = ipaddress.ip_address(socket.inet_aton(host))
+        except (OSError, ValueError):
+            ip = None
+    if ip is not None and (
+        ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast
+    ):
+        raise IngestConfigError(
+            f"pagespeed url resolves to a non-public address: {host}", error_class="invalid_url"
+        )
+    low = host.lower()
+    if low == "localhost" or low.endswith((".local", ".internal", ".localhost")):
+        raise IngestConfigError(
+            f"pagespeed url host not allowed: {host}", error_class="invalid_url"
+        )
+    return raw
+
+
 async def _sync_pagespeed(
     session: AsyncSession, connection: PlatformConnection,
-    window_start: date, window_end: date, http_client: Any | None,
+    run_type: str, window_start: date, window_end: date, http_client: Any | None,
 ) -> int:
+    # M-nokey: fail closed when the PageSpeed key is unset (mirrors the Ads dev
+    # token) instead of silently degrading to the throttled anonymous quota.
+    if http_client is None:
+        _require(connection, _pagespeed_api_key(), "PageSpeed API key")
     client = _pagespeed_seam(http_client)
-    url = connection.display_name or connection.external_account_id
+    url = _validate_public_url(connection.display_name or connection.external_account_id)
     total = 0
     for strategy in ("mobile", "desktop"):
         payload = await pagespeed.fetch_pagespeed(client, url=url, strategy=strategy)
@@ -207,12 +282,39 @@ async def _sync_pagespeed(
     return total
 
 
+async def _sync_meta_ads(
+    session: AsyncSession, connection: PlatformConnection,
+    run_type: str, window_start: date, window_end: date, http_client: Any | None,
+) -> int:
+    client = _meta_seam(connection, http_client)
+    payload = await meta_ads.fetch_meta_ads(
+        client,
+        account_id=connection.external_account_id,
+        window_start=window_start,
+        window_end=window_end,
+    )
+    await warehouse.insert_raw_payload(
+        session, connection_id=connection.id, platform="meta_ads", endpoint="insights:async",
+        window_start=window_start, window_end=window_end,
+        request_fingerprint=f"meta:{connection.external_account_id}:{window_start}:{window_end}",
+        payload=payload,
+    )
+    ads, campaigns, adgroups = meta_ads.map_meta_ads(
+        payload, connection_id=connection.id, company_id=connection.company_id, currency=connection.currency
+    )
+    rows = await warehouse.upsert_ads_daily(session, ads)
+    await warehouse.upsert_campaigns(session, campaigns)
+    await warehouse.upsert_adgroups(session, adgroups)
+    return rows
+
+
 # platform → handler; the only place that knows the per-platform fetch/map/upsert.
 _HANDLERS = {
     "google_ads": _sync_google_ads,
     "ga4": _sync_ga4,
     "gsc": _sync_gsc,
     "pagespeed": _sync_pagespeed,
+    "meta_ads": _sync_meta_ads,
 }
 
 
@@ -223,6 +325,21 @@ def _require(connection: PlatformConnection, value: str | None, what: str) -> st
             error_class="missing_config",
         )
     return value
+
+
+def _require_platform_enabled(platform: str) -> None:
+    """Keep a platform dark behind its phase flag even if a connection exists.
+
+    meta_ads ships behind MKTG_META_ENABLED (Business-Verification gated). The
+    scheduler + admin routes also gate this, but enforcing it at the single ingest
+    entry point means no path can sync Meta while it's off."""
+    from src.config import settings
+
+    if platform == "meta_ads" and not settings.MKTG_META_ENABLED:
+        raise IngestConfigError(
+            "meta_ads ingest is disabled (MKTG_META_ENABLED is off)",
+            error_class="flag_disabled",
+        )
 
 
 def _ads_developer_token() -> str | None:
@@ -274,6 +391,7 @@ async def run_connection_sync(
                 f"platform '{connection.platform}' not ingestible in this slice",
                 error_class="unsupported_platform",
             )
+        _require_platform_enabled(connection.platform)
         # D2: serialize this connection's writers (daily/settling/backfill).
         await warehouse.lock_connection(session, connection.id)
         await _write_audit(
@@ -281,12 +399,27 @@ async def run_connection_sync(
             detail=f"{run_type} {window_start}..{window_end}",
         )
         rows = await _dispatch(
-            session, connection,
+            session, connection, run_type=run_type,
             window_start=window_start, window_end=window_end, http_client=http_client,
         )
         run.rows_upserted = rows
         run.status = "success"
         health.apply_success(connection)
+    except UnmappableShapeError as exc:
+        # CRITICAL-1: the API returned 2xx but the mapper could not recognize the
+        # shape (drifted/degraded). The mapper aborted BEFORE any upsert, so the
+        # facts were NOT refreshed. Record 'partial' (truthful — distinct from a
+        # 'success' silent zero and from an 'error' fetch failure) and let health
+        # count it (apply_failure does NOT stamp last_synced_at, so freshness stays
+        # honest and persistent drift escalates).
+        health.apply_failure(connection, exc)
+        run.status = "partial"
+        run.error = str(exc)[:2000]
+        run.error_class = "unmappable_shape"
+        logger.warning(
+            "[marketing_ingest] connection=%s platform=%s unmappable shape (partial): %s",
+            connection.id, connection.platform, exc,
+        )
     except Exception as exc:  # noqa: BLE001 — isolation boundary (mirrors scheduler)
         outcome = health.apply_failure(connection, exc)
         run.status = "error"

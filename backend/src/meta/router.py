@@ -151,10 +151,13 @@ async def sync_instagram(
     await _require_company_access(db, company_id, current_user, data_scope)
     service = MetaService(db)
     credential = await service.get_credential(current_user.id)
-    if not credential or not credential.access_token:
+    # C4: read the effective (decrypted) token, with plaintext fallback during the
+    # expand phase — not the raw column (which is None for encrypted-only rows).
+    token = service._effective_token(credential) if credential else None
+    if not token:
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail="No Meta connection or access token")
 
-    meta = await service.sync_instagram(company_id, request_data.page_id, credential.access_token)
+    meta = await service.sync_instagram(company_id, request_data.page_id, token)
     if not meta:
         raise HTTPException(status_code=404, detail="No Instagram business account linked to this page")
     return CompanyMetaDataResponse.model_validate(meta)

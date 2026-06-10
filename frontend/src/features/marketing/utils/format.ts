@@ -97,11 +97,21 @@ export function formatDecimal(value: Numish): string {
   return _decimalFmt.format(n);
 }
 
-const _dateFmt = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' });
+// timeZone: 'UTC' is load-bearing (C3): a date-only ISO string like "2026-06-01"
+// is parsed by `new Date(...)` as UTC midnight; formatting in the viewer's local
+// zone would render "May 31" for any negative-UTC-offset user (e.g. the app's own
+// America/Chicago reporting tz), shifting every trend/table date back a day. Pinning
+// the formatter to UTC keeps the rendered day equal to the stored calendar date.
+const _dateFmt = new Intl.DateTimeFormat(undefined, {
+  month: 'short',
+  day: 'numeric',
+  timeZone: 'UTC',
+});
 const _dateYearFmt = new Intl.DateTimeFormat(undefined, {
   year: 'numeric',
   month: 'short',
   day: 'numeric',
+  timeZone: 'UTC',
 });
 
 /** "Jun 8" (or "Jun 8, 2026" with year). Accepts an ISO date string or Date. */

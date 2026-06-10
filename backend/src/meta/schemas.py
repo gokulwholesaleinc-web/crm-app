@@ -56,6 +56,9 @@ class MetaConnectionStatus(BaseModel):
     scopes: str | None = None
     token_expiry: datetime | None = None
     pages: list[dict[str, Any]] = []
+    # C4: True when the stored token couldn't be decrypted (key rotated/removed) —
+    # 'connected' but unreadable, distinct from a connection with simply no pages.
+    token_error: bool = False
 
 
 class MetaLeadCaptureResponse(BaseModel):

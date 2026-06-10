@@ -5,6 +5,7 @@ import {
   formatSignedPercent,
   formatNumber,
   formatDecimal,
+  formatDate,
   formatRelativeTime,
   EM_DASH,
 } from './format';
@@ -37,6 +38,13 @@ describe('marketing formatters', () => {
   it('formats counts compact for cards', () => {
     expect(formatNumber(1500000)).toBe('1,500,000');
     expect(formatNumber(1500000, true)).toBe('1.5M');
+  });
+
+  it('renders a date-only ISO string as the same calendar day regardless of local TZ (C3)', () => {
+    // Without timeZone:'UTC' this returns "May 31" under a negative-offset zone.
+    expect(formatDate('2026-06-01')).toBe('Jun 1');
+    expect(formatDate('2026-06-01', true)).toBe('Jun 1, 2026');
+    expect(formatDate(null)).toBe(EM_DASH);
   });
 
   it('renders relative freshness from a real timestamp', () => {

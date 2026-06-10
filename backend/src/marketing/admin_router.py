@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import delete, select
 
 from src.auth.models import User
+from src.config import settings
 from src.core.constants import HTTPStatus
 from src.core.permissions import require_admin
 from src.core.router_utils import DBSession
@@ -147,6 +148,49 @@ def _audit(session, connection: PlatformConnection, *, action: str, user_id: int
     )
 
 
+def _overall_status(statuses: list[str]) -> str:
+    """Worst-status rollup for a refresh's runs: success | partial | error.
+
+    A drifted run is recorded 'partial' (data NOT refreshed) — it must NEVER roll up
+    to 'success' (the silent-success-on-drift sin this whole change set fixes). All
+    runs error → 'error'; any error OR partial (but not all-error) → 'partial';
+    otherwise 'success'.
+    """
+    if not statuses:
+        return "error"  # no runs is NOT success (absence must never read as success)
+    if all(s == "error" for s in statuses):
+        return "error"
+    if any(s in ("error", "partial") for s in statuses):
+        return "partial"
+    return "success"
+
+
+def _require_platform_enabled(platform: str) -> None:
+    """Block create/refresh of a phase-gated platform while it's dark.
+
+    meta_ads is admin-creatable in code but stays behind MKTG_META_ENABLED (Business
+    Verification gated) so connections aren't wired/synced before Meta access lands."""
+    if platform == "meta_ads" and not settings.MKTG_META_ENABLED:
+        raise HTTPException(
+            HTTPStatus.UNPROCESSABLE_ENTITY,
+            "meta_ads is not enabled yet (MKTG_META_ENABLED is off)",
+        )
+
+
+async def _scoped_connection(db, company_id: int, connection_id: int) -> PlatformConnection:
+    """Load a connection and assert it belongs to ``company_id`` (M-idor).
+
+    The mutate routes are nested under ``/companies/{company_id}`` so company scope
+    is structural — a connection_id from another company 404s (not 403, to avoid
+    existence disclosure). This forecloses the latent IDOR where a future
+    per-company marketing-admin role could PATCH/refresh/purge any company's
+    connection by guessing the sequential id."""
+    connection = await db.get(PlatformConnection, connection_id)
+    if connection is None or connection.company_id != company_id:
+        raise HTTPException(HTTPStatus.NOT_FOUND, "Connection not found")
+    return connection
+
+
 def _set_token(connection: PlatformConnection, access_token: str | None, refresh_token: str | None) -> None:
     """Encrypt + store pasted tokens (fail-closed). Empty string clears nothing."""
     if access_token:
@@ -171,6 +215,7 @@ async def create_connection(
         raise HTTPException(HTTPStatus.UNPROCESSABLE_ENTITY, f"unknown platform '{body.platform}'")
     if body.credential_mode not in CREDENTIAL_MODES:
         raise HTTPException(HTTPStatus.UNPROCESSABLE_ENTITY, f"unknown credential_mode '{body.credential_mode}'")
+    _require_platform_enabled(body.platform)
 
     from src.companies.models import Company
 
@@ -229,8 +274,9 @@ async def list_connections(
     return [ConnectionAdmin.of(c) for c in rows.scalars().all()]
 
 
-@router.patch("/connections/{connection_id}", response_model=ConnectionAdmin)
+@router.patch("/companies/{company_id}/connections/{connection_id}", response_model=ConnectionAdmin)
 async def update_connection(
+    company_id: int,
     connection_id: int,
     body: ConnectionUpdate,
     current_user: AdminUser,
@@ -238,9 +284,7 @@ async def update_connection(
     _: MktgEnabled,
 ) -> ConnectionAdmin:
     """Edit config / rotate a pasted token / pause a connection."""
-    connection = await db.get(PlatformConnection, connection_id)
-    if connection is None:
-        raise HTTPException(HTTPStatus.NOT_FOUND, "Connection not found")
+    connection = await _scoped_connection(db, company_id, connection_id)
     if body.display_name is not None:
         connection.display_name = body.display_name
     if body.currency is not None:
@@ -268,8 +312,9 @@ async def update_connection(
     return ConnectionAdmin.of(connection)
 
 
-@router.post("/connections/{connection_id}/refresh", response_model=RefreshResult)
+@router.post("/companies/{company_id}/connections/{connection_id}/refresh", response_model=RefreshResult)
 async def refresh_connection(
+    company_id: int,
     connection_id: int,
     current_user: AdminUser,
     db: DBSession,
@@ -277,9 +322,8 @@ async def refresh_connection(
 ) -> RefreshResult:
     """Sync now: run the daily lookback (+ settling for ad platforms), then
     invalidate the client's cached reads so the dashboard updates immediately."""
-    connection = await db.get(PlatformConnection, connection_id)
-    if connection is None:
-        raise HTTPException(HTTPStatus.NOT_FOUND, "Connection not found")
+    connection = await _scoped_connection(db, company_id, connection_id)
+    _require_platform_enabled(connection.platform)
 
     today = date.today()
     daily_end = today - timedelta(days=1)
@@ -299,19 +343,16 @@ async def refresh_connection(
     await db.commit()
     await cache.invalidate(connection.company_id)
 
-    statuses = [r.status for r in runs]
-    overall = "error" if all(s == "error" for s in statuses) else (
-        "partial" if "error" in statuses else "success"
-    )
     return RefreshResult(
         connection_id=connection_id,
         runs=[f"{r.run_type}:{r.status}" for r in runs],
-        status=overall,
+        status=_overall_status([r.status for r in runs]),
     )
 
 
-@router.delete("/connections/{connection_id}", status_code=HTTPStatus.NO_CONTENT)
+@router.delete("/companies/{company_id}/connections/{connection_id}", status_code=HTTPStatus.NO_CONTENT)
 async def disconnect_connection(
+    company_id: int,
     connection_id: int,
     current_user: AdminUser,
     db: DBSession,
@@ -325,9 +366,7 @@ async def disconnect_connection(
     row is marked ``disabled`` with its tokens nulled. Provider-side token
     revocation is a follow-up once the OAuth connect flow lands (C3).
     """
-    connection = await db.get(PlatformConnection, connection_id)
-    if connection is None:
-        raise HTTPException(HTTPStatus.NOT_FOUND, "Connection not found")
+    connection = await _scoped_connection(db, company_id, connection_id)
 
     # Hard-delete the tokens (E7).
     connection.access_token_ciphertext = None

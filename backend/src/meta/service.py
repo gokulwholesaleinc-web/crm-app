@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
+from src.meta import crypto
 from src.meta.models import CompanyMetaData, MetaCredential, MetaLeadCapture
 
 logger = logging.getLogger(__name__)
@@ -29,6 +30,47 @@ class MetaService:
 
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    # =========================================================================
+    # Token encryption (C4 retrofit — write-both / read-new-fallback-old / strict)
+    # =========================================================================
+
+    @staticmethod
+    def _store_access_token(credential: MetaCredential, token: str) -> None:
+        """Persist the access token per the C4 rollout phase.
+
+        * key configured → write the encrypted column (+ version);
+        * expand phase (not strict) → ALSO keep writing the legacy plaintext column
+          so a deploy before the key is set never breaks the OAuth callback;
+        * strict phase → require the key (fail closed) and stop writing plaintext.
+        """
+        strict = settings.META_TOKEN_ENCRYPTION_STRICT
+        if crypto.is_configured():
+            ct, version = crypto.encrypt_token(token)
+            credential.access_token_ciphertext = ct
+            credential.token_key_version = version
+        elif strict:
+            raise crypto.MetaCryptoError(
+                "META_TOKEN_KEY must be set when META_TOKEN_ENCRYPTION_STRICT is on."
+            )
+        else:
+            # Expand phase with no key: CLEAR any prior ciphertext so the freshly
+            # written plaintext is authoritative. Otherwise a stale ciphertext (from
+            # when the key was set) would win on read and return the OLD token (C4-1).
+            credential.access_token_ciphertext = None
+            credential.token_key_version = None
+        credential.access_token = None if strict else token
+
+    @staticmethod
+    def _effective_token(credential: MetaCredential) -> str | None:
+        """Decrypt the stored token (C4). Prefers ciphertext; in the expand phase
+        falls back to the legacy plaintext column for un-backfilled rows. Returns
+        ``None`` when no usable token exists (caller treats as not-connected)."""
+        if credential.access_token_ciphertext:
+            return crypto.decrypt_token(credential.access_token_ciphertext)
+        if not settings.META_TOKEN_ENCRYPTION_STRICT and credential.access_token:
+            return credential.access_token
+        return None
 
     # =========================================================================
     # OAuth2 Flow
@@ -48,9 +90,11 @@ class MetaService:
 
     async def exchange_code(self, code: str, redirect_uri: str, user_id: int) -> MetaCredential:
         """Exchange authorization code for a long-lived access token."""
-        # Short-lived token
+        # POST (not GET) so client_secret + the token never ride in the query string
+        # — on a 4xx, httpx's error string embeds the full URL and it surfaces in the
+        # HTTPException detail + logs (C4-3). Meta's token endpoint accepts form POST.
         async with httpx.AsyncClient() as client:
-            response = await client.get(META_TOKEN_URL, params={
+            response = await client.post(META_TOKEN_URL, data={
                 "client_id": settings.META_APP_ID,
                 "client_secret": settings.META_APP_SECRET,
                 "redirect_uri": redirect_uri,
@@ -60,7 +104,7 @@ class MetaService:
             short_token_data = response.json()
 
             # Exchange for long-lived token (60 days)
-            ll_response = await client.get(META_TOKEN_URL, params={
+            ll_response = await client.post(META_TOKEN_URL, data={
                 "grant_type": "fb_exchange_token",
                 "client_id": settings.META_APP_ID,
                 "client_secret": settings.META_APP_SECRET,
@@ -70,11 +114,12 @@ class MetaService:
             ll_data = ll_response.json()
 
         expiry = datetime.now(UTC) + timedelta(seconds=ll_data.get("expires_in", 5184000))
+        token = ll_data["access_token"]
 
-        # Upsert credential
+        # Upsert credential (token stored encrypted per the C4 rollout phase).
         existing = await self.get_credential(user_id)
         if existing:
-            existing.access_token = ll_data["access_token"]
+            self._store_access_token(existing, token)
             existing.token_expiry = expiry
             existing.scopes = META_SCOPES
             existing.is_active = True
@@ -83,10 +128,10 @@ class MetaService:
 
         credential = MetaCredential(
             user_id=user_id,
-            access_token=ll_data["access_token"],
             token_expiry=expiry,
             scopes=META_SCOPES,
         )
+        self._store_access_token(credential, token)
         self.db.add(credential)
         await self.db.flush()
         return credential
@@ -113,17 +158,34 @@ class MetaService:
         if not credential or not credential.is_active:
             return {"connected": False, "scopes": None, "token_expiry": None, "pages": []}
 
-        pages = []
+        pages: list[dict[str, Any]] = []
+        token_error = False
+        # C4-2: a decrypt failure (key rotated out / removed / corrupt) must NOT be
+        # swallowed as a green "connected, 0 pages". Surface it distinctly so the
+        # admin sees the credential is unreadable, not merely page-less.
         try:
-            pages = await self._fetch_user_pages(credential.access_token)
-        except Exception as e:
-            logger.warning("Failed to fetch pages for user %s: %s", user_id, e)
+            token = self._effective_token(credential)
+        except crypto.MetaCryptoError:
+            logger.error(
+                "Meta token for user %s could not be decrypted (META_TOKEN_KEY "
+                "rotated/removed/corrupt?) — credential is unreadable.",
+                user_id,
+            )
+            token = None
+            token_error = True
+
+        if token:
+            try:
+                pages = await self._fetch_user_pages(token)
+            except Exception as e:
+                logger.warning("Failed to fetch pages for user %s: %s", user_id, e)
 
         return {
             "connected": True,
             "scopes": credential.scopes,
             "token_expiry": credential.token_expiry,
             "pages": pages,
+            "token_error": token_error,
         }
 
     # =========================================================================

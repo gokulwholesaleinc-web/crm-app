@@ -58,6 +58,9 @@ export interface OverviewResponse {
   cost_per_conversion: Numish;
   roas: Numish;
   withheld_reason: string | null;
+  // BLEND: set when >1 ad platform contributes — conversion-derived blended fields
+  // are withheld (non-additive across platforms) while spend/clicks stay.
+  conversions_withheld_reason: string | null;
 }
 
 export interface SeriesPoint {
@@ -77,6 +80,76 @@ export interface SeriesResponse {
   timeframe: Timeframe;
   data_trust: DataTrust;
   points: SeriesPoint[];
+  withheld_reason: string | null;
+  conversions_withheld_reason: string | null;
+}
+
+export interface DayOfWeekCard {
+  day_of_week: number;
+  label: string;
+  spend: Numish;
+  impressions: number;
+  clicks: number;
+  conversions: Numish;
+  conversion_value: Numish;
+  ctr: Numish;
+  cpc: Numish;
+  cost_per_conversion: Numish;
+  roas: Numish;
+}
+
+export interface DayOfWeekResponse {
+  timeframe: Timeframe;
+  data_trust: DataTrust;
+  days: DayOfWeekCard[];
+  withheld_reason: string | null;
+  conversions_withheld_reason: string | null;
+}
+
+export interface BreakdownRow {
+  date: string;
+  platform: string;
+  currency: string | null;
+  spend: Numish;
+  impressions: number;
+  clicks: number;
+  conversions: Numish;
+  conversion_value: Numish;
+  ctr: Numish;
+  cpc: Numish;
+  cost_per_conversion: Numish;
+  roas: Numish;
+}
+
+export interface BreakdownResponse {
+  timeframe: Timeframe;
+  data_trust: DataTrust;
+  rows: BreakdownRow[];
+}
+
+export interface CampaignRow {
+  platform: string;
+  connection_id: number;
+  campaign_id: string | null;
+  name: string | null;
+  status: string | null;
+  spend: Numish;
+  impressions: number;
+  clicks: number;
+  conversions: Numish;
+  conversion_value: Numish;
+  ctr: Numish;
+  cpc: Numish;
+  cost_per_conversion: Numish;
+  conversion_rate: Numish;
+  roas: Numish;
+}
+
+export interface CampaignsResponse {
+  timeframe: Timeframe;
+  data_trust: DataTrust;
+  active_campaigns: number;
+  campaigns: CampaignRow[];
 }
 
 export interface AllocationSlice {
@@ -150,6 +223,18 @@ export const getSeries = async (companyId: number, w: DateWindow): Promise<Serie
 
 export const getAllocation = async (companyId: number, w: DateWindow): Promise<AllocationResponse> =>
   (await apiClient.get<AllocationResponse>(`${base(companyId)}/allocation`, { params: windowParams(w) })).data;
+
+export const getDayOfWeek = async (companyId: number, w: DateWindow): Promise<DayOfWeekResponse> =>
+  (await apiClient.get<DayOfWeekResponse>(`${base(companyId)}/day-of-week`, { params: windowParams(w) })).data;
+
+export const getBreakdown = async (companyId: number, w: DateWindow): Promise<BreakdownResponse> =>
+  (await apiClient.get<BreakdownResponse>(`${base(companyId)}/breakdown`, { params: windowParams(w) })).data;
+
+// /campaigns does NOT take entity_level (it forces 'campaign' server-side).
+export const getCampaigns = async (companyId: number, w: DateWindow): Promise<CampaignsResponse> =>
+  (await apiClient.get<CampaignsResponse>(`${base(companyId)}/campaigns`, {
+    params: { date_from: w.date_from, date_to: w.date_to },
+  })).data;
 
 export const getSyncStatus = async (companyId: number): Promise<SyncStatusResponse> =>
   (await apiClient.get<SyncStatusResponse>(`${base(companyId)}/sync-status`)).data;

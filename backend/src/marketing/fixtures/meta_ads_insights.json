@@ -1,0 +1,71 @@
+{
+  "insights": [
+    {
+      "date_start": "2026-06-01",
+      "date_stop": "2026-06-01",
+      "campaign_id": "100",
+      "campaign_name": "Prospecting",
+      "adset_id": "11",
+      "adset_name": "Lookalike 1%",
+      "spend": "10.00",
+      "impressions": "1000",
+      "clicks": "50",
+      "reach": "800",
+      "actions": [
+        {"action_type": "omni_purchase", "value": "3"},
+        {"action_type": "landing_page_view", "value": "40"}
+      ],
+      "action_values": [
+        {"action_type": "omni_purchase", "value": "150.00"}
+      ]
+    },
+    {
+      "date_start": "2026-06-01",
+      "date_stop": "2026-06-01",
+      "campaign_id": "100",
+      "campaign_name": "Prospecting",
+      "adset_id": "12",
+      "adset_name": "Interests - Outdoors",
+      "spend": "5.50",
+      "impressions": "600",
+      "clicks": "20",
+      "reach": "500",
+      "actions": [
+        {"action_type": "purchase", "value": "1"}
+      ],
+      "action_values": [
+        {"action_type": "purchase", "value": "40.00"}
+      ]
+    },
+    {
+      "date_start": "2026-06-01",
+      "date_stop": "2026-06-01",
+      "campaign_id": "200",
+      "campaign_name": "Retargeting",
+      "adset_id": "21",
+      "adset_name": "Cart Abandoners",
+      "spend": "8.00",
+      "impressions": "400",
+      "clicks": "30",
+      "reach": "350",
+      "actions": [
+        {"action_type": "omni_purchase", "value": "2"},
+        {"action_type": "purchase", "value": "5"},
+        {"action_type": "landing_page_view", "value": "10"}
+      ],
+      "action_values": [
+        {"action_type": "omni_purchase", "value": "200.00"},
+        {"action_type": "purchase", "value": "333.00"}
+      ]
+    }
+  ],
+  "campaigns": [
+    {"id": "100", "name": "Prospecting", "effective_status": "ACTIVE"},
+    {"id": "200", "name": "Retargeting", "effective_status": "PAUSED"}
+  ],
+  "adsets": [
+    {"id": "11", "name": "Lookalike 1%", "campaign_id": "100", "effective_status": "ACTIVE"},
+    {"id": "12", "name": "Interests - Outdoors", "campaign_id": "100", "effective_status": "ADSET_PAUSED"},
+    {"id": "21", "name": "Cart Abandoners", "campaign_id": "200", "effective_status": "ACTIVE"}
+  ]
+}

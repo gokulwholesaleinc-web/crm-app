@@ -27,6 +27,11 @@ _Q6 = Decimal("0.000001")
 def _to_decimal(value: Decimal | int | str | float) -> Decimal:
     """Coerce to ``Decimal`` safely — floats go through ``str`` to avoid binary
     artifacts (``Decimal(0.1)`` ≠ ``Decimal("0.1")``)."""
+    # bool is a subclass of int, so a stray JSON ``true``/``false`` reaching a money
+    # field would silently become 1.00 / 0.00. Refuse it loudly (must precede the
+    # int path since isinstance(True, int) is True).
+    if isinstance(value, bool):
+        raise TypeError(f"refusing to coerce bool to a money/conversion Decimal: {value!r}")
     if isinstance(value, Decimal):
         return value
     if isinstance(value, float):

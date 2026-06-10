@@ -1,5 +1,5 @@
 {
-  "batches": [
+  "campaign_batches": [
     {
       "results": [
         {
@@ -8,6 +8,64 @@
             "id": "111",
             "name": "Brand Search",
             "status": "ENABLED"
+          },
+          "metrics": {
+            "costMicros": "7500000",
+            "impressions": "1840",
+            "clicks": "100",
+            "conversions": 4.5,
+            "conversionsValue": 515.75
+          },
+          "segments": {
+            "date": "2026-06-01"
+          }
+        },
+        {
+          "campaign": {
+            "resourceName": "customers/1234567890/campaigns/222",
+            "id": "222",
+            "name": "Generic Prospecting",
+            "status": "REMOVED"
+          },
+          "metrics": {
+            "costMicros": "10250000",
+            "impressions": "5400",
+            "clicks": "210",
+            "conversions": 6.25,
+            "conversionsValue": 0.0
+          },
+          "segments": {
+            "date": "2026-06-01"
+          }
+        },
+        {
+          "campaign": {
+            "resourceName": "customers/1234567890/campaigns/333",
+            "id": "333",
+            "name": "Performance Max - Retail",
+            "status": "ENABLED"
+          },
+          "metrics": {
+            "costMicros": "8000000",
+            "impressions": "3000",
+            "clicks": "150",
+            "conversions": 12.0,
+            "conversionsValue": 999.0
+          },
+          "segments": {
+            "date": "2026-06-01"
+          }
+        }
+      ]
+    }
+  ],
+  "adgroup_batches": [
+    {
+      "results": [
+        {
+          "campaign": {
+            "resourceName": "customers/1234567890/campaigns/111",
+            "id": "111"
           },
           "adGroup": {
             "resourceName": "customers/1234567890/adGroups/911",
@@ -29,9 +87,7 @@
         {
           "campaign": {
             "resourceName": "customers/1234567890/campaigns/111",
-            "id": "111",
-            "name": "Brand Search",
-            "status": "ENABLED"
+            "id": "111"
           },
           "adGroup": {
             "resourceName": "customers/1234567890/adGroups/912",
@@ -49,17 +105,11 @@
           "segments": {
             "date": "2026-06-01"
           }
-        }
-      ]
-    },
-    {
-      "results": [
+        },
         {
           "campaign": {
             "resourceName": "customers/1234567890/campaigns/222",
-            "id": "222",
-            "name": "Generic Prospecting",
-            "status": "REMOVED"
+            "id": "222"
           },
           "adGroup": {
             "resourceName": "customers/1234567890/adGroups/921",

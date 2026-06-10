@@ -71,6 +71,11 @@ class Settings(BaseSettings):
     PAGESPEED_API_KEY: str = ""
     # Dedicated Meta token key for the plaintext→encrypted retrofit (C4).
     META_TOKEN_KEY: str = ""
+    # C4 multi-deploy switch. False (expand phase): write BOTH plaintext +
+    # ciphertext, read ciphertext-then-plaintext-fallback (safe even before the key
+    # is set). Flip True (contract phase) AFTER the backfill: read ciphertext-only +
+    # stop writing plaintext, so the legacy column can later be dropped.
+    META_TOKEN_ENCRYPTION_STRICT: bool = False
 
     # Feature flags — every marketing surface ships behind one; defaults keep
     # approval-gated and dormant platforms DARK so the module is safe to deploy

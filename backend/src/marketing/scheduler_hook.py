@@ -25,8 +25,8 @@ from sqlalchemy import select
 import src.database as db_module
 from src.config import settings
 
-from . import cache
-from .ingest import health, run_connection_sync, settling
+from . import alerts, cache
+from .ingest import SUPPORTED_PLATFORMS, health, run_connection_sync, settling
 from .models import PlatformConnection
 
 logger = logging.getLogger(__name__)
@@ -43,12 +43,24 @@ DAILY_LOOKBACK_DAYS = 3
 SYNCABLE_STATUSES = ("active", "pending", "error")
 
 
+def _allowed_platforms() -> set[str]:
+    """Platforms eligible for the daily sync: the wired set, minus phase-gated ones.
+
+    meta_ads is excluded until MKTG_META_ENABLED so a created-but-dark Meta
+    connection isn't selected (no burned error runs / no daily health flip)."""
+    allowed = set(SUPPORTED_PLATFORMS)
+    if not settings.MKTG_META_ENABLED:
+        allowed.discard("meta_ads")
+    return allowed
+
+
 async def _syncable_connections() -> list[PlatformConnection]:
     async with db_module.async_session_maker() as session:
         rows = await session.execute(
             select(PlatformConnection).where(
                 PlatformConnection.is_enabled.is_(True),
                 PlatformConnection.status.in_(SYNCABLE_STATUSES),
+                PlatformConnection.platform.in_(_allowed_platforms()),
             )
         )
         return list(rows.scalars().all())
@@ -111,3 +123,21 @@ async def run_daily_marketing_sync(*, today: date | None = None) -> None:
         "[marketing_daily] done — %d connection(s), %d client cache(s) invalidated",
         len(connections), len(affected),
     )
+
+    # CRITICAL-2: after syncing, flag connections that are reading 'active' but
+    # haven't actually refreshed (truthful-freshness canary). Dormant until the
+    # flag flips; isolated so an alerting failure can't break the ingest tick.
+    if settings.MKTG_ALERTS_ENABLED:
+        await _run_stale_sync_alerts()
+
+
+async def _run_stale_sync_alerts() -> None:
+    """Run the stale_sync alert pass in its own session (B4 / CRITICAL-2)."""
+    try:
+        async with db_module.async_session_maker() as session:
+            fired = await alerts.detect_stale_syncs(session)
+            await session.commit()
+            if fired:
+                logger.warning("[marketing_daily] %d stale-sync alert(s) open", fired)
+    except Exception:
+        logger.exception("[marketing_daily] stale-sync alert pass failed")

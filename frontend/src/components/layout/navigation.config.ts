@@ -21,7 +21,17 @@ import {
   UserPlusIcon,
   ShareIcon,
   InboxIcon,
+  PresentationChartLineIcon,
 } from '@heroicons/react/24/outline';
+
+// Marketing Analytics (/reporting) ships dark behind the rollout flag; the nav
+// entry appears only when VITE_MKTG_ENABLED is set (mirror of the backend
+// MKTG_ENABLED gate), so the page isn't orphaned once it goes live but stays
+// undiscoverable until then.
+const MKTG_NAV: NavItem[] =
+  import.meta.env.VITE_MKTG_ENABLED === 'true'
+    ? [{ id: 'reporting', name: 'Marketing Analytics', href: '/reporting', icon: PresentationChartLineIcon }]
+    : [];
 
 export interface NavItem {
   id: string;
@@ -53,6 +63,7 @@ export const DEFAULT_MAIN_NAVIGATION: NavItem[] = [
 export const DEFAULT_SECONDARY_NAVIGATION: NavItem[] = [
   { id: 'import-export', name: 'Import/Export', href: '/import-export', icon: ArrowsRightLeftIcon },
   { id: 'reports', name: 'Reports', href: '/reports', icon: ChartBarIcon },
+  ...MKTG_NAV,
   { id: 'settings', name: 'Settings', href: '/settings', icon: Cog6ToothIcon },
   { id: 'help', name: 'Help', href: '/help', icon: QuestionMarkCircleIcon },
   { id: 'admin', name: 'Admin', href: '/admin', icon: ShieldCheckIcon },

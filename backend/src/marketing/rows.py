@@ -79,6 +79,11 @@ class AnalyticsDailyRow:
     ctr: Decimal | None = None
     position: Decimal | None = None
     is_sampled: bool = False
+    # GA4 truthfulness (A11 / H3): False when the report had a high-cardinality
+    # "(other)" overflow (metadata.dataLossFromOtherRow) or was not yet finalized
+    # (metadata.dataGolden=False) — so the read layer can disclose that a breakdown
+    # may not tie out to the totals.
+    is_data_golden: bool = True
 
 
 @dataclass(frozen=True, slots=True)

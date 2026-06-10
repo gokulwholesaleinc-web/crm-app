@@ -9,8 +9,10 @@ The locked rules (B5):
 
 * **success** → ``failure_count = 0``, ``status = 'active'``, stamp ``last_synced_at``.
 * **transient** (429 / RESOURCE_EXHAUSTED / 5xx / network) → ``failure_count += 1``,
-  record the error, but **never** change ``status`` away from ``active`` —
-  ``failure_count`` only drives backoff, not the disable decision.
+  record the error, and leave ``status`` on ``active`` for the first
+  ``TRANSIENT_ESCALATION_THRESHOLD - 1`` in a row (``failure_count`` drives
+  backoff). Only *sustained* throttling escalates to ``error`` (CRITICAL-2) so a
+  permanently-throttled connection can't read ``active`` forever.
 * **reauth** (Google ``invalid_grant`` / Meta OAuth-190) → ``status = 'needs_reauth'``
   immediately, regardless of count.
 * **hard failure** (any other permanent error) → ``failure_count += 1``; once it
@@ -28,6 +30,16 @@ from .http_client import IngestHTTPError, PermanentError, TransientError
 
 # N consecutive hard (non-transient, non-reauth) failures trip status='error' (B5).
 HARD_FAILURE_THRESHOLD = 5
+
+# CRITICAL-2: transient failures (429/RESOURCE_EXHAUSTED/5xx) deliberately do NOT
+# flip an active connection on the first few — quota blips are normal. But a
+# connection that is *permanently* throttled would otherwise climb failure_count
+# forever while still reading 'active' (it never syncs, but never alarms). After
+# this many CONSECUTIVE transient failures we escalate to 'error' so a
+# stuck-throttled connection surfaces. Set well above HARD_FAILURE_THRESHOLD so
+# transient stays the more forgiving class. At ~2 runs/day (daily + settling)
+# this is ~5 days of unbroken throttling. Any success resets failure_count to 0.
+TRANSIENT_ESCALATION_THRESHOLD = 10
 
 # error_class tokens that mean "the credential is gone, reconnect needed".
 _REAUTH_CLASSES = frozenset({"invalid_grant", "invalid_token", "oauth_exception_190"})
@@ -80,8 +92,12 @@ def apply_failure(connection: PlatformConnection, exc: BaseException) -> Outcome
     connection.last_error = str(exc)[:1000]
 
     if outcome is Outcome.TRANSIENT:
-        # Backoff signal only — quota/5xx must never flip an active connection.
+        # Backoff signal — a few quota/5xx blips must never flip an active
+        # connection. But sustained throttling (CRITICAL-2) eventually escalates so
+        # a permanently-throttled connection stops reading 'active' forever.
         connection.failure_count = (connection.failure_count or 0) + 1
+        if connection.failure_count >= TRANSIENT_ESCALATION_THRESHOLD:
+            connection.status = "error"
         return outcome
 
     if outcome is Outcome.REAUTH:

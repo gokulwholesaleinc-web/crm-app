@@ -18,7 +18,7 @@ from typing import Any
 
 from ..money import q6
 from ..rows import SiteHealthRow
-from .http_client import PageSpeedSeam
+from .http_client import PageSpeedSeam, UnmappableShapeError
 
 _SCORE_KEYS = {
     "performance_score": "performance",
@@ -78,12 +78,17 @@ def map_pagespeed(
 ) -> list[SiteHealthRow]:
     """Pure: a Lighthouse result → one ``SiteHealthRow`` snapshot.
 
-    Returns a list (0 or 1 rows) so the orchestrator treats every mapper the same
-    way. A response missing ``lighthouseResult`` yields ``[]`` (E5 guard).
+    Returns a one-element list so the orchestrator treats every mapper the same
+    way. A successful PageSpeed run ALWAYS carries ``lighthouseResult``; its
+    absence is an error body / drifted shape, not empty data — raise so the run is
+    recorded ``partial`` rather than a silent zero (CRITICAL-1). PageSpeed has no
+    legitimately-empty case (a reachable URL always scores), so there is no E5 path.
     """
-    lh = payload.get("lighthouseResult")
+    lh = payload.get("lighthouseResult") if isinstance(payload, dict) else None
     if not lh:
-        return []
+        raise UnmappableShapeError(
+            "pagespeed payload missing 'lighthouseResult'", platform="pagespeed"
+        )
 
     categories = lh.get("categories", {})
     audits = lh.get("audits", {})

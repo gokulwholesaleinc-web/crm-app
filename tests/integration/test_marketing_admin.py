@@ -117,12 +117,26 @@ class TestListUpdateDisconnect:
         conn.failure_count = 4
         await db_session.commit()
         r = await client.patch(
-            f"/api/marketing/admin/connections/{cid}",
+            f"/api/marketing/admin/companies/{test_company.id}/connections/{cid}",
             json={"access_token": "fresh-token"},
             headers=h,
         )
         assert r.status_code == 200
         assert r.json()["status"] == "pending"  # reauth cleared, retry armed
+
+    async def test_mutate_route_scoped_to_company_404_on_mismatch(
+        self, client, superuser_token, db_session, test_company
+    ):
+        # M-idor: a connection_id under the WRONG company path 404s (company scope
+        # is structural), even for a global admin.
+        h = _admin(superuser_token)
+        cid = (await _create(client, h, test_company.id)).json()["id"]
+        r = await client.patch(
+            f"/api/marketing/admin/companies/{test_company.id + 999}/connections/{cid}",
+            json={"display_name": "x"},
+            headers=h,
+        )
+        assert r.status_code == 404
 
     async def test_disconnect_purges_facts_and_disables(
         self, client, superuser_token, db_session, test_company
@@ -139,7 +153,9 @@ class TestListUpdateDisconnect:
         )
         await db_session.commit()
 
-        r = await client.delete(f"/api/marketing/admin/connections/{cid}", headers=h)
+        r = await client.delete(
+            f"/api/marketing/admin/companies/{test_company.id}/connections/{cid}", headers=h
+        )
         assert r.status_code == 204
 
         db_session.expire_all()
@@ -166,3 +182,52 @@ def count_ads(connection_id):
     return select(func.count()).select_from(AdsDailyMetric).where(
         AdsDailyMetric.connection_id == connection_id
     )
+
+
+class TestMetaPhaseGate:
+    """meta_ads admin actions stay dark behind MKTG_META_ENABLED (Business-Verification gated)."""
+
+    async def test_create_meta_blocked_when_flag_off(self, client, superuser_token, test_company, monkeypatch):
+        from src.config import settings
+        monkeypatch.setattr(settings, "MKTG_META_ENABLED", False)
+        r = await _create(
+            client, _admin(superuser_token), test_company.id,
+            platform="meta_ads", external_account_id="act_222", credential_mode="system_user",
+        )
+        assert r.status_code == 422
+
+    async def test_create_meta_allowed_when_flag_on(self, client, superuser_token, test_company, monkeypatch):
+        from src.config import settings
+        monkeypatch.setattr(settings, "MKTG_META_ENABLED", True)
+        r = await _create(
+            client, _admin(superuser_token), test_company.id,
+            platform="meta_ads", external_account_id="act_222", credential_mode="system_user",
+        )
+        assert r.status_code == 201
+        assert r.json()["external_account_id"] == "act_222"  # A10 normalized
+
+    async def test_refresh_meta_blocked_when_flag_off(self, client, superuser_token, test_company, monkeypatch):
+        from src.config import settings
+        # create it while enabled, then turn Meta off and try to refresh
+        monkeypatch.setattr(settings, "MKTG_META_ENABLED", True)
+        cid = (await _create(
+            client, _admin(superuser_token), test_company.id,
+            platform="meta_ads", external_account_id="act_222", credential_mode="system_user",
+        )).json()["id"]
+        monkeypatch.setattr(settings, "MKTG_META_ENABLED", False)
+        r = await client.post(
+            f"/api/marketing/admin/companies/{test_company.id}/connections/{cid}/refresh",
+            headers=_admin(superuser_token),
+        )
+        assert r.status_code == 422
+
+
+def test_overall_status_never_reports_partial_as_success():
+    # A drifted 'partial' run must NOT roll up to 'success' (silent-success-on-drift).
+    from src.marketing.admin_router import _overall_status
+    assert _overall_status(["partial"]) == "partial"
+    assert _overall_status(["success", "partial"]) == "partial"
+    assert _overall_status(["success", "success"]) == "success"
+    assert _overall_status(["error", "error"]) == "error"
+    assert _overall_status(["error", "success"]) == "partial"
+    assert _overall_status([]) == "error"  # no runs is not success

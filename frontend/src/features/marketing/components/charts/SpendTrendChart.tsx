@@ -22,6 +22,19 @@ interface Props {
 export function SpendTrendChart({ points, currency }: Props) {
   const color = getBrandColor('primary', '#2563eb');
   const data = points.map((p) => ({ date: p.date, spend: Number(p.spend ?? 0) }));
+  // PROVISIONAL-GREY: only footnote settling days when some actually are provisional.
+  const hasProvisional = points.some((p) => p.is_provisional);
+
+  if (points.length === 0) {
+    return (
+      <ChartFigure title="Daily spend">
+        <div className="flex h-[240px] items-center justify-center text-sm text-gray-400">
+          No spend in this period
+        </div>
+      </ChartFigure>
+    );
+  }
+
   const table = {
     columns: [
       { key: 'date', label: 'Date' },
@@ -33,10 +46,15 @@ export function SpendTrendChart({ points, currency }: Props) {
       spend: formatCurrency(p.spend, currency),
       clicks: formatNumber(p.clicks),
     })),
+    rowKey: (row: Record<string, unknown>) => String(row.date),
   };
 
   return (
-    <ChartFigure title="Daily spend" subtitle="* most recent days are still settling" table={table}>
+    <ChartFigure
+      title="Daily spend"
+      subtitle={hasProvisional ? '* most recent days are still settling' : undefined}
+      table={table}
+    >
       <div style={{ height: 240 }}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 8, right: 12, bottom: 4, left: 4 }}>

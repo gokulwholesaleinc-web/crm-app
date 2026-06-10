@@ -1,7 +1,18 @@
 """Meta (Facebook/Instagram) integration models."""
 from datetime import datetime
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Integer,
+    LargeBinary,
+    SmallInteger,
+    String,
+    Text,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.database import Base
@@ -42,7 +53,12 @@ class MetaCredential(Base):
         nullable=False,
         unique=True,
     )
-    access_token: Mapped[str] = mapped_column(Text, nullable=False)
+    # C4 retrofit: the legacy plaintext column is now NULLABLE so the contract phase
+    # can stop writing it (and a later migration can drop it). New rows carry the
+    # token in access_token_ciphertext (encrypted via meta/crypto, META_TOKEN_KEY).
+    access_token: Mapped[str | None] = mapped_column(Text, nullable=True)
+    access_token_ciphertext: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    token_key_version: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     token_expiry: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     page_access_tokens: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # {page_id: token}
     scopes: Mapped[str | None] = mapped_column(Text, nullable=True)

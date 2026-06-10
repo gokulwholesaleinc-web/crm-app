@@ -87,7 +87,10 @@ class OverviewResponse(BaseModel):
     cpc: Decimal | None = None
     cost_per_conversion: Decimal | None = None
     roas: Decimal | None = None
-    withheld_reason: str | None = None
+    withheld_reason: str | None = None  # A9: multi-currency → blended numbers withheld
+    # BLEND: >1 ad platform contributed → conversion-derived blended fields are
+    # withheld (non-additive across platforms) while spend/clicks/impressions remain.
+    conversions_withheld_reason: str | None = None
 
 
 # ── /series ──────────────────────────────────────────────────────────────────
@@ -96,8 +99,10 @@ class SeriesPoint(BaseModel):
     spend: Decimal
     impressions: int
     clicks: int
-    conversions: Decimal
-    conversion_value: Decimal
+    # nullable: withheld (→ None) when >1 ad platform contributes (BLEND) — conversions
+    # are non-additive across platforms.
+    conversions: Decimal | None = None
+    conversion_value: Decimal | None = None
     ctr: Decimal | None = None
     cpc: Decimal | None = None
     roas: Decimal | None = None
@@ -108,6 +113,8 @@ class SeriesResponse(BaseModel):
     timeframe: Timeframe
     data_trust: DataTrust
     points: list[SeriesPoint] = []
+    withheld_reason: str | None = None  # A9 multi-currency (spend blended across FX)
+    conversions_withheld_reason: str | None = None  # BLEND: >1 ad platform
 
 
 # ── /allocation ──────────────────────────────────────────────────────────────
@@ -134,8 +141,9 @@ class DayOfWeekCard(BaseModel):
     spend: Decimal
     impressions: int
     clicks: int
-    conversions: Decimal
-    conversion_value: Decimal
+    # nullable: withheld when >1 ad platform contributes (BLEND, non-additive).
+    conversions: Decimal | None = None
+    conversion_value: Decimal | None = None
     ctr: Decimal | None = None
     cpc: Decimal | None = None
     cost_per_conversion: Decimal | None = None
@@ -146,6 +154,8 @@ class DayOfWeekResponse(BaseModel):
     timeframe: Timeframe
     data_trust: DataTrust
     days: list[DayOfWeekCard] = []
+    withheld_reason: str | None = None  # A9 multi-currency (spend blended across FX)
+    conversions_withheld_reason: str | None = None  # BLEND: >1 ad platform
 
 
 # ── /campaigns ───────────────────────────────────────────────────────────────
@@ -206,10 +216,12 @@ class Ga4Totals(BaseModel):
     users: int
     new_users: int
     engaged_sessions: int
+    # key_events IS GA4's conversion metric (H7) — no separate `conversions` field;
+    # ad-platform conversions live on the Paid Media surfaces, not here.
     key_events: Decimal
-    conversions: Decimal
     engagement_rate: Decimal | None = None
     is_sampled: bool = False  # A11: surface sampling, never hide it
+    is_data_golden: bool = True  # H3: False ⇒ "(other)" overflow / not finalized → may not tie out
 
 
 class Ga4SeriesPoint(BaseModel):
@@ -285,6 +297,7 @@ class SiteHealthResponse(BaseModel):
 class BreakdownRow(BaseModel):
     date: date
     platform: str
+    currency: str | None = None  # this row's account currency (FE-1: per-row, multi-currency)
     spend: Decimal
     impressions: int
     clicks: int
