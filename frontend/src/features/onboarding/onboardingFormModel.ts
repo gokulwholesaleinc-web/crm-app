@@ -61,6 +61,7 @@ export function cleanField(
   if (field.kind === 'file_upload') {
     out.maxFiles = field.maxFiles ?? 1;
     out.maxMB = field.maxMB ?? 10;
+    if (field.sensitive) out.sensitive = true;
     return out;
   }
   if (CHOICE_KINDS.has(field.kind)) {

@@ -348,6 +348,83 @@ async def test_sensitive_field_lands_sensitive_category(
         await _cleanup(db_session)
 
 
+async def test_packet_detail_redacts_sensitive_uploads_from_shared_reader(
+    client, db_session, test_contact, test_user, auth_headers
+):
+    """A shared contact reader cannot see sensitive upload metadata in packet detail."""
+    from src.auth.models import User
+    from src.auth.security import create_access_token, get_password_hash
+    from src.core.models import EntityShare
+
+    service, packet, raw = await _make_upload_packet(
+        db_session,
+        test_contact.id,
+        [
+            _upload_field("gov_id", sensitive=True),
+            _upload_field("logo", sensitive=False),
+        ],
+        created_by_id=test_user.id,
+    )
+    headers = await _session(client, raw)
+    doc_id = await _doc_id(service, packet)
+    try:
+        for field_id in ("gov_id", "logo"):
+            resp = await client.post(
+                f"/api/onboarding/public/{raw}/documents/{doc_id}/files",
+                headers=headers,
+                data={"field_id": field_id},
+                files={
+                    "file": (
+                        f"{field_id}.pdf",
+                        io.BytesIO(one_page_pdf()),
+                        "application/pdf",
+                    )
+                },
+            )
+            assert resp.status_code == 201, resp.text
+
+        owner_view = await client.get(
+            f"/api/onboarding/packets/{packet.id}", headers=auth_headers
+        )
+        assert owner_view.status_code == 200, owner_view.text
+        owner_uploads = owner_view.json()["uploads"]
+        assert {u["field_id"] for u in owner_uploads} == {"gov_id", "logo"}
+        assert any(u["sensitive"] for u in owner_uploads)
+
+        reader = User(
+            email="shared_reader@example.com",
+            hashed_password=get_password_hash("pw12345678"),
+            full_name="Shared Reader",
+            is_active=True,
+            is_superuser=False,
+        )
+        db_session.add(reader)
+        await db_session.flush()
+        db_session.add(
+            EntityShare(
+                entity_type="contacts",
+                entity_id=test_contact.id,
+                shared_with_user_id=reader.id,
+                shared_by_user_id=test_user.id,
+                permission_level="view",
+            )
+        )
+        await db_session.commit()
+        reader_headers = {
+            "Authorization": f"Bearer {create_access_token(data={'sub': str(reader.id)})}"
+        }
+
+        reader_view = await client.get(
+            f"/api/onboarding/packets/{packet.id}", headers=reader_headers
+        )
+        assert reader_view.status_code == 200, reader_view.text
+        reader_uploads = reader_view.json()["uploads"]
+        assert {u["field_id"] for u in reader_uploads} == {"logo"}
+        assert all(not u["sensitive"] for u in reader_uploads)
+    finally:
+        await _cleanup(db_session)
+
+
 # --------------------------------------------------------------------------
 # DELETE removes the Attachment + row + answer id
 # --------------------------------------------------------------------------
