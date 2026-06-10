@@ -5,6 +5,12 @@ from sqlalchemy import select
 
 from src.core.constants import HTTPStatus
 from src.core.router_utils import raise_forbidden
+from src.payments.liveness import (
+    is_live_company,
+    is_live_contact,
+    live_company_filter,
+    live_contact_filter,
+)
 from src.payments.models import StripeCustomer
 
 
@@ -34,7 +40,7 @@ async def _verify_contact_access(db, contact_id: int | None, current_user) -> No
     result = await db.execute(
         select(Contact).where(
             Contact.id == contact_id,
-            Contact.deleted_at.is_(None),
+            *live_contact_filter(Contact),
         )
     )
     contact = result.scalar_one_or_none()
@@ -55,7 +61,7 @@ async def _verify_contact_live(db, contact_id: int | None) -> None:
     result = await db.execute(
         select(Contact.id).where(
             Contact.id == contact_id,
-            Contact.deleted_at.is_(None),
+            *live_contact_filter(Contact),
         )
     )
     if result.scalar_one_or_none() is None:
@@ -71,8 +77,7 @@ async def _verify_company_access(db, company_id: int | None, current_user) -> No
     result = await db.execute(
         select(Company).where(
             Company.id == company_id,
-            Company.status != "merged",
-            Company.merged_into_id.is_(None),
+            *live_company_filter(Company),
         )
     )
     company = result.scalar_one_or_none()
@@ -93,8 +98,7 @@ async def _verify_company_live(db, company_id: int | None) -> None:
     result = await db.execute(
         select(Company.id).where(
             Company.id == company_id,
-            Company.status != "merged",
-            Company.merged_into_id.is_(None),
+            *live_company_filter(Company),
         )
     )
     if result.scalar_one_or_none() is None:
@@ -133,15 +137,9 @@ async def _verify_stripe_customer_access(
     sc = result.scalar_one_or_none()
     if sc is None:
         raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Stripe customer not found")
-    if sc.contact_id is not None and (
-        sc.contact is None or sc.contact.deleted_at is not None
-    ):
+    if sc.contact_id is not None and not is_live_contact(sc.contact):
         raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Stripe customer not found")
-    if sc.company_id is not None and (
-        sc.company is None
-        or sc.company.status == "merged"
-        or sc.company.merged_into_id is not None
-    ):
+    if sc.company_id is not None and not is_live_company(sc.company):
         raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Stripe customer not found")
     if _is_privileged(current_user):
         return sc

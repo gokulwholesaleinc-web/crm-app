@@ -833,6 +833,50 @@ class TestDedupMergeSoftDelete:
         assert archived.merged_into_id == primary.id
 
     @pytest.mark.asyncio
+    async def test_merge_companies_reassigns_stripe_customers(
+        self,
+        db_session: AsyncSession,
+        test_user: User,
+    ):
+        """Company-level Stripe customers must follow the surviving company."""
+        from src.dedup.service import DedupService
+        from src.payments.models import StripeCustomer
+
+        primary = Company(
+            name="Stripe Primary Co",
+            status="customer",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        secondary = Company(
+            name="Stripe Secondary Co",
+            status="prospect",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add_all([primary, secondary])
+        await db_session.commit()
+        await db_session.refresh(primary)
+        await db_session.refresh(secondary)
+
+        customer = StripeCustomer(
+            stripe_customer_id="cus_company_merge_repoint",
+            company_id=secondary.id,
+            email="billing@stripe-secondary.example",
+        )
+        db_session.add(customer)
+        await db_session.commit()
+        await db_session.refresh(customer)
+
+        await DedupService(db_session).merge_companies(
+            primary.id, secondary.id, user_id=test_user.id
+        )
+        await db_session.commit()
+        await db_session.refresh(customer)
+
+        assert customer.company_id == primary.id
+
+    @pytest.mark.asyncio
     async def test_merge_same_id_raises(
         self,
         db_session: AsyncSession,

@@ -18,6 +18,7 @@ from src.core.sorting import build_order_clauses
 from src.email.types import EmailAttachment
 from src.payments.amounts import to_stripe_minor_units as _to_stripe_amount
 from src.payments.exceptions import NoRecipientEmailError
+from src.payments.liveness import live_company_filter, live_contact_filter
 from src.payments.models import (
     Payment,
     Product,
@@ -61,13 +62,6 @@ def _stable_stripe_idempotency_key(prefix: str, *parts: object) -> str:
 
 
 logger = logging.getLogger(__name__)
-
-
-def _company_live_filters(Company):
-    return (
-        Company.status != "merged",
-        Company.merged_into_id.is_(None),
-    )
 
 
 def _get_stripe():
@@ -245,14 +239,14 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
 
             query = query.join(Contact, StripeCustomer.contact_id == Contact.id).where(
                 StripeCustomer.contact_id == contact_id,
-                Contact.deleted_at.is_(None),
+                *live_contact_filter(Contact),
             )
         if company_id is not None:
             from src.companies.models import Company
 
             query = query.join(Company, StripeCustomer.company_id == Company.id).where(
                 StripeCustomer.company_id == company_id,
-                *_company_live_filters(Company),
+                *live_company_filter(Company),
             )
 
         if owner_id:
@@ -532,7 +526,7 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
             contact_result = await self.db.execute(
                 select(Contact).where(
                     Contact.id == contact_id,
-                    Contact.deleted_at.is_(None),
+                    *live_contact_filter(Contact),
                 )
             )
             contact = contact_result.scalar_one_or_none()
@@ -547,7 +541,7 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
             company_result = await self.db.execute(
                 select(Company).where(
                     Company.id == company_id,
-                    *_company_live_filters(Company),
+                    *live_company_filter(Company),
                 )
             )
             company = company_result.scalar_one_or_none()
@@ -1482,11 +1476,11 @@ class StripeCustomerService:
             .where(
                 or_(
                     StripeCustomer.contact_id.is_(None),
-                    Contact.deleted_at.is_(None),
+                    *live_contact_filter(Contact),
                 ),
                 or_(
                     StripeCustomer.company_id.is_(None),
-                    and_(*_company_live_filters(Company)),
+                    and_(*live_company_filter(Company)),
                 ),
             )
         )
@@ -1501,23 +1495,23 @@ class StripeCustomerService:
                 or_(
                     and_(
                         StripeCustomer.contact_id == contact_id,
-                        Contact.deleted_at.is_(None),
+                        *live_contact_filter(Contact),
                     ),
                     and_(
                         StripeCustomer.company_id == company_id,
-                        *_company_live_filters(Company),
+                        *live_company_filter(Company),
                     ),
                 )
             )
         elif contact_id is not None:
             query = query.where(
                 StripeCustomer.contact_id == contact_id,
-                Contact.deleted_at.is_(None),
+                *live_contact_filter(Contact),
             )
         elif company_id is not None:
             query = query.where(
                 StripeCustomer.company_id == company_id,
-                *_company_live_filters(Company),
+                *live_company_filter(Company),
             )
 
         count_query = select(func.count()).select_from(query.subquery())

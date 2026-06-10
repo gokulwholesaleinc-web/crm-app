@@ -350,9 +350,9 @@ class DedupService:
         """Merge ``secondary`` company into ``primary``.
 
         Repoints every child FK (contacts, opportunities, quotes,
-        proposals, contracts) + polymorphic links + soft-deletes the
-        secondary with ``status="merged"`` and a ``merged_into_id``
-        forwarding pointer. Writes an audit log entry.
+        proposals, contracts, Stripe customers) + polymorphic links +
+        soft-deletes the secondary with ``status="merged"`` and a
+        ``merged_into_id`` forwarding pointer. Writes an audit log entry.
         """
         primary, secondary = await self._load_merge_pair(Company, primary_id, secondary_id)
 
@@ -479,6 +479,7 @@ class DedupService:
         """Repoint every direct FK column that references ``companies.id``."""
         from src.contracts.models import Contract
         from src.opportunities.models import Opportunity
+        from src.payments.models import StripeCustomer
         from src.proposals.models import Proposal
         from src.quotes.models import Quote
 
@@ -492,6 +493,7 @@ class DedupService:
             (Proposal, Proposal.company_id),
             (Opportunity, Opportunity.company_id),
             (Contract, Contract.company_id),
+            (StripeCustomer, StripeCustomer.company_id),
         ]
         for model, column in tables_with_company_fk:
             await self.db.execute(
