@@ -1,0 +1,26 @@
+{
+  "rows": [
+    {
+      "keys": [ "2026-06-01", "https://www.example-client.com/" ],
+      "clicks": 60.0,
+      "impressions": 1500.0,
+      "ctr": 0.04,
+      "position": 4.2
+    },
+    {
+      "keys": [ "2026-06-01", "https://www.example-client.com/products" ],
+      "clicks": 30.0,
+      "impressions": 800.0,
+      "ctr": 0.0375,
+      "position": 6.1
+    },
+    {
+      "keys": [ "2026-06-02", "https://www.example-client.com/" ],
+      "clicks": 55.0,
+      "impressions": 1450.0,
+      "ctr": 0.037931,
+      "position": 4.4
+    }
+  ],
+  "responseAggregationType": "byProperty"
+}

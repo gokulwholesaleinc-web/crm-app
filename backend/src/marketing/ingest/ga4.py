@@ -28,6 +28,16 @@ logger = logging.getLogger(__name__)
 
 _PAGE_LIMIT = 100000  # GA4 per-request row cap (D3)
 _MAX_PAGES = 10  # bound the offset loop so a runaway property can't blow the quota
+# analytics_daily.dimension_value is String(512); a pagePath can exceed that, so
+# the mapper truncates to keep a long path from failing the whole run's insert.
+_MAX_DIM_LEN = 512
+
+# The GA4 dimension whose value populates ``dimension_value`` for a breakdown shape.
+# 'total' has no breakdown dimension (date only). Keep in sync with fetch_ga4_*.
+_BREAKDOWN_DIM = {
+    "channel": "sessionDefaultChannelGroup",
+    "page": "pagePath",
+}
 
 # Metrics requested for the total shape (engagement needs sessions+engaged).
 _TOTAL_METRICS = [
@@ -125,6 +135,20 @@ async def fetch_ga4_channels(
     return await _run_paged(client, url, _body(_CHANNEL_METRICS, dims, window_start, window_end))
 
 
+async def fetch_ga4_pages(
+    client: GoogleSeam, *, property_id: str, window_start: date_cls, window_end: date_cls
+) -> dict[str, Any]:
+    """Fetch the date × pagePath runReport (top-pages breakdown), offset-paged.
+
+    Same volume metrics as the channel shape; ``pagePath`` is the canonical
+    top-pages dimension (path without query string). Kept per-date so the daily
+    re-fetch restates each day's page rows (A2/A7); the read layer sums + limits.
+    """
+    url = f"{GA4_BASE}/properties/{property_id}:runReport"
+    dims = [_date_dim(), {"name": "pagePath"}]
+    return await _run_paged(client, url, _body(_CHANNEL_METRICS, dims, window_start, window_end))
+
+
 def _is_sampled(payload: dict[str, Any]) -> bool:
     """Any non-empty ``samplingMetadatas`` on the report means it was sampled (A11)."""
     metas = payload.get("metadata", {}).get("samplingMetadatas")
@@ -177,10 +201,10 @@ def map_ga4(
 ) -> list[AnalyticsDailyRow]:
     """Pure: one runReport payload → ``AnalyticsDailyRow``s for one dimension type.
 
-    ``dimension_type`` is ``'total'`` (date-only shape) or ``'channel'`` (date ×
-    channel). Totals are produced ONLY from the total shape — this mapper never
-    sums dimension rows to fabricate a total (A11). Sampling is propagated to
-    every emitted row. Empty payload → ``[]`` (E5 guard).
+    ``dimension_type`` is ``'total'`` (date-only shape), ``'channel'`` (date ×
+    channel) or ``'page'`` (date × pagePath). Totals are produced ONLY from the
+    total shape — this mapper never sums dimension rows to fabricate a total (A11).
+    Sampling is propagated to every emitted row. Empty payload → ``[]`` (E5 guard).
     """
     # Envelope guard (CRITICAL-1): a valid runReport always carries report
     # structure (headers/metadata) even with zero traffic. A payload with none of
@@ -201,7 +225,19 @@ def map_ga4(
     sampled = _is_sampled(payload)
     golden = _is_data_golden(payload)
     date_idx = _dim_index(payload, "date")
-    channel_idx = _dim_index(payload, "sessionDefaultChannelGroup")
+    # The breakdown dimension's column index (None for the total shape).
+    breakdown_name = _BREAKDOWN_DIM.get(dimension_type)
+    breakdown_idx = _dim_index(payload, breakdown_name) if breakdown_name else None
+    # CRITICAL-1: a breakdown shape (page/channel) whose dimension header is
+    # renamed/dropped on a 2xx (drift) would otherwise collapse every row to
+    # dimension_value="" and land as a silent success. Require the requested
+    # breakdown column to be present (symmetric with the GSC breakdown guard). Only
+    # reached when raw_rows is non-empty, so a genuinely-empty report still → [].
+    ensure_shape(
+        breakdown_name is None or breakdown_idx is not None,
+        f"ga4 {dimension_type} report missing its '{breakdown_name}' dimension header",
+        platform="ga4",
+    )
     mi = _metric_index_map(payload)
 
     for raw in raw_rows:
@@ -212,8 +248,8 @@ def map_ga4(
         row_date = date_cls.fromisoformat(_ga4_date(dims[date_idx].get("value", "")))
 
         dimension_value = ""
-        if dimension_type == "channel" and channel_idx is not None:
-            dimension_value = dims[channel_idx].get("value", "") or "(not set)"
+        if breakdown_idx is not None:
+            dimension_value = (dims[breakdown_idx].get("value", "") or "(not set)")[:_MAX_DIM_LEN]
 
         rows.append(
             AnalyticsDailyRow(

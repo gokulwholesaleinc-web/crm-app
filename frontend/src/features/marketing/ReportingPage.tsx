@@ -1,5 +1,5 @@
-import { useQuery, type UseQueryResult } from '@tanstack/react-query';
-import { type ReactNode, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { listCompanies } from '../../api/companies';
 import {
@@ -9,19 +9,21 @@ import {
   getOverview,
   getSeries,
   getSyncStatus,
-  type ConnectionSyncStatus,
 } from '../../api/marketing';
 import { Card, SearchableSelect } from '../../components/ui';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { AllocationDonut } from './components/charts/AllocationDonut';
 import { DayOfWeekChart } from './components/charts/DayOfWeekChart';
 import { SpendTrendChart } from './components/charts/SpendTrendChart';
+import { CampaignsTab } from './components/CampaignsTab';
 import { DailyBreakdownTable } from './components/DailyBreakdownTable';
-import { DataTrustBadge, type SourceFreshness } from './components/DataTrustBadge';
+import { DataTrustBadge } from './components/DataTrustBadge';
 import { KpiCard } from './components/KpiCard';
+import { QueryPanel } from './components/QueryPanel';
+import { WebsiteAnalyticsTab } from './components/WebsiteAnalyticsTab';
 import { formatCardValue, toKpiDelta } from './utils/cardMapping';
 import { isValidPreset, PRESET_LABELS, presetRange, type RangePreset } from './utils/dateRange';
-import { platformLabel } from './utils/platformLabel';
+import { syncToSources } from './utils/syncToSources';
 
 type TabKey = 'paid' | 'analytics' | 'campaigns';
 const TABS: Array<{ key: TabKey; label: string }> = [
@@ -118,64 +120,13 @@ export default function ReportingPage() {
         <EmptyState title="No client selected" description="Choose a client to view their marketing analytics." />
       ) : tab === 'paid' ? (
         <PaidMediaTab companyId={effectiveCompanyId} preset={preset} />
+      ) : tab === 'analytics' ? (
+        <WebsiteAnalyticsTab companyId={effectiveCompanyId} preset={preset} />
       ) : (
-        <Card padding="lg">
-          <EmptyState
-            title={`${TABS.find((t) => t.key === tab)?.label} view`}
-            description="Connect this client's GA4 / Ads / Meta accounts in the admin panel to populate this section."
-          />
-        </Card>
+        <CampaignsTab companyId={effectiveCompanyId} preset={preset} />
       )}
     </div>
   );
-}
-
-function syncToSources(connections: ConnectionSyncStatus[]): SourceFreshness[] {
-  return connections.map((c) => ({
-    source: platformLabel(c.platform),
-    lastSyncedAt: c.last_synced_at,
-    status: c.status,
-  }));
-}
-
-/** Loading skeleton / error+retry / data for a single panel query — keeps charts
- *  from popping in (CLS) and gives every panel a consistent error + retry path. */
-function QueryPanel<T>({
-  q,
-  height = 240,
-  render,
-}: {
-  q: UseQueryResult<T>;
-  height?: number;
-  render: (data: T) => ReactNode;
-}) {
-  if (q.isLoading) {
-    return (
-      <div
-        className="animate-pulse rounded-lg border border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800"
-        style={{ height }}
-        aria-hidden="true"
-      />
-    );
-  }
-  if (q.isError) {
-    return (
-      <Card padding="lg">
-        <EmptyState variant="error" title="Couldn't load this panel" description="Something went wrong." />
-        <div className="mt-3 flex justify-center">
-          <button
-            type="button"
-            onClick={() => q.refetch()}
-            className="rounded-md bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 dark:bg-gray-700 dark:text-gray-200"
-          >
-            Retry
-          </button>
-        </div>
-      </Card>
-    );
-  }
-  if (!q.data) return null;
-  return <>{render(q.data)}</>;
 }
 
 function PaidMediaTab({ companyId, preset }: { companyId: number; preset: Exclude<RangePreset, 'custom'> }) {

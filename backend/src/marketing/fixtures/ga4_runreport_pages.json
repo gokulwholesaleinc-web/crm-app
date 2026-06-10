@@ -1,0 +1,32 @@
+{
+  "dimensionHeaders": [
+    { "name": "date" },
+    { "name": "pagePath" }
+  ],
+  "metricHeaders": [
+    { "name": "sessions", "type": "TYPE_INTEGER" },
+    { "name": "totalUsers", "type": "TYPE_INTEGER" },
+    { "name": "newUsers", "type": "TYPE_INTEGER" },
+    { "name": "engagedSessions", "type": "TYPE_INTEGER" }
+  ],
+  "rows": [
+    {
+      "dimensionValues": [ { "value": "20260601" }, { "value": "/" } ],
+      "metricValues": [ { "value": "620" }, { "value": "540" }, { "value": "300" }, { "value": "450" } ]
+    },
+    {
+      "dimensionValues": [ { "value": "20260601" }, { "value": "/products" } ],
+      "metricValues": [ { "value": "310" }, { "value": "280" }, { "value": "150" }, { "value": "230" } ]
+    },
+    {
+      "dimensionValues": [ { "value": "20260602" }, { "value": "/" } ],
+      "metricValues": [ { "value": "600" }, { "value": "520" }, { "value": "290" }, { "value": "440" } ]
+    }
+  ],
+  "metadata": {
+    "currencyCode": "USD",
+    "timeZone": "America/Chicago"
+  },
+  "rowCount": 3,
+  "kind": "analyticsData#runReport"
+}

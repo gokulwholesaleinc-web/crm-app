@@ -267,6 +267,44 @@ class TestGa4Mapper:
         assert {r.dimension_value for r in rows} == {"Organic Search", "Paid Search", "Direct"}
         assert all(r.dimension_type == "channel" for r in rows)
 
+    def test_breakdown_missing_dimension_header_raises_drift(self):
+        # CRITICAL-1: a 2xx report with rows but the requested breakdown header
+        # dropped (drift) must RAISE, not collapse every row to dimension_value=""
+        # and land as a silent success — symmetric with the GSC breakdown guard.
+        from src.marketing.ingest.http_client import UnmappableShapeError
+
+        payload = {
+            "dimensionHeaders": [{"name": "date"}],  # pagePath header missing
+            "metricHeaders": [{"name": "sessions"}],
+            "rows": [{"dimensionValues": [{"value": "20260601"}], "metricValues": [{"value": "5"}]}],
+        }
+        with pytest.raises(UnmappableShapeError):
+            ga4.map_ga4(payload, connection_id=5, company_id=9, dimension_type="page")
+        with pytest.raises(UnmappableShapeError):
+            ga4.map_ga4(payload, connection_id=5, company_id=9, dimension_type="channel")
+
+    def test_breakdown_empty_report_does_not_raise(self):
+        # a genuinely-empty report (no rows) returns [] even for a breakdown shape.
+        assert (
+            ga4.map_ga4(
+                {"dimensionHeaders": [], "metricHeaders": [], "rows": []},
+                connection_id=5, company_id=9, dimension_type="page",
+            )
+            == []
+        )
+
+    def test_page_query_sets_pagepath_dimension_value(self):
+        # Phase 3: date × pagePath → dimension_type='page', dimension_value=pagePath.
+        rows = ga4.map_ga4(
+            _load("ga4_runreport_pages.json"), connection_id=5, company_id=9, dimension_type="page"
+        )
+        assert all(r.dimension_type == "page" for r in rows)
+        assert {r.dimension_value for r in rows} == {"/", "/products"}
+        # per-date grain preserved (two days for "/") so the daily re-fetch restates.
+        home = sorted((r for r in rows if r.dimension_value == "/"), key=lambda r: r.date)
+        assert [r.date for r in home] == [date(2026, 6, 1), date(2026, 6, 2)]
+        assert home[0].sessions == 620 and home[0].users == 540
+
     def test_sampling_metadata_sets_is_sampled(self):
         # the channels fixture carries samplingMetadatas → every row flagged (A11)
         rows = ga4.map_ga4(
@@ -360,6 +398,44 @@ class TestGscMapper:
         # GENUINE empty (E5): the fetcher always lands {"rows": [...]}; an empty list
         # is a site with no search traffic that day, not drift → [].
         assert gsc.map_gsc({"rows": []}, connection_id=2, company_id=4) == []
+
+    def test_query_dimension_sets_dimension_value(self):
+        # Phase 3: [date, query] → dimension_type='query', dimension_value=query.
+        rows = gsc.map_gsc(
+            _load("gsc_searchanalytics_query.json"), connection_id=2, company_id=4, dimension_type="query"
+        )
+        assert all(r.dimension_type == "query" and r.source == "gsc" for r in rows)
+        assert {r.dimension_value for r in rows} == {"best widgets", "widget store near me"}
+        # per-date grain (two days for "best widgets") → daily re-fetch restates.
+        bw = sorted((r for r in rows if r.dimension_value == "best widgets"), key=lambda r: r.date)
+        assert [r.date for r in bw] == [date(2026, 6, 1), date(2026, 6, 2)]
+        assert bw[0].clicks == 40 and bw[0].impressions == 900
+
+    def test_page_dimension_sets_dimension_value(self):
+        rows = gsc.map_gsc(
+            _load("gsc_searchanalytics_page.json"), connection_id=2, company_id=4, dimension_type="page"
+        )
+        assert all(r.dimension_type == "page" for r in rows)
+        assert "https://www.example-client.com/products" in {r.dimension_value for r in rows}
+
+    def test_breakdown_row_missing_dimension_key_raises_drift(self):
+        # A [date]-only row arriving where [date, dim] was requested is a drifted
+        # shape, not empty data → raise (CRITICAL-1) rather than silently mis-map.
+        from src.marketing.ingest.http_client import UnmappableShapeError
+
+        with pytest.raises(UnmappableShapeError):
+            gsc.map_gsc(
+                {"rows": [{"keys": ["2026-06-01"], "clicks": 1, "impressions": 2}]},
+                connection_id=2, company_id=4, dimension_type="query",
+            )
+
+    def test_long_page_value_truncated_to_column_width(self):
+        long_url = "https://x.com/" + "a" * 600
+        rows = gsc.map_gsc(
+            {"rows": [{"keys": ["2026-06-01", long_url], "clicks": 1, "impressions": 2, "ctr": 0.5, "position": 1.0}]},
+            connection_id=2, company_id=4, dimension_type="page",
+        )
+        assert len(rows[0].dimension_value) == 512
 
 
 # ── PageSpeed ────────────────────────────────────────────────────────────────

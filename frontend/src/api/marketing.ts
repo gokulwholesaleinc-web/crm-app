@@ -197,6 +197,121 @@ export interface SyncStatusResponse {
   connections: ConnectionSyncStatus[];
 }
 
+// ── /analytics (GA4 + GSC) ────────────────────────────────────────────────────
+export interface Ga4Totals {
+  sessions: number;
+  users: number;
+  new_users: number;
+  engaged_sessions: number;
+  // key_events IS GA4's conversion metric (H7) — no separate `conversions`.
+  key_events: Numish;
+  engagement_rate: Numish;
+  is_sampled: boolean; // A11: surface sampling, never hide it
+  is_data_golden: boolean; // H3: false ⇒ "(other)" overflow / not finalized
+}
+
+export interface Ga4SeriesPoint {
+  date: string;
+  sessions: number;
+  users: number;
+}
+
+export interface TrafficSource {
+  channel: string;
+  sessions: number;
+  users: number;
+}
+
+export interface TopPage {
+  page: string;
+  sessions: number;
+  users: number;
+}
+
+export interface GscTotals {
+  clicks: number;
+  impressions: number;
+  ctr: Numish;
+  position: Numish;
+}
+
+export interface GscQuery {
+  query: string;
+  clicks: number;
+  impressions: number;
+  ctr: Numish;
+  position: Numish;
+}
+
+export interface GscPage {
+  page: string;
+  clicks: number;
+  impressions: number;
+  ctr: Numish;
+  position: Numish;
+}
+
+export interface AnalyticsResponse {
+  timeframe: Timeframe;
+  data_trust: DataTrust;
+  ga4_configured: boolean; // false → "GA4 Property ID needed" empty state
+  gsc_configured: boolean;
+  ga4_totals: Ga4Totals | null;
+  ga4_series: Ga4SeriesPoint[];
+  traffic_sources: TrafficSource[];
+  top_pages: TopPage[]; // GA4 top pages (sessions/users)
+  gsc_totals: GscTotals | null;
+  gsc_queries: GscQuery[];
+  gsc_pages: GscPage[]; // GSC top pages (clicks/impressions/position)
+}
+
+// ── /site-health (PageSpeed) ──────────────────────────────────────────────────
+export interface SiteHealthSnapshotOut {
+  url: string;
+  strategy: string; // mobile | desktop
+  captured_date: string;
+  performance_score: Numish;
+  seo_score: Numish;
+  accessibility_score: Numish;
+  best_practices_score: Numish;
+  lcp_ms: number | null;
+  cls: Numish;
+  inp_ms: number | null;
+}
+
+export interface SiteHealthResponse {
+  timeframe: Timeframe;
+  data_trust: DataTrust;
+  latest: SiteHealthSnapshotOut[];
+  trend: SiteHealthSnapshotOut[];
+}
+
+// ── /adgroups ─────────────────────────────────────────────────────────────────
+export interface AdGroupRow {
+  platform: string;
+  connection_id: number;
+  adgroup_id: string | null;
+  campaign_id: string | null;
+  name: string | null;
+  status: string | null;
+  spend: Numish;
+  impressions: number;
+  clicks: number;
+  conversions: Numish;
+  conversion_value: Numish;
+  ctr: Numish;
+  cpc: Numish;
+  cost_per_conversion: Numish;
+  conversion_rate: Numish;
+  roas: Numish;
+}
+
+export interface AdGroupsResponse {
+  timeframe: Timeframe;
+  data_trust: DataTrust;
+  adgroups: AdGroupRow[];
+}
+
 export interface DateWindow {
   date_from: string;
   date_to: string;
@@ -233,6 +348,24 @@ export const getBreakdown = async (companyId: number, w: DateWindow): Promise<Br
 // /campaigns does NOT take entity_level (it forces 'campaign' server-side).
 export const getCampaigns = async (companyId: number, w: DateWindow): Promise<CampaignsResponse> =>
   (await apiClient.get<CampaignsResponse>(`${base(companyId)}/campaigns`, {
+    params: { date_from: w.date_from, date_to: w.date_to },
+  })).data;
+
+// /adgroups forces entity_level='adgroup' server-side (date_from/date_to only).
+export const getAdGroups = async (companyId: number, w: DateWindow): Promise<AdGroupsResponse> =>
+  (await apiClient.get<AdGroupsResponse>(`${base(companyId)}/adgroups`, {
+    params: { date_from: w.date_from, date_to: w.date_to },
+  })).data;
+
+// /analytics (GA4 + GSC) takes date_from/date_to only.
+export const getAnalytics = async (companyId: number, w: DateWindow): Promise<AnalyticsResponse> =>
+  (await apiClient.get<AnalyticsResponse>(`${base(companyId)}/analytics`, {
+    params: { date_from: w.date_from, date_to: w.date_to },
+  })).data;
+
+// /site-health (PageSpeed snapshots + trend) takes date_from/date_to only.
+export const getSiteHealth = async (companyId: number, w: DateWindow): Promise<SiteHealthResponse> =>
+  (await apiClient.get<SiteHealthResponse>(`${base(companyId)}/site-health`, {
     params: { date_from: w.date_from, date_to: w.date_to },
   })).data;
 

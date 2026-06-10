@@ -674,6 +674,48 @@ async def analytics(
             }
         )
 
+    # Top GSC pages (dimension_type='page') — same ratio-of-sums shape as queries,
+    # ordered by clicks. Position is impression-weighted (A5).
+    gsc_page_rows = (
+        await session.execute(
+            select(
+                AnalyticsDaily.dimension_value,
+                func.coalesce(func.sum(AnalyticsDaily.clicks), 0),
+                func.coalesce(func.sum(AnalyticsDaily.impressions), 0),
+                func.coalesce(
+                    func.sum(
+                        func.cast(AnalyticsDaily.position, Numeric(18, 6))
+                        * func.cast(AnalyticsDaily.impressions, Numeric(18, 6))
+                    ),
+                    0,
+                ),
+            )
+            .where(
+                AnalyticsDaily.company_id == company_id,
+                AnalyticsDaily.source == "gsc",
+                AnalyticsDaily.dimension_type == "page",
+                AnalyticsDaily.date >= date_from,
+                AnalyticsDaily.date <= date_to,
+            )
+            .group_by(AnalyticsDaily.dimension_value)
+            .order_by(func.coalesce(func.sum(AnalyticsDaily.clicks), 0).desc())
+            .limit(top_pages_limit)
+        )
+    ).all()
+    gsc_pages = []
+    for dim, clicks, impressions, pos_weighted in gsc_page_rows:
+        cl = _int(clicks)
+        imp = _int(impressions)
+        gsc_pages.append(
+            {
+                "page": dim,
+                "clicks": cl,
+                "impressions": imp,
+                "ctr": _ratio(cl, imp),
+                "position": _ratio(pos_weighted, imp),
+            }
+        )
+
     return {
         "ga4_totals": ga4_totals,
         "ga4_series": ga4_series,
@@ -681,8 +723,9 @@ async def analytics(
         "top_pages": top_pages,
         "gsc_totals": gsc_totals,
         "gsc_queries": gsc_queries,
+        "gsc_pages": gsc_pages,
         "ga4_configured": sessions > 0 or bool(ga4_series),
-        "gsc_configured": gsc_impressions > 0 or bool(gsc_queries),
+        "gsc_configured": gsc_impressions > 0 or bool(gsc_queries) or bool(gsc_pages),
     }
 
 

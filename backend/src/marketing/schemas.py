@@ -257,6 +257,14 @@ class GscQuery(BaseModel):
     position: Decimal | None = None
 
 
+class GscPage(BaseModel):
+    page: str
+    clicks: int
+    impressions: int
+    ctr: Decimal | None = None
+    position: Decimal | None = None
+
+
 class AnalyticsResponse(BaseModel):
     timeframe: Timeframe
     data_trust: DataTrust
@@ -265,9 +273,10 @@ class AnalyticsResponse(BaseModel):
     ga4_totals: Ga4Totals | None = None
     ga4_series: list[Ga4SeriesPoint] = []
     traffic_sources: list[TrafficSource] = []
-    top_pages: list[TopPage] = []
+    top_pages: list[TopPage] = []  # GA4 top pages (sessions/users)
     gsc_totals: GscTotals | None = None
     gsc_queries: list[GscQuery] = []
+    gsc_pages: list[GscPage] = []  # GSC top pages (clicks/impressions/position)
 
 
 # ── /site-health ─────────────────────────────────────────────────────────────

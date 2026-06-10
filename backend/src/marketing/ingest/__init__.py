@@ -173,21 +173,26 @@ async def _sync_ga4(
 ) -> int:
     client = _google_seam(connection, http_client)
     cid, company = connection.id, connection.company_id
+    prop = connection.external_account_id
     total = await ga4.fetch_ga4_total(
-        client, property_id=connection.external_account_id, window_start=window_start, window_end=window_end
+        client, property_id=prop, window_start=window_start, window_end=window_end
     )
     channels = await ga4.fetch_ga4_channels(
-        client, property_id=connection.external_account_id, window_start=window_start, window_end=window_end
+        client, property_id=prop, window_start=window_start, window_end=window_end
     )
-    for shape, payload in (("total", total), ("channel", channels)):
+    # Phase 3: date × pagePath → dimension_type='page' (top-pages panel).
+    pages = await ga4.fetch_ga4_pages(
+        client, property_id=prop, window_start=window_start, window_end=window_end
+    )
+    analytics: list[Any] = []
+    for shape, payload in (("total", total), ("channel", channels), ("page", pages)):
         await warehouse.insert_raw_payload(
             session, connection_id=cid, platform="ga4", endpoint=f"runReport:{shape}",
             window_start=window_start, window_end=window_end,
-            request_fingerprint=f"ga4:{shape}:{connection.external_account_id}:{window_start}:{window_end}",
+            request_fingerprint=f"ga4:{shape}:{prop}:{window_start}:{window_end}",
             payload=payload,
         )
-    analytics = ga4.map_ga4(total, connection_id=cid, company_id=company, dimension_type="total")
-    analytics += ga4.map_ga4(channels, connection_id=cid, company_id=company, dimension_type="channel")
+        analytics += ga4.map_ga4(payload, connection_id=cid, company_id=company, dimension_type=shape)
     return await warehouse.upsert_analytics_daily(session, analytics)
 
 
@@ -196,16 +201,21 @@ async def _sync_gsc(
     run_type: str, window_start: date, window_end: date, http_client: Any | None,
 ) -> int:
     client = _google_seam(connection, http_client)
-    payload = await gsc.fetch_gsc(
-        client, site_url=connection.external_account_id, window_start=window_start, window_end=window_end
-    )
-    await warehouse.insert_raw_payload(
-        session, connection_id=connection.id, platform="gsc", endpoint="searchAnalytics:query",
-        window_start=window_start, window_end=window_end,
-        request_fingerprint=f"gsc:{connection.external_account_id}:{window_start}:{window_end}",
-        payload=payload,
-    )
-    analytics = gsc.map_gsc(payload, connection_id=connection.id, company_id=connection.company_id)
+    cid, company, site = connection.id, connection.company_id, connection.external_account_id
+    # Three dimension shapes, each its own request + landing row (Phase 3): the
+    # per-date 'total' (site totals, A11) plus per-date 'query'/'page' breakdowns.
+    analytics: list[Any] = []
+    for shape, dims in (("total", ("date",)), ("query", ("date", "query")), ("page", ("date", "page"))):
+        payload = await gsc.fetch_gsc(
+            client, site_url=site, window_start=window_start, window_end=window_end, dimensions=dims
+        )
+        await warehouse.insert_raw_payload(
+            session, connection_id=cid, platform="gsc", endpoint=f"searchAnalytics:{shape}",
+            window_start=window_start, window_end=window_end,
+            request_fingerprint=f"gsc:{shape}:{site}:{window_start}:{window_end}",
+            payload=payload,
+        )
+        analytics += gsc.map_gsc(payload, connection_id=cid, company_id=company, dimension_type=shape)
     return await warehouse.upsert_analytics_daily(session, analytics)
 
 

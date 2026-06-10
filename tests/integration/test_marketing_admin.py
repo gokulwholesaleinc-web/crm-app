@@ -222,6 +222,55 @@ class TestMetaPhaseGate:
         assert r.status_code == 422
 
 
+class TestBackfillEndpoint:
+    """POST .../connections/{id}/backfill — auth/flag/phase gates + the
+    not-backfillable short-circuit (which returns before any PG-only upsert, so it
+    runs on the SQLite harness). Chunk execution is covered by the PG driver tests."""
+
+    def _url(self, company_id: int, cid: int) -> str:
+        return f"/api/marketing/admin/companies/{company_id}/connections/{cid}/backfill"
+
+    async def test_non_admin_forbidden(self, client, auth_headers, test_company):
+        r = await client.post(self._url(test_company.id, 1), headers=auth_headers)
+        assert r.status_code == 403
+
+    async def test_dark_when_flag_off(self, client, superuser_token, test_company, monkeypatch):
+        from src.config import settings
+
+        monkeypatch.setattr(settings, "MKTG_ENABLED", False)
+        r = await client.post(self._url(test_company.id, 1), headers=_admin(superuser_token))
+        assert r.status_code == 404
+
+    async def test_cross_company_connection_404(self, client, superuser_token, test_company):
+        cid = (await _create(client, _admin(superuser_token), test_company.id)).json()["id"]
+        # a different company can't reach this connection (M-idor: structural scope)
+        r = await client.post(self._url(test_company.id + 99999, cid), headers=_admin(superuser_token))
+        assert r.status_code == 404
+
+    async def test_pagespeed_is_not_backfillable(self, client, superuser_token, test_company):
+        cid = (await _create(
+            client, _admin(superuser_token), test_company.id,
+            platform="pagespeed", external_account_id="https://www.example-client.com/",
+            access_token=None, manager_account_id=None, credential_mode="api_key",
+        )).json()["id"]
+        r = await client.post(self._url(test_company.id, cid), headers=_admin(superuser_token))
+        assert r.status_code == 200
+        body = r.json()
+        assert body["status"] == "not_backfillable" and body["chunks"] == 0
+
+    async def test_meta_backfill_blocked_when_flag_off(self, client, superuser_token, test_company, monkeypatch):
+        from src.config import settings
+
+        monkeypatch.setattr(settings, "MKTG_META_ENABLED", True)
+        cid = (await _create(
+            client, _admin(superuser_token), test_company.id,
+            platform="meta_ads", external_account_id="act_222", credential_mode="system_user",
+        )).json()["id"]
+        monkeypatch.setattr(settings, "MKTG_META_ENABLED", False)
+        r = await client.post(self._url(test_company.id, cid), headers=_admin(superuser_token))
+        assert r.status_code == 422
+
+
 def test_overall_status_never_reports_partial_as_success():
     # A drifted 'partial' run must NOT roll up to 'success' (silent-success-on-drift).
     from src.marketing.admin_router import _overall_status

@@ -608,6 +608,7 @@ class MarketingReadService:
             top_pages=data["top_pages"],
             gsc_totals=data["gsc_totals"] if data["gsc_configured"] else None,
             gsc_queries=data["gsc_queries"],
+            gsc_pages=data["gsc_pages"],
         )
 
     # ── /site-health ──────────────────────────────────────────────────────────
