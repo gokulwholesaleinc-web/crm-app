@@ -84,6 +84,9 @@ ALERT_TYPES = (
     "paused_still_spending",
     "stale_sync",
 )
+# Organic-social platforms (Phase 4). IG + FB are wired; tiktok/linkedin are
+# enum-valid but have no ingest handler yet (App-Review-gated human work).
+SOCIAL_PLATFORMS = ("instagram", "facebook", "tiktok", "linkedin")
 
 
 def _in(column: str, values: tuple[str, ...]) -> str:
@@ -391,6 +394,41 @@ class SiteHealthSnapshot(Base):
         ),
         CheckConstraint(_in("strategy", PAGESPEED_STRATEGIES), name="strategy"),
         Index("ix_site_health_snapshots_company_date", "company_id", "captured_date"),
+    )
+
+
+class SocialDailyMetric(Base, TimestampMixin):
+    """Organic-social daily metric (Phase 4) — generic long-format so IG/FB (and,
+    later, TikTok/LinkedIn) share ONE fact table without a per-platform schema
+    change. One row per ``(connection, date, platform, metric_key)``; ``value`` is
+    ``Numeric`` (follower counts, reach, impressions, views, engagement — never a
+    derived ratio). Restated idempotently by the daily re-fetch like the other
+    facts. Platform insights (Graph API) are the source; mappers land them pure."""
+
+    __tablename__ = "social_daily_metrics"
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer(), "sqlite"), primary_key=True
+    )
+    connection_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("platform_connections.id", ondelete="CASCADE", name="fk_social_daily_metrics_connection_id"),
+        nullable=False,
+    )
+    company_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    platform: Mapped[str] = mapped_column(String(32), nullable=False)
+    date: Mapped[date] = mapped_column(Date, nullable=False)
+    metric_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    value: Mapped[float] = mapped_column(Numeric(20, 4), nullable=False, server_default="0")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "connection_id", "date", "platform", "metric_key",
+            name="uq_social_daily_metrics_grain",
+            postgresql_nulls_not_distinct=True,
+        ),
+        CheckConstraint(_in("platform", SOCIAL_PLATFORMS), name="platform"),
+        Index("ix_social_daily_metrics_company_platform_date", "company_id", "platform", "date"),
     )
 
 

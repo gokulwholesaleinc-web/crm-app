@@ -40,6 +40,7 @@ from .models import (
     MarketingSyncRun,
     PlatformConnection,
     SiteHealthSnapshot,
+    SocialDailyMetric,
 )
 from .money import q6
 
@@ -730,6 +731,77 @@ async def analytics(
 
 
 # ════════════════════════════════════════════════════════════════════════════
+# Organic social (Phase 4) — generic long-format per platform
+# ════════════════════════════════════════════════════════════════════════════
+async def social(
+    session: AsyncSession,
+    company_id: int,
+    date_from: date,
+    date_to: date,
+) -> dict:
+    """Organic-social metrics from ``social_daily_metrics``, grouped per platform.
+
+    Generic over ``metric_key`` (so IG/FB — and later TikTok/LinkedIn — need no read
+    change): for each platform, each metric carries its daily series (date-asc) plus
+    its ``latest`` value (the most recent day in the window). Values are raw measures
+    (follower counts / reach / views / engagement), never derived ratios.
+
+    Aggregated per ``(platform, metric_key, date)`` with ``SUM`` so a company holding
+    more than one account of the same platform (two IG business accounts) yields ONE
+    deterministic point per day (the total across its accounts) instead of duplicate
+    same-date points + a nondeterministic ``latest`` — consistent with how every
+    other read collapses across connections.
+    """
+    rows = (
+        await session.execute(
+            select(
+                SocialDailyMetric.platform,
+                SocialDailyMetric.metric_key,
+                SocialDailyMetric.date,
+                func.coalesce(func.sum(SocialDailyMetric.value), 0),
+            )
+            .where(
+                SocialDailyMetric.company_id == company_id,
+                SocialDailyMetric.date >= date_from,
+                SocialDailyMetric.date <= date_to,
+            )
+            .group_by(
+                SocialDailyMetric.platform,
+                SocialDailyMetric.metric_key,
+                SocialDailyMetric.date,
+            )
+            .order_by(
+                SocialDailyMetric.platform,
+                SocialDailyMetric.metric_key,
+                SocialDailyMetric.date,
+            )
+        )
+    ).all()
+
+    grouped: dict[str, dict[str, list[dict]]] = {}
+    for platform, metric_key, d, value in rows:
+        grouped.setdefault(platform, {}).setdefault(metric_key, []).append(
+            {"date": d, "value": q6(value or 0)}
+        )
+
+    platforms: list[dict] = []
+    for platform in sorted(grouped):
+        metrics = grouped[platform]
+        metric_list = [
+            {
+                "metric_key": metric_key,
+                # series is date-ascending → the last point is the latest day.
+                "latest": series[-1]["value"] if series else None,
+                "series": series,
+            }
+            for metric_key, series in sorted(metrics.items())
+        ]
+        platforms.append({"platform": platform, "configured": True, "metrics": metric_list})
+
+    return {"platforms": platforms}
+
+
+# ════════════════════════════════════════════════════════════════════════════
 # Site Health — latest snapshots + trend
 # ════════════════════════════════════════════════════════════════════════════
 async def site_health(
@@ -1057,6 +1129,7 @@ __all__ = [
     "campaigns",
     "adgroups",
     "analytics",
+    "social",
     "site_health",
     "breakdown",
     "budget_pacing",

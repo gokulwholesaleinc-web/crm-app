@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
 
+from .ingest import SUPPORTED_PLATFORMS
 from .models import MarketingAlert, PlatformConnection
 
 logger = logging.getLogger(__name__)
@@ -98,9 +99,17 @@ async def detect_stale_syncs(
     for conn in conns:
         if conn.status in _SKIP_STATUSES:
             continue
-        # A phase-gated platform (meta_ads while MKTG_META_ENABLED is off) is dark by
-        # design — the scheduler never syncs it, so don't flag it as a stuck source.
+        # A platform with no ingest handler (tiktok/linkedin — enum-valid but unwired)
+        # can never sync, so a stale_sync alert would fire forever with no recovery
+        # path. Skip anything not actually ingestible.
+        if conn.platform not in SUPPORTED_PLATFORMS:
+            continue
+        # A phase-gated platform (meta_ads behind MKTG_META_ENABLED, organic social
+        # behind MKTG_SOCIAL_ENABLED) is dark by design — the scheduler never syncs
+        # it, so don't flag it as a stuck source.
         if conn.platform == "meta_ads" and not settings.MKTG_META_ENABLED:
+            continue
+        if conn.platform in ("instagram", "facebook") and not settings.MKTG_SOCIAL_ENABLED:
             continue
         last = conn.last_synced_at
         # Postgres returns tz-aware (DateTime(timezone=True)); the SQLite test

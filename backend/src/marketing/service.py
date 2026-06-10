@@ -50,6 +50,7 @@ from .schemas import (
     SeriesPoint,
     SeriesResponse,
     SiteHealthResponse,
+    SocialResponse,
     SyncStatusResponse,
     Timeframe,
 )
@@ -609,6 +610,32 @@ class MarketingReadService:
             gsc_totals=data["gsc_totals"] if data["gsc_configured"] else None,
             gsc_queries=data["gsc_queries"],
             gsc_pages=data["gsc_pages"],
+        )
+
+    # ── /social (organic IG/FB) ─────────────────────────────────────────────────
+    async def social(
+        self, company_id: int, date_from: date, date_to: date
+    ) -> SocialResponse:
+        key = cache.make_key(
+            company_id=company_id,
+            endpoint="social",
+            date_from=date_from,
+            date_to=date_to,
+        )
+        return await cache.get_or_compute(
+            key, lambda: self._social_uncached(company_id, date_from, date_to)
+        )
+
+    async def _social_uncached(
+        self, company_id: int, date_from: date, date_to: date
+    ) -> SocialResponse:
+        data = await reads.social(self.db, company_id, date_from, date_to)
+        return SocialResponse(
+            timeframe=Timeframe(date_from=date_from, date_to=date_to),
+            data_trust=await self._data_trust(
+                company_id, is_provisional=True, withheld_reason=None
+            ),
+            platforms=data["platforms"],
         )
 
     # ── /site-health ──────────────────────────────────────────────────────────

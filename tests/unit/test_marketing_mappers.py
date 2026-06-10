@@ -438,6 +438,124 @@ class TestGscMapper:
         assert len(rows[0].dimension_value) == 512
 
 
+# ── Social (organic IG/FB) ────────────────────────────────────────────────────
+class TestSocialMapper:
+    def test_maps_insights_to_per_metric_per_date_rows(self):
+        from src.marketing.ingest import social
+
+        rows = social.map_social_insights(
+            _load("instagram_insights.json"), connection_id=3, company_id=7, platform="instagram"
+        )
+        # 3 metrics × 2 days = 6 rows; all tagged with the platform.
+        assert len(rows) == 6
+        assert all(r.platform == "instagram" and r.connection_id == 3 for r in rows)
+        # follower_count is per-date (the daily series), latest day = 5412.
+        fc = sorted((r for r in rows if r.metric_key == "follower_count"), key=lambda r: r.date)
+        assert [r.date for r in fc] == [date(2026, 6, 2), date(2026, 6, 3)]
+        assert fc[-1].value == Decimal("5412")
+
+    def test_facebook_metrics_map(self):
+        from src.marketing.ingest import social
+
+        rows = social.map_social_insights(
+            _load("facebook_insights.json"), connection_id=4, company_id=7, platform="facebook"
+        )
+        assert {r.metric_key for r in rows} == {
+            "page_impressions_unique", "page_post_engagements", "page_fans", "page_views_total"
+        }
+
+    def test_missing_data_envelope_raises_drift(self):
+        from src.marketing.ingest import social
+        from src.marketing.ingest.http_client import UnmappableShapeError
+
+        with pytest.raises(UnmappableShapeError):
+            social.map_social_insights(
+                {"error": {"code": 190}}, connection_id=3, company_id=7, platform="instagram"
+            )
+
+    def test_skips_breakdown_shaped_values(self):
+        from src.marketing.ingest import social
+
+        payload = {
+            "data": [
+                {"name": "reach", "period": "day", "values": [
+                    {"value": {"city": 5}, "end_time": "2026-06-02T07:00:00+0000"},  # breakdown dict → skipped
+                    {"value": 100, "end_time": "2026-06-03T07:00:00+0000"},
+                ]},
+            ]
+        }
+        rows = social.map_social_insights(payload, connection_id=3, company_id=7, platform="instagram")
+        assert len(rows) == 1 and rows[0].value == Decimal("100")
+
+    def test_empty_data_returns_empty(self):
+        from src.marketing.ingest import social
+
+        assert social.map_social_insights(
+            {"data": []}, connection_id=3, company_id=7, platform="instagram"
+        ) == []
+
+    def test_renamed_values_key_raises_drift(self):
+        # CRITICAL-1: a Graph rename ('values' → 'value') is drift, not no-data — it
+        # must raise rather than silently emit zero rows + a green success.
+        from src.marketing.ingest import social
+        from src.marketing.ingest.http_client import UnmappableShapeError
+
+        payload = {
+            "data": [
+                {"name": "reach", "period": "day", "value": [{"value": 5, "end_time": "2026-06-02T07:00:00+0000"}]}
+            ]
+        }
+        with pytest.raises(UnmappableShapeError):
+            social.map_social_insights(payload, connection_id=3, company_id=7, platform="instagram")
+
+    def test_scalar_value_missing_end_time_raises_drift(self):
+        from src.marketing.ingest import social
+        from src.marketing.ingest.http_client import UnmappableShapeError
+
+        payload = {"data": [{"name": "reach", "period": "day", "values": [{"value": 5}]}]}  # no end_time
+        with pytest.raises(UnmappableShapeError):
+            social.map_social_insights(payload, connection_id=3, company_id=7, platform="instagram")
+
+    def test_empty_values_list_is_no_data_not_drift(self):
+        # an empty values list is legitimate no-data (E5) → no row, no raise.
+        from src.marketing.ingest import social
+
+        payload = {"data": [{"name": "reach", "period": "day", "values": []}]}
+        assert social.map_social_insights(payload, connection_id=3, company_id=7, platform="instagram") == []
+
+
+class TestSocialFetch:
+    class _Seam:
+        def __init__(self, payload):
+            self._p = payload
+
+        async def get(self, url, params=None):
+            return self._p
+
+        async def post(self, url, params=None):  # pragma: no cover - unused
+            return {}
+
+    async def test_fetch_raises_on_error_envelope(self):
+        # Fetch-boundary drift guard: an error/renamed envelope raises before landing.
+        from src.marketing.ingest import social
+        from src.marketing.ingest.http_client import UnmappableShapeError
+
+        with pytest.raises(UnmappableShapeError):
+            await social.fetch_social_insights(
+                self._Seam({"error": {"code": 190}}), object_id="1", metrics=("reach",),
+                window_start=date(2026, 6, 1), window_end=date(2026, 6, 2), platform="instagram",
+            )
+
+    async def test_fetch_returns_payload_on_valid_data(self):
+        from src.marketing.ingest import social
+
+        out = await social.fetch_social_insights(
+            self._Seam({"data": []}), object_id="1", metrics=("reach",),
+            window_start=date(2026, 6, 1), window_end=date(2026, 6, 2), platform="instagram",
+        )
+        assert out == {"data": []}
+
+
 # ── PageSpeed ────────────────────────────────────────────────────────────────
 class TestPageSpeedMapper:
     def test_scores_scaled_0_100(self):

@@ -44,6 +44,7 @@ _MARKETING_TABLES = (
     "budget_periods",
     "marketing_credential_audit",
     "marketing_sync_runs",
+    "social_daily_metrics",
     "site_health_snapshots",
     "analytics_daily",
     "ads_daily_metrics",

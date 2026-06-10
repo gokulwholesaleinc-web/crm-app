@@ -265,6 +265,30 @@ export interface AnalyticsResponse {
   gsc_pages: GscPage[]; // GSC top pages (clicks/impressions/position)
 }
 
+// ── /social (organic IG/FB) ───────────────────────────────────────────────────
+export interface SocialSeriesPoint {
+  date: string;
+  value: Numish;
+}
+
+export interface SocialMetric {
+  metric_key: string;
+  latest: Numish; // most recent day in the window (null if no data)
+  series: SocialSeriesPoint[];
+}
+
+export interface SocialPlatform {
+  platform: string; // instagram | facebook
+  configured: boolean;
+  metrics: SocialMetric[];
+}
+
+export interface SocialResponse {
+  timeframe: Timeframe;
+  data_trust: DataTrust;
+  platforms: SocialPlatform[];
+}
+
 // ── /site-health (PageSpeed) ──────────────────────────────────────────────────
 export interface SiteHealthSnapshotOut {
   url: string;
@@ -366,6 +390,12 @@ export const getAnalytics = async (companyId: number, w: DateWindow): Promise<An
 // /site-health (PageSpeed snapshots + trend) takes date_from/date_to only.
 export const getSiteHealth = async (companyId: number, w: DateWindow): Promise<SiteHealthResponse> =>
   (await apiClient.get<SiteHealthResponse>(`${base(companyId)}/site-health`, {
+    params: { date_from: w.date_from, date_to: w.date_to },
+  })).data;
+
+// /social (organic Instagram + Facebook) takes date_from/date_to only.
+export const getSocial = async (companyId: number, w: DateWindow): Promise<SocialResponse> =>
+  (await apiClient.get<SocialResponse>(`${base(companyId)}/social`, {
     params: { date_from: w.date_from, date_to: w.date_to },
   })).data;
 

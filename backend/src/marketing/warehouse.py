@@ -39,8 +39,16 @@ from .models import (
     MarketingCampaign,
     MarketingRawPayload,
     SiteHealthSnapshot,
+    SocialDailyMetric,
 )
-from .rows import AdGroupDimRow, AdsDailyRow, AnalyticsDailyRow, CampaignDimRow, SiteHealthRow
+from .rows import (
+    AdGroupDimRow,
+    AdsDailyRow,
+    AnalyticsDailyRow,
+    CampaignDimRow,
+    SiteHealthRow,
+    SocialDailyRow,
+)
 
 # Advisory-lock namespace (int4) — keeps marketing's per-connection locks from
 # colliding with any other advisory-lock user (e.g. a future scheduler singleton).
@@ -145,6 +153,17 @@ async def upsert_analytics_daily(session: AsyncSession, rows: Iterable[Analytics
         grain=("connection_id", "date", "source", "dimension_type", "dimension_value"),
         constraint="uq_analytics_daily_grain",
         measures=_ANALYTICS_MEASURES,
+    )
+
+
+async def upsert_social_daily(session: AsyncSession, rows: Iterable[SocialDailyRow]) -> int:
+    """Restate ``social_daily_metrics`` at its ``(connection, date, platform,
+    metric_key)`` grain (Phase 4)."""
+    return await _upsert(
+        session, SocialDailyMetric, rows,
+        grain=("connection_id", "date", "platform", "metric_key"),
+        constraint="uq_social_daily_metrics_grain",
+        measures=("value",),
     )
 
 

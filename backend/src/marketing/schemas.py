@@ -279,6 +279,30 @@ class AnalyticsResponse(BaseModel):
     gsc_pages: list[GscPage] = []  # GSC top pages (clicks/impressions/position)
 
 
+# ── /social (organic IG/FB) ──────────────────────────────────────────────────
+class SocialSeriesPoint(BaseModel):
+    date: date
+    value: Decimal
+
+
+class SocialMetric(BaseModel):
+    metric_key: str
+    latest: Decimal | None = None  # most recent day in the window (None if no data)
+    series: list[SocialSeriesPoint] = []
+
+
+class SocialPlatform(BaseModel):
+    platform: str  # instagram | facebook (tiktok/linkedin enum-valid but unwired)
+    configured: bool = False
+    metrics: list[SocialMetric] = []
+
+
+class SocialResponse(BaseModel):
+    timeframe: Timeframe
+    data_trust: DataTrust
+    platforms: list[SocialPlatform] = []
+
+
 # ── /site-health ─────────────────────────────────────────────────────────────
 class SiteHealthSnapshotOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)

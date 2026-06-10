@@ -56,6 +56,9 @@ def _allowed_platforms() -> set[str]:
     allowed = set(SUPPORTED_PLATFORMS)
     if not settings.MKTG_META_ENABLED:
         allowed.discard("meta_ads")
+    if not settings.MKTG_SOCIAL_ENABLED:
+        allowed.discard("instagram")
+        allowed.discard("facebook")
     return allowed
 
 

@@ -271,6 +271,33 @@ class TestBackfillEndpoint:
         assert r.status_code == 422
 
 
+class TestSocialPhaseGate:
+    """instagram/facebook admin actions stay dark behind MKTG_SOCIAL_ENABLED (App-Review gated)."""
+
+    async def test_create_social_blocked_when_flag_off(self, client, superuser_token, test_company, monkeypatch):
+        from src.config import settings
+
+        monkeypatch.setattr(settings, "MKTG_SOCIAL_ENABLED", False)
+        r = await _create(
+            client, _admin(superuser_token), test_company.id,
+            platform="instagram", external_account_id="17841400000000000",
+            credential_mode="system_user", manager_account_id=None,
+        )
+        assert r.status_code == 422
+
+    async def test_create_social_allowed_when_flag_on(self, client, superuser_token, test_company, monkeypatch):
+        from src.config import settings
+
+        monkeypatch.setattr(settings, "MKTG_SOCIAL_ENABLED", True)
+        r = await _create(
+            client, _admin(superuser_token), test_company.id,
+            platform="facebook", external_account_id="1234567890",
+            credential_mode="system_user", manager_account_id=None,
+        )
+        assert r.status_code == 201
+        assert r.json()["platform"] == "facebook"
+
+
 def test_overall_status_never_reports_partial_as_success():
     # A drifted 'partial' run must NOT roll up to 'success' (silent-success-on-drift).
     from src.marketing.admin_router import _overall_status

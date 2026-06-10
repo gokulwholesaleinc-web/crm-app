@@ -43,6 +43,7 @@ from .models import (
     MarketingSyncRun,
     PlatformConnection,
     SiteHealthSnapshot,
+    SocialDailyMetric,
 )
 
 # Warehouse data tables purged on disconnect (E7) — facts, landing + dims. Audit,
@@ -51,6 +52,7 @@ _PURGE_MODELS = (
     AdsDailyMetric,
     AnalyticsDaily,
     SiteHealthSnapshot,
+    SocialDailyMetric,
     MarketingRawPayload,
     MarketingCampaign,
     MarketingAdGroup,
@@ -181,6 +183,11 @@ def _require_platform_enabled(platform: str) -> None:
         raise HTTPException(
             HTTPStatus.UNPROCESSABLE_ENTITY,
             "meta_ads is not enabled yet (MKTG_META_ENABLED is off)",
+        )
+    if platform in ("instagram", "facebook") and not settings.MKTG_SOCIAL_ENABLED:
+        raise HTTPException(
+            HTTPStatus.UNPROCESSABLE_ENTITY,
+            f"{platform} is not enabled yet (MKTG_SOCIAL_ENABLED is off)",
         )
 
 

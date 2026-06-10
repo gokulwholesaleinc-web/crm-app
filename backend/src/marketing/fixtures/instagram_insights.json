@@ -1,0 +1,29 @@
+{
+  "data": [
+    {
+      "name": "reach",
+      "period": "day",
+      "values": [
+        { "value": 1200, "end_time": "2026-06-02T07:00:00+0000" },
+        { "value": 1350, "end_time": "2026-06-03T07:00:00+0000" }
+      ]
+    },
+    {
+      "name": "profile_views",
+      "period": "day",
+      "values": [
+        { "value": 80, "end_time": "2026-06-02T07:00:00+0000" },
+        { "value": 95, "end_time": "2026-06-03T07:00:00+0000" }
+      ]
+    },
+    {
+      "name": "follower_count",
+      "period": "day",
+      "values": [
+        { "value": 5400, "end_time": "2026-06-02T07:00:00+0000" },
+        { "value": 5412, "end_time": "2026-06-03T07:00:00+0000" }
+      ]
+    }
+  ],
+  "paging": { "previous": "https://graph.facebook.com/v25.0/x", "next": "https://graph.facebook.com/v25.0/y" }
+}
