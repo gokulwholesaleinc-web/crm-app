@@ -5,6 +5,7 @@ from collections.abc import Callable
 from typing import Any
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler  # pyright: ignore[reportMissingImports]
+from apscheduler.triggers.cron import CronTrigger  # pyright: ignore[reportMissingImports]
 from apscheduler.triggers.interval import IntervalTrigger  # pyright: ignore[reportMissingImports]
 
 import src.database as db_module
@@ -68,6 +69,14 @@ async def _sync_google_calendars():
             logger.exception("[google_calendar_sync] user_id=%s error", credential.user_id)
 
 
+async def _sync_marketing_daily():
+    # Lazy import so the marketing module graph isn't loaded at scheduler import.
+    # The hook is internally gated by MKTG_ENABLED (no-op when the feature is dark).
+    from src.marketing.scheduler_hook import run_daily_marketing_sync
+
+    await run_daily_marketing_sync()
+
+
 async def _background_tick():
     # Single periodic wakeup runs all four handlers sequentially so Neon's
     # compute only has to come out of autosuspend once per interval.
@@ -105,6 +114,18 @@ def start_scheduler():
         replace_existing=True,
         coalesce=True,
         max_instances=1,
+    )
+    # Marketing ingest runs on its OWN daily cron (D1), not the 90-min tick which
+    # would re-pull 16×/day. ~09:00 UTC so "yesterday" is final across US zones;
+    # misfire_grace_time means a deploy spanning the fire time still runs the day.
+    scheduler.add_job(
+        _sync_marketing_daily,
+        trigger=CronTrigger(hour=9, minute=0),
+        id="marketing_daily",
+        replace_existing=True,
+        coalesce=True,
+        max_instances=1,
+        misfire_grace_time=3600,
     )
     # Contract lifecycle cron unregistered 2026-05-14 — contracts router
     # unmounted. The service module is preserved as dead code under

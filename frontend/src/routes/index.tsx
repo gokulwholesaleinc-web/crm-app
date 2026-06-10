@@ -63,6 +63,7 @@ const CampaignDetailPage = lazy(() => import('../features/campaigns/CampaignDeta
 
 // Reports
 const ReportsPage = lazy(() => import('../features/reports/ReportsPage'));
+const ReportingPage = lazy(() => import('../features/marketing/ReportingPage'));
 
 // Import/Export
 const ImportExportPage = lazy(() => import('../features/import-export/ImportExportPage'));
@@ -138,6 +139,18 @@ function AppRoutes() {
           <PrivateRoute>
             <ErrorBoundary>
               <ContactDetailPage />
+            </ErrorBoundary>
+          </PrivateRoute>
+        }
+      />
+
+      {/* Marketing Analytics (per-client reporting workspace) */}
+      <Route
+        path="/reporting"
+        element={
+          <PrivateRoute>
+            <ErrorBoundary>
+              <ReportingPage />
             </ErrorBoundary>
           </PrivateRoute>
         }

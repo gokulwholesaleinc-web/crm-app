@@ -172,7 +172,9 @@ class TestSchedulerConsolidation:
         try:
             job_ids = {j.id for j in scheduler.get_jobs()}
             # `contract_lifecycle` retired 2026-05-14 with the Contracts module.
-            assert job_ids == {"background_tick", "gmail_sync"}, (
+            # `marketing_daily` added with the in-CRM Marketing Analytics feature —
+            # a dedicated daily cron (NOT folded into the 90-min tick, D1).
+            assert job_ids == {"background_tick", "gmail_sync", "marketing_daily"}, (
                 f"unexpected scheduler jobs: {job_ids}"
             )
 
@@ -185,6 +187,13 @@ class TestSchedulerConsolidation:
             assert gmail.trigger.interval.total_seconds() == GMAIL_SYNC_INTERVAL_SECONDS
             assert gmail.coalesce is True
             assert gmail.max_instances == 1
+
+            # Marketing ingest runs on its own daily cron with a misfire grace so a
+            # deploy spanning the fire time still runs the day (D1).
+            mktg = scheduler.get_job("marketing_daily")
+            assert mktg.coalesce is True
+            assert mktg.max_instances == 1
+            assert mktg.misfire_grace_time == 3600
         finally:
             if not was_running:
                 stop_scheduler()

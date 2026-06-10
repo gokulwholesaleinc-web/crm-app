@@ -1,0 +1,44 @@
+{
+  "captchaResult": "CAPTCHA_NOT_NEEDED",
+  "kind": "pagespeedonline#result",
+  "id": "https://www.example-client.com/",
+  "lighthouseResult": {
+    "requestedUrl": "https://www.example-client.com/",
+    "finalUrl": "https://www.example-client.com/",
+    "lighthouseVersion": "12.2.1",
+    "fetchTime": "2026-06-02T06:14:33.000Z",
+    "categories": {
+      "performance": { "id": "performance", "title": "Performance", "score": 0.74 },
+      "accessibility": { "id": "accessibility", "title": "Accessibility", "score": 0.92 },
+      "seo": { "id": "seo", "title": "SEO", "score": 1.0 },
+      "best-practices": { "id": "best-practices", "title": "Best Practices", "score": 0.96 }
+    },
+    "audits": {
+      "largest-contentful-paint": {
+        "id": "largest-contentful-paint",
+        "title": "Largest Contentful Paint",
+        "displayValue": "2.4 s",
+        "numericValue": 2412.0,
+        "numericUnit": "millisecond",
+        "score": 0.78
+      },
+      "cumulative-layout-shift": {
+        "id": "cumulative-layout-shift",
+        "title": "Cumulative Layout Shift",
+        "displayValue": "0.04",
+        "numericValue": 0.041,
+        "numericUnit": "unitless",
+        "score": 0.99
+      },
+      "interaction-to-next-paint": {
+        "id": "interaction-to-next-paint",
+        "title": "Interaction to Next Paint",
+        "displayValue": "186 ms",
+        "numericValue": 186.0,
+        "numericUnit": "millisecond",
+        "score": 0.86
+      }
+    }
+  },
+  "analysisUTCTimestamp": "2026-06-02T06:14:33.000Z"
+}

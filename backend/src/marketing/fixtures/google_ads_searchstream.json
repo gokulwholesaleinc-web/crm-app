@@ -1,0 +1,84 @@
+{
+  "batches": [
+    {
+      "results": [
+        {
+          "campaign": {
+            "resourceName": "customers/1234567890/campaigns/111",
+            "id": "111",
+            "name": "Brand Search",
+            "status": "ENABLED"
+          },
+          "adGroup": {
+            "resourceName": "customers/1234567890/adGroups/911",
+            "id": "911",
+            "name": "Brand Exact",
+            "status": "ENABLED"
+          },
+          "metrics": {
+            "costMicros": "5000000",
+            "impressions": "1200",
+            "clicks": "80",
+            "conversions": 3.5,
+            "conversionsValue": 420.75
+          },
+          "segments": {
+            "date": "2026-06-01"
+          }
+        },
+        {
+          "campaign": {
+            "resourceName": "customers/1234567890/campaigns/111",
+            "id": "111",
+            "name": "Brand Search",
+            "status": "ENABLED"
+          },
+          "adGroup": {
+            "resourceName": "customers/1234567890/adGroups/912",
+            "id": "912",
+            "name": "Brand Phrase",
+            "status": "PAUSED"
+          },
+          "metrics": {
+            "costMicros": "2500000",
+            "impressions": "640",
+            "clicks": "20",
+            "conversions": 1.0,
+            "conversionsValue": 95.0
+          },
+          "segments": {
+            "date": "2026-06-01"
+          }
+        }
+      ]
+    },
+    {
+      "results": [
+        {
+          "campaign": {
+            "resourceName": "customers/1234567890/campaigns/222",
+            "id": "222",
+            "name": "Generic Prospecting",
+            "status": "REMOVED"
+          },
+          "adGroup": {
+            "resourceName": "customers/1234567890/adGroups/921",
+            "id": "921",
+            "name": "Generic Broad",
+            "status": "ENABLED"
+          },
+          "metrics": {
+            "costMicros": "10250000",
+            "impressions": "5400",
+            "clicks": "210",
+            "conversions": 6.25,
+            "conversionsValue": 0.0
+          },
+          "segments": {
+            "date": "2026-06-01"
+          }
+        }
+      ]
+    }
+  ]
+}
