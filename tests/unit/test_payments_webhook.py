@@ -382,6 +382,54 @@ class TestHandleInvoicePaid:
         assert new_payment.amount == Decimal("29.99")
 
     @pytest.mark.asyncio
+    async def test_subscription_renewal_skips_on_customer_mismatch(
+        self,
+        db_session: AsyncSession,
+        payment_service: PaymentService,
+        test_user: User,
+    ):
+        """A renewal invoice whose customer disagrees with the subscription's
+        is acked and SKIPPED — never raised. Raising surfaces as HTTP 400
+        before the dedup row is written, so Stripe would redeliver the same
+        permanently-mismatched event for days."""
+        subscription_customer = StripeCustomer(
+            stripe_customer_id="cus_renewal_sub_owner",
+            email="subscription-owner@example.com",
+            name="Subscription Owner",
+        )
+        invoice_customer = StripeCustomer(
+            stripe_customer_id="cus_renewal_invoice_other",
+            email="invoice-other@example.com",
+            name="Invoice Other",
+        )
+        db_session.add_all([subscription_customer, invoice_customer])
+        await db_session.flush()
+
+        sub = Subscription(
+            stripe_subscription_id="sub_renewal_mismatch",
+            customer_id=subscription_customer.id,
+            status="active",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(sub)
+        await db_session.commit()
+
+        handled = await payment_service._handle_invoice_paid({
+            "id": "in_renewal_mismatch",
+            "subscription": "sub_renewal_mismatch",
+            "customer": "cus_renewal_invoice_other",
+            "amount_paid": 2999,
+            "currency": "usd",
+        })
+        assert handled is None
+
+        result = await db_session.execute(
+            select(Payment).where(Payment.stripe_invoice_id == "in_renewal_mismatch")
+        )
+        assert result.scalar_one_or_none() is None
+
+    @pytest.mark.asyncio
     async def test_unknown_customer_and_subscription_drops_silently(
         self,
         db_session: AsyncSession,
@@ -542,6 +590,58 @@ class TestHandleSubscriptionCreated:
         assert sub is not None
         assert sub.status == "active"
         assert sub.customer_id == customer.id
+
+    @pytest.mark.asyncio
+    async def test_owner_not_derived_from_soft_deleted_contact(
+        self,
+        db_session: AsyncSession,
+        payment_service: PaymentService,
+        test_user: User,
+    ):
+        """Gap (c): the webhook must not resurrect a soft-deleted contact as
+        the owner of a newly inserted Subscription row."""
+        from src.contacts.models import Contact
+
+        dead_contact = Contact(
+            first_name="Dead",
+            last_name="Contact",
+            email="dead-contact@example.com",
+            status="active",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+            deleted_at=datetime.now(UTC),
+        )
+        db_session.add(dead_contact)
+        await db_session.flush()
+
+        customer = StripeCustomer(
+            stripe_customer_id="cus_subcreate_dead_owner",
+            email="dead-owner@example.com",
+            name="Dead Owner Customer",
+            contact_id=dead_contact.id,
+        )
+        db_session.add(customer)
+        await db_session.commit()
+
+        ts_now = int(time.time())
+        await payment_service._handle_subscription_created({
+            "id": "sub_create_dead_owner",
+            "customer": "cus_subcreate_dead_owner",
+            "status": "active",
+            "cancel_at_period_end": False,
+            "current_period_start": ts_now,
+            "current_period_end": ts_now + 2592000,
+            "items": {"data": []},
+        })
+
+        result = await db_session.execute(
+            select(Subscription).where(
+                Subscription.stripe_subscription_id == "sub_create_dead_owner"
+            )
+        )
+        sub = result.scalar_one_or_none()
+        assert sub is not None
+        assert sub.owner_id is None
 
     @pytest.mark.asyncio
     async def test_unknown_customer_skips_insert(

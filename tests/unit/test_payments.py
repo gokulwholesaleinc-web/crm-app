@@ -11,7 +11,7 @@ Validates:
 import hashlib
 import hmac
 import time
-from datetime import UTC
+from datetime import UTC, datetime
 
 import pytest
 from httpx import AsyncClient
@@ -22,7 +22,7 @@ from src.companies.models import Company
 from src.contacts.models import Contact
 from src.opportunities.models import Opportunity, PipelineStage
 from src.payments.models import Payment, Price, Product, StripeCustomer, Subscription
-from src.payments.service import PaymentService
+from src.payments.service import PaymentService, StripeCustomerService
 from src.proposals.models import Proposal
 from src.roles.models import Role, UserRole
 
@@ -406,13 +406,66 @@ class TestStripeCustomer:
         guard, an admin path produces StripeCustomer rows pointing at
         tombstoned CRM entities — referential integrity hole.
         """
-        from datetime import datetime
         test_contact.deleted_at = datetime.now(UTC)
         await db_session.commit()
 
         response = await client.post(
             "/api/payments/customers/sync",
             json={"contact_id": test_contact.id},
+            headers=_token(test_superuser),
+        )
+        assert response.status_code == 404, response.text
+
+    @pytest.mark.asyncio
+    async def test_sync_customer_admin_blocked_on_merged_company(
+        self,
+        client: AsyncClient,
+        test_superuser,
+        test_user,
+        test_company,
+        db_session: AsyncSession,
+    ):
+        """Company merge tombstones must not pass the privileged sync path."""
+        survivor = Company(
+            name="Merged Company Survivor",
+            status="customer",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(survivor)
+        await db_session.flush()
+
+        test_company.status = "merged"
+        test_company.merged_into_id = survivor.id
+        await db_session.commit()
+
+        response = await client.post(
+            "/api/payments/customers/sync",
+            json={"company_id": test_company.id},
+            headers=_token(test_superuser),
+        )
+        assert response.status_code == 404, response.text
+
+    @pytest.mark.asyncio
+    async def test_invoice_rejects_customer_linked_to_soft_deleted_contact(
+        self,
+        client: AsyncClient,
+        test_superuser,
+        test_contact,
+        test_stripe_customer,
+        db_session: AsyncSession,
+    ):
+        """StripeCustomer access must fail before invoicing a tombstoned contact."""
+        test_contact.deleted_at = datetime.now(UTC)
+        await db_session.commit()
+
+        response = await client.post(
+            "/api/payments/invoices/create-and-send",
+            json={
+                "customer_id": test_stripe_customer.id,
+                "amount": "25.00",
+                "description": "Should not invoice deleted contact",
+            },
             headers=_token(test_superuser),
         )
         assert response.status_code == 404, response.text
@@ -701,6 +754,97 @@ class TestPaymentServiceDB:
         assert customer.contact_id == test_contact.id
         assert customer.stripe_customer_id.startswith("local_")
 
+    @pytest.mark.asyncio
+    async def test_sync_customer_rejects_soft_deleted_contact_before_existing_shortcut(
+        self, db_session, test_contact,
+    ):
+        """A stale local StripeCustomer must not make a deleted contact syncable."""
+        existing = StripeCustomer(
+            stripe_customer_id="cus_deleted_contact_existing",
+            email="deleted-contact@example.com",
+            name="Deleted Contact",
+            contact_id=test_contact.id,
+        )
+        db_session.add(existing)
+        await db_session.flush()
+
+        test_contact.deleted_at = datetime.now(UTC)
+        await db_session.commit()
+
+        service = PaymentService(db_session)
+        with pytest.raises(ValueError, match=f"Contact {test_contact.id} not found"):
+            await service.sync_customer(contact_id=test_contact.id)
+
+    @pytest.mark.asyncio
+    async def test_sync_customer_rejects_merged_company_before_existing_shortcut(
+        self, db_session, test_user, test_company,
+    ):
+        """A stale local StripeCustomer must not make a merged company syncable."""
+        survivor = Company(
+            name="Service Merge Survivor",
+            status="customer",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(survivor)
+        await db_session.flush()
+
+        existing = StripeCustomer(
+            stripe_customer_id="cus_merged_company_existing",
+            email="merged-company@example.com",
+            name="Merged Company",
+            company_id=test_company.id,
+        )
+        test_company.status = "merged"
+        test_company.merged_into_id = survivor.id
+        db_session.add(existing)
+        await db_session.commit()
+
+        service = PaymentService(db_session)
+        with pytest.raises(ValueError, match=f"Company {test_company.id} not found"):
+            await service.sync_customer(company_id=test_company.id)
+
+    @pytest.mark.asyncio
+    async def test_customer_service_list_skips_soft_deleted_filter_targets(
+        self, db_session, test_user, test_contact, test_company,
+    ):
+        """Filtered customer lookup should not rediscover deleted/merged CRM targets."""
+        survivor = Company(
+            name="Customer List Merge Survivor",
+            status="customer",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        contact_customer = StripeCustomer(
+            stripe_customer_id="cus_list_deleted_contact",
+            email="list-deleted-contact@example.com",
+            name="List Deleted Contact",
+            contact_id=test_contact.id,
+        )
+        company_customer = StripeCustomer(
+            stripe_customer_id="cus_list_merged_company",
+            email="list-merged-company@example.com",
+            name="List Merged Company",
+            company_id=test_company.id,
+        )
+        db_session.add_all([survivor, contact_customer, company_customer])
+        await db_session.flush()
+
+        test_contact.deleted_at = datetime.now(UTC)
+        test_company.status = "merged"
+        test_company.merged_into_id = survivor.id
+        await db_session.commit()
+
+        service = StripeCustomerService(db_session)
+
+        contact_customers, contact_total = await service.get_list(contact_id=test_contact.id)
+        assert contact_customers == []
+        assert contact_total == 0
+
+        company_customers, company_total = await service.get_list(company_id=test_company.id)
+        assert company_customers == []
+        assert company_total == 0
+
 
 class TestCheckoutAndPaymentIntent:
     """Test checkout and payment intent creation endpoints."""
@@ -979,6 +1123,53 @@ class TestPaymentsByEntity:
         data = response.json()
         ids = [item["id"] for item in data["items"]]
         assert company_payment.id in ids
+
+    @pytest.mark.asyncio
+    async def test_filter_payments_by_soft_deleted_contact_returns_404(
+        self,
+        client: AsyncClient,
+        db_session,
+        test_superuser,
+        test_contact,
+    ):
+        """Merged-away contacts must not be valid payment-list filter targets."""
+        test_contact.deleted_at = datetime.now(UTC)
+        await db_session.commit()
+
+        response = await client.get(
+            f"/api/payments?contact_id={test_contact.id}",
+            headers=_token(test_superuser),
+        )
+        assert response.status_code == 404, response.text
+
+    @pytest.mark.asyncio
+    async def test_filter_payments_by_merged_company_returns_404(
+        self,
+        client: AsyncClient,
+        db_session,
+        test_superuser,
+        test_user,
+        test_company,
+    ):
+        """Merged-away companies must not be valid payment-list filter targets."""
+        survivor = Company(
+            name="Payment Filter Merge Survivor",
+            status="customer",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(survivor)
+        await db_session.flush()
+
+        test_company.status = "merged"
+        test_company.merged_into_id = survivor.id
+        await db_session.commit()
+
+        response = await client.get(
+            f"/api/payments?company_id={test_company.id}",
+            headers=_token(test_superuser),
+        )
+        assert response.status_code == 404, response.text
 
     @pytest.mark.asyncio
     async def test_filter_subscriptions_by_contact_id(

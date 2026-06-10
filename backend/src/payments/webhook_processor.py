@@ -46,6 +46,27 @@ def _payment_context(payment: Payment | None) -> dict | None:
     }
 
 
+def _live_owner_id(customer_row: StripeCustomer | None) -> int | None:
+    """Owner from the linked contact/company, mirroring the router-side
+    liveness rules: a soft-deleted contact (``deleted_at`` set) or a
+    merged-away company contributes nothing, so webhook-created rows never
+    resurrect a dead owner on per-user dashboards."""
+    if customer_row is None:
+        return None
+    contact = customer_row.contact
+    if contact is not None and contact.deleted_at is None and contact.owner_id:
+        return contact.owner_id
+    company = customer_row.company
+    if (
+        company is not None
+        and company.status != "merged"
+        and company.merged_into_id is None
+        and company.owner_id
+    ):
+        return company.owner_id
+    return None
+
+
 class WebhookProcessor:
     """Handles Stripe webhook signature verification and event dispatching.
 
@@ -499,12 +520,9 @@ class WebhookProcessor:
             return
 
         # Derive owner_id from the linked contact/company so admin lists
-        # still work with the new row.
-        owner_id = None
-        if customer_row.contact and customer_row.contact.owner_id:
-            owner_id = customer_row.contact.owner_id
-        elif customer_row.company and customer_row.company.owner_id:
-            owner_id = customer_row.company.owner_id
+        # still work with the new row — skipping dead links per the
+        # soft-delete rules (gap (c) of the soft-delete brief).
+        owner_id = _live_owner_id(customer_row)
 
         # Optional: resolve local Price if we happen to have one matching
         # the Stripe price id. `price_id` is now nullable (migration 003)
@@ -640,6 +658,27 @@ class WebhookProcessor:
             )
             customer_row = cust_result.scalar_one_or_none()
 
+        if (
+            subscription is not None
+            and customer_row is not None
+            and subscription.customer_id != customer_row.id
+        ):
+            # Our books disagree with Stripe's — raising here would 400 the
+            # webhook BEFORE the dedup row is written (it's recorded after
+            # all handlers run), so Stripe would redeliver a permanently
+            # mismatched event for days. Ack and skip the insert instead,
+            # same shape as the orphan drop below, and log at error level
+            # for operator follow-up.
+            logger.error(
+                "invoice.paid customer mismatch for subscription %s: invoice "
+                "customer %s does not match local customer %s — skipping "
+                "Payment insert",
+                stripe_subscription_id,
+                stripe_customer_id,
+                subscription.customer_id,
+            )
+            return None
+
         if subscription is None and customer_row is None:
             # Nothing to link to — log and drop instead of inserting an
             # orphan Payment row.
@@ -652,11 +691,10 @@ class WebhookProcessor:
         owner_id = None
         if subscription is not None:
             owner_id = subscription.owner_id
-        if owner_id is None and customer_row is not None:
-            if customer_row.contact and customer_row.contact.owner_id:
-                owner_id = customer_row.contact.owner_id
-            elif customer_row.company and customer_row.company.owner_id:
-                owner_id = customer_row.company.owner_id
+        if owner_id is None:
+            # Liveness-aware fallback (gap (c)): never derive an owner from a
+            # soft-deleted contact or merged-away company.
+            owner_id = _live_owner_id(customer_row)
 
         if owner_id is None:
             # Per-user dashboard KPIs filter by Payment.owner_id, so an

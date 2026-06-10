@@ -46,12 +46,35 @@ async def _verify_contact_access(db, contact_id: int | None, current_user) -> No
         raise_forbidden("You do not have permission to reference this contact")
 
 
+async def _verify_contact_live(db, contact_id: int | None) -> None:
+    """Raise 404 if the referenced contact is missing or soft-deleted."""
+    if contact_id is None:
+        return
+    from src.contacts.models import Contact
+
+    result = await db.execute(
+        select(Contact.id).where(
+            Contact.id == contact_id,
+            Contact.deleted_at.is_(None),
+        )
+    )
+    if result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Contact not found")
+
+
 async def _verify_company_access(db, company_id: int | None, current_user) -> None:
-    """Raise 403 if the caller cannot access the referenced company."""
+    """Raise 403/404 if the caller cannot access the referenced company."""
     if company_id is None:
         return
     from src.companies.models import Company
-    result = await db.execute(select(Company).where(Company.id == company_id))
+
+    result = await db.execute(
+        select(Company).where(
+            Company.id == company_id,
+            Company.status != "merged",
+            Company.merged_into_id.is_(None),
+        )
+    )
     company = result.scalar_one_or_none()
     if company is None:
         raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Company not found")
@@ -59,6 +82,23 @@ async def _verify_company_access(db, company_id: int | None, current_user) -> No
         return
     if company.owner_id != current_user.id:
         raise_forbidden("You do not have permission to reference this company")
+
+
+async def _verify_company_live(db, company_id: int | None) -> None:
+    """Raise 404 if the referenced company is missing or merged away."""
+    if company_id is None:
+        return
+    from src.companies.models import Company
+
+    result = await db.execute(
+        select(Company.id).where(
+            Company.id == company_id,
+            Company.status != "merged",
+            Company.merged_into_id.is_(None),
+        )
+    )
+    if result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Company not found")
 
 
 # ``_verify_quote_access`` removed 2026-05-14 — quotes router unmounted.
@@ -92,6 +132,16 @@ async def _verify_stripe_customer_access(
     )
     sc = result.scalar_one_or_none()
     if sc is None:
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Stripe customer not found")
+    if sc.contact_id is not None and (
+        sc.contact is None or sc.contact.deleted_at is not None
+    ):
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Stripe customer not found")
+    if sc.company_id is not None and (
+        sc.company is None
+        or sc.company.status == "merged"
+        or sc.company.merged_into_id is not None
+    ):
         raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Stripe customer not found")
     if _is_privileged(current_user):
         return sc
