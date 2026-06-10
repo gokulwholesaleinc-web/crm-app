@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from src.core.constants import ENTITY_TYPE_PAYMENTS
 from src.core.data_scope import DataScope, get_data_scope
 from src.core.router_utils import CurrentUser, DBSession, calculate_pages
+from src.payments._router_helpers import _verify_company_live, _verify_contact_live
 from src.payments.routers import customers, diagnostics, invoices, payments, products, subscriptions
 from src.payments.schemas import PaymentListResponse, PaymentResponse
 from src.payments.service import PaymentService
@@ -37,6 +38,9 @@ async def list_payments(
     tab on the contact and company detail pages.
     """
     effective_owner_id = owner_id if data_scope.can_see_all() else data_scope.owner_id
+
+    await _verify_contact_live(db, contact_id)
+    await _verify_company_live(db, company_id)
 
     service = PaymentService(db)
 

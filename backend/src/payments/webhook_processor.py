@@ -640,6 +640,17 @@ class WebhookProcessor:
             )
             customer_row = cust_result.scalar_one_or_none()
 
+        if (
+            subscription is not None
+            and customer_row is not None
+            and subscription.customer_id != customer_row.id
+        ):
+            raise ValueError(
+                "invoice.paid customer mismatch for subscription "
+                f"{stripe_subscription_id}: invoice customer {stripe_customer_id} "
+                f"does not match local customer {subscription.customer_id}"
+            )
+
         if subscription is None and customer_row is None:
             # Nothing to link to — log and drop instead of inserting an
             # orphan Payment row.

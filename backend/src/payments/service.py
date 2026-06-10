@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import String, func, or_, select
+from sqlalchemy import String, and_, func, or_, select
 from sqlalchemy.orm import selectinload
 
 from src.config import settings
@@ -61,6 +61,13 @@ def _stable_stripe_idempotency_key(prefix: str, *parts: object) -> str:
 
 
 logger = logging.getLogger(__name__)
+
+
+def _company_live_filters(Company):
+    return (
+        Company.status != "merged",
+        Company.merged_into_id.is_(None),
+    )
 
 
 def _get_stripe():
@@ -234,9 +241,19 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
             query = query.join(Payment.customer, isouter=True)
 
         if contact_id is not None:
-            query = query.where(StripeCustomer.contact_id == contact_id)
+            from src.contacts.models import Contact
+
+            query = query.join(Contact, StripeCustomer.contact_id == Contact.id).where(
+                StripeCustomer.contact_id == contact_id,
+                Contact.deleted_at.is_(None),
+            )
         if company_id is not None:
-            query = query.where(StripeCustomer.company_id == company_id)
+            from src.companies.models import Company
+
+            query = query.join(Company, StripeCustomer.company_id == Company.id).where(
+                StripeCustomer.company_id == company_id,
+                *_company_live_filters(Company),
+            )
 
         if owner_id:
             if shared_entity_ids:
@@ -509,8 +526,38 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         if contact_id is None and company_id is None:
             raise ValueError("Either contact_id or company_id is required")
 
-        # Check if we already have a StripeCustomer for this entity
-        if contact_id:
+        if contact_id is not None:
+            from src.contacts.models import Contact
+
+            contact_result = await self.db.execute(
+                select(Contact).where(
+                    Contact.id == contact_id,
+                    Contact.deleted_at.is_(None),
+                )
+            )
+            contact = contact_result.scalar_one_or_none()
+            if not contact:
+                raise ValueError(f"Contact {contact_id} not found")
+            email = email or contact.email
+            name = name or getattr(contact, "full_name", None)
+
+        if company_id is not None:
+            from src.companies.models import Company
+
+            company_result = await self.db.execute(
+                select(Company).where(
+                    Company.id == company_id,
+                    *_company_live_filters(Company),
+                )
+            )
+            company = company_result.scalar_one_or_none()
+            if not company:
+                raise ValueError(f"Company {company_id} not found")
+            email = email or company.email
+            name = name or company.name
+
+        # Check if we already have a StripeCustomer for this live entity
+        if contact_id is not None:
             result = await self.db.execute(
                 select(StripeCustomer).where(StripeCustomer.contact_id == contact_id)
             )
@@ -518,35 +565,13 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
             if existing:
                 return existing
 
-        if company_id:
+        if company_id is not None:
             result = await self.db.execute(
                 select(StripeCustomer).where(StripeCustomer.company_id == company_id)
             )
             existing = result.scalar_one_or_none()
             if existing:
                 return existing
-
-        # Resolve email/name from contact or company if not provided, and
-        # validate the CRM entity before creating anything in Stripe.
-        if contact_id:
-            from src.contacts.models import Contact
-
-            contact_result = await self.db.execute(select(Contact).where(Contact.id == contact_id))
-            contact = contact_result.scalar_one_or_none()
-            if not contact:
-                raise ValueError(f"Contact {contact_id} not found")
-            email = email or contact.email
-            name = name or getattr(contact, "full_name", None)
-
-        if company_id:
-            from src.companies.models import Company
-
-            company_result = await self.db.execute(select(Company).where(Company.id == company_id))
-            company = company_result.scalar_one_or_none()
-            if not company:
-                raise ValueError(f"Company {company_id} not found")
-            email = email or company.email
-            name = name or company.name
 
         # Try to create Stripe customer
         stripe = _get_stripe()
@@ -1447,7 +1472,24 @@ class StripeCustomerService:
         in JS (which 422'd because the endpoint capped page_size at
         100).
         """
-        query = select(StripeCustomer)
+        from src.companies.models import Company
+        from src.contacts.models import Contact
+
+        query = (
+            select(StripeCustomer)
+            .outerjoin(Contact, StripeCustomer.contact_id == Contact.id)
+            .outerjoin(Company, StripeCustomer.company_id == Company.id)
+            .where(
+                or_(
+                    StripeCustomer.contact_id.is_(None),
+                    Contact.deleted_at.is_(None),
+                ),
+                or_(
+                    StripeCustomer.company_id.is_(None),
+                    and_(*_company_live_filters(Company)),
+                ),
+            )
+        )
         # OR semantics when both ids are present: a single Stripe
         # customer may be linked at the company level only, while the
         # frontend asks "does this contact's record have a payment
@@ -1457,14 +1499,26 @@ class StripeCustomerService:
         if contact_id is not None and company_id is not None:
             query = query.where(
                 or_(
-                    StripeCustomer.contact_id == contact_id,
-                    StripeCustomer.company_id == company_id,
+                    and_(
+                        StripeCustomer.contact_id == contact_id,
+                        Contact.deleted_at.is_(None),
+                    ),
+                    and_(
+                        StripeCustomer.company_id == company_id,
+                        *_company_live_filters(Company),
+                    ),
                 )
             )
         elif contact_id is not None:
-            query = query.where(StripeCustomer.contact_id == contact_id)
+            query = query.where(
+                StripeCustomer.contact_id == contact_id,
+                Contact.deleted_at.is_(None),
+            )
         elif company_id is not None:
-            query = query.where(StripeCustomer.company_id == company_id)
+            query = query.where(
+                StripeCustomer.company_id == company_id,
+                *_company_live_filters(Company),
+            )
 
         count_query = select(func.count()).select_from(query.subquery())
         total_result = await self.db.execute(count_query)

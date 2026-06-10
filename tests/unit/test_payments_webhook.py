@@ -382,6 +382,51 @@ class TestHandleInvoicePaid:
         assert new_payment.amount == Decimal("29.99")
 
     @pytest.mark.asyncio
+    async def test_subscription_renewal_raises_on_customer_mismatch(
+        self,
+        db_session: AsyncSession,
+        payment_service: PaymentService,
+        test_user: User,
+    ):
+        """Renewal invoices must belong to the same customer as the subscription."""
+        subscription_customer = StripeCustomer(
+            stripe_customer_id="cus_renewal_sub_owner",
+            email="subscription-owner@example.com",
+            name="Subscription Owner",
+        )
+        invoice_customer = StripeCustomer(
+            stripe_customer_id="cus_renewal_invoice_other",
+            email="invoice-other@example.com",
+            name="Invoice Other",
+        )
+        db_session.add_all([subscription_customer, invoice_customer])
+        await db_session.flush()
+
+        sub = Subscription(
+            stripe_subscription_id="sub_renewal_mismatch",
+            customer_id=subscription_customer.id,
+            status="active",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(sub)
+        await db_session.commit()
+
+        with pytest.raises(ValueError, match="customer mismatch"):
+            await payment_service._handle_invoice_paid({
+                "id": "in_renewal_mismatch",
+                "subscription": "sub_renewal_mismatch",
+                "customer": "cus_renewal_invoice_other",
+                "amount_paid": 2999,
+                "currency": "usd",
+            })
+
+        result = await db_session.execute(
+            select(Payment).where(Payment.stripe_invoice_id == "in_renewal_mismatch")
+        )
+        assert result.scalar_one_or_none() is None
+
+    @pytest.mark.asyncio
     async def test_unknown_customer_and_subscription_drops_silently(
         self,
         db_session: AsyncSession,
