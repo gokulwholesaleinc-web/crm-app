@@ -987,15 +987,18 @@ class TestDedupMergeSoftDelete:
             )
         )
         company_customers = rows.scalars().all()
-        assert [customer.id for customer in company_customers] == [newer_customer_id]
-        assert await db_session.get(StripeCustomer, older_customer_id) is None
+        assert [customer.id for customer in company_customers] == [older_customer_id]
+        archived_newer_customer = await db_session.get(StripeCustomer, newer_customer_id)
+        assert archived_newer_customer is not None
+        assert archived_newer_customer.company_id is None
+        assert archived_newer_customer.contact_id is None
 
         merged_payment = await db_session.get(Payment, payment_id)
         merged_subscription = await db_session.get(Subscription, subscription_id)
         assert merged_payment is not None
         assert merged_subscription is not None
-        assert merged_payment.customer_id == newer_customer_id
-        assert merged_subscription.customer_id == newer_customer_id
+        assert merged_payment.customer_id == older_customer_id
+        assert merged_subscription.customer_id == older_customer_id
 
     @pytest.mark.asyncio
     async def test_merge_same_id_raises(

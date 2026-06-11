@@ -403,6 +403,7 @@ class TestStripeCustomer:
         db_session: AsyncSession,
         test_company,
         test_contact,
+        caplog,
     ):
         """Duplicate company rows should not raise MultipleResultsFound."""
         older_company_customer = StripeCustomer(
@@ -433,11 +434,16 @@ class TestStripeCustomer:
         expected_id = newer_company_customer.id
         await db_session.commit()
 
-        customer = await PaymentService(db_session).sync_customer(
-            company_id=test_company.id
-        )
+        with caplog.at_level("WARNING", logger="src.payments.service"):
+            customer = await PaymentService(db_session).sync_customer(
+                company_id=test_company.id
+            )
 
         assert customer.id == expected_id
+        assert any(
+            "Multiple StripeCustomer rows matched company_id" in record.message
+            for record in caplog.records
+        )
 
     @pytest.mark.asyncio
     async def test_sync_customer_admin_blocked_on_soft_deleted_contact(

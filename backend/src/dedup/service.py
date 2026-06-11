@@ -16,6 +16,8 @@ from src.leads.models import Lead
 
 logger = logging.getLogger(__name__)
 
+ACTIVE_SUBSCRIPTION_STATUSES = ("active", "trialing", "past_due")
+
 
 # Company suffixes to strip for normalization
 COMPANY_SUFFIXES = re.compile(
@@ -40,6 +42,15 @@ def normalize_company_name(name: str) -> str:
 def normalize_phone(phone: str) -> str:
     """Normalize phone number by stripping non-digit characters."""
     return re.sub(r"\D", "", phone)
+
+
+def _stripe_customer_recency_key(customer: Any) -> tuple[bool, str, int]:
+    created_at = getattr(customer, "created_at", None)
+    return (
+        created_at is not None,
+        created_at.isoformat() if created_at is not None else "",
+        int(getattr(customer, "id", 0) or 0),
+    )
 
 
 def names_are_similar(name1: str, name2: str) -> bool:
@@ -546,17 +557,32 @@ class DedupService:
                 StripeCustomer.company_id.in_([from_id, to_id]),
                 StripeCustomer.contact_id.is_(None),
             )
-            .order_by(
-                StripeCustomer.created_at.desc().nulls_last(),
-                StripeCustomer.id.desc(),
-            )
         )
         company_customers = list(result.scalars().all())
         if not company_customers:
             return
 
-        keep = company_customers[0]
-        loser_ids = [customer.id for customer in company_customers[1:]]
+        live_counts = await self._stripe_customer_live_link_counts(
+            [int(customer.id) for customer in company_customers]
+        )
+        keep, skip_reason = self._choose_stripe_customer_to_keep(
+            company_customers,
+            live_counts,
+        )
+        if keep is None:
+            for customer in company_customers:
+                customer.company_id = to_id
+            logger.warning(
+                "Skipped StripeCustomer coalesce for company merge %s->%s: %s "
+                "(candidate_ids=%s)",
+                from_id,
+                to_id,
+                skip_reason,
+                [customer.id for customer in company_customers],
+            )
+            return
+
+        loser_ids = [customer.id for customer in company_customers if customer.id != keep.id]
         if loser_ids:
             await self.db.execute(
                 update(Payment)
@@ -568,10 +594,80 @@ class DedupService:
                 .where(Subscription.customer_id.in_(loser_ids))
                 .values(customer_id=keep.id)
             )
-            for customer in company_customers[1:]:
-                await self.db.delete(customer)
+            for customer in company_customers:
+                if customer.id != keep.id:
+                    customer.company_id = None
+                    customer.contact_id = None
 
         keep.company_id = to_id
+
+    async def _stripe_customer_live_link_counts(
+        self,
+        customer_ids: list[int],
+    ) -> dict[int, dict[str, int]]:
+        from src.payments.models import Payment, Subscription
+
+        counts = {
+            customer_id: {"active_subscriptions": 0, "payments": 0}
+            for customer_id in customer_ids
+        }
+        if not customer_ids:
+            return counts
+
+        subscription_rows = await self.db.execute(
+            select(Subscription.customer_id, func.count(Subscription.id))
+            .where(
+                Subscription.customer_id.in_(customer_ids),
+                Subscription.status.in_(ACTIVE_SUBSCRIPTION_STATUSES),
+            )
+            .group_by(Subscription.customer_id)
+        )
+        for customer_id, count in subscription_rows.all():
+            counts[int(customer_id)]["active_subscriptions"] = int(count or 0)
+
+        payment_rows = await self.db.execute(
+            select(Payment.customer_id, func.count(Payment.id))
+            .where(Payment.customer_id.in_(customer_ids))
+            .group_by(Payment.customer_id)
+        )
+        for customer_id, count in payment_rows.all():
+            counts[int(customer_id)]["payments"] = int(count or 0)
+
+        return counts
+
+    @staticmethod
+    def _choose_stripe_customer_to_keep(
+        customers: list[Any],
+        live_counts: dict[int, dict[str, int]],
+    ) -> tuple[Any | None, str | None]:
+        live_customers = [
+            customer
+            for customer in customers
+            if (
+                live_counts.get(int(customer.id), {}).get("active_subscriptions", 0) > 0
+                or live_counts.get(int(customer.id), {}).get("payments", 0) > 0
+            )
+        ]
+        if len(live_customers) > 1:
+            return None, "multiple StripeCustomer rows have live billing links"
+
+        active_subscription_customers = [
+            customer
+            for customer in customers
+            if live_counts.get(int(customer.id), {}).get("active_subscriptions", 0) > 0
+        ]
+        if active_subscription_customers:
+            return max(active_subscription_customers, key=_stripe_customer_recency_key), None
+
+        payment_customers = [
+            customer
+            for customer in customers
+            if live_counts.get(int(customer.id), {}).get("payments", 0) > 0
+        ]
+        if payment_customers:
+            return max(payment_customers, key=_stripe_customer_recency_key), None
+
+        return max(customers, key=_stripe_customer_recency_key), None
 
     async def _log_merge_audit(
         self,
