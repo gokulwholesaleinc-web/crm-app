@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import String, and_, func, or_, select
+from sqlalchemy import String, and_, case, func, or_, select
 from sqlalchemy.orm import selectinload
 
 from src.config import settings
@@ -62,6 +62,17 @@ def _stable_stripe_idempotency_key(prefix: str, *parts: object) -> str:
 
 
 logger = logging.getLogger(__name__)
+
+
+def _stripe_customer_recency_order():
+    return (StripeCustomer.created_at.desc().nulls_last(), StripeCustomer.id.desc())
+
+
+def _company_stripe_customer_order():
+    return (
+        case((StripeCustomer.contact_id.is_(None), 0), else_=1),
+        *_stripe_customer_recency_order(),
+    )
 
 
 def _get_stripe():
@@ -553,17 +564,21 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         # Check if we already have a StripeCustomer for this live entity
         if contact_id is not None:
             result = await self.db.execute(
-                select(StripeCustomer).where(StripeCustomer.contact_id == contact_id)
+                select(StripeCustomer)
+                .where(StripeCustomer.contact_id == contact_id)
+                .order_by(*_stripe_customer_recency_order())
             )
-            existing = result.scalar_one_or_none()
+            existing = result.scalars().first()
             if existing:
                 return existing
 
         if company_id is not None:
             result = await self.db.execute(
-                select(StripeCustomer).where(StripeCustomer.company_id == company_id)
+                select(StripeCustomer)
+                .where(StripeCustomer.company_id == company_id)
+                .order_by(*_company_stripe_customer_order())
             )
-            existing = result.scalar_one_or_none()
+            existing = result.scalars().first()
             if existing:
                 return existing
 

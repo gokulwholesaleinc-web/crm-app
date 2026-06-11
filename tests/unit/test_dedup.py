@@ -5,7 +5,7 @@ Tests for contact dedup (email, phone, name match), company dedup (name match),
 merge operations, and no-false-positive verification.
 """
 
-from datetime import UTC
+from datetime import UTC, datetime
 
 import pytest
 from httpx import AsyncClient
@@ -195,6 +195,45 @@ class TestDedupCheckCompanies:
         assert response.status_code == 200
         data = response.json()
         assert data["has_duplicates"] is True
+
+    @pytest.mark.asyncio
+    async def test_check_duplicate_company_ignores_merged_candidates(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+    ):
+        """Merged company tombstones must not be offered as duplicate targets."""
+        live_root = Company(
+            name="Dead Candidate Root",
+            status="customer",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        merged_candidate = Company(
+            name="Dead Candidate LLC",
+            status="merged",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add_all([live_root, merged_candidate])
+        await db_session.flush()
+        merged_candidate.merged_into_id = live_root.id
+        await db_session.commit()
+
+        response = await client.post(
+            "/api/dedup/check",
+            headers=auth_headers,
+            json={
+                "entity_type": "companies",
+                "data": {"name": "Dead Candidate"},
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["has_duplicates"] is False
 
     @pytest.mark.asyncio
     async def test_check_no_duplicate_company(
@@ -877,6 +916,88 @@ class TestDedupMergeSoftDelete:
         assert customer.company_id == primary.id
 
     @pytest.mark.asyncio
+    async def test_merge_companies_coalesces_duplicate_company_stripe_customers(
+        self,
+        db_session: AsyncSession,
+        test_user: User,
+    ):
+        """Company-owned StripeCustomer rows must collapse onto one survivor."""
+        from src.dedup.service import DedupService
+        from src.payments.models import Payment, StripeCustomer, Subscription
+
+        primary = Company(
+            name="Stripe Duplicate Primary Co",
+            status="customer",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        secondary = Company(
+            name="Stripe Duplicate Secondary Co",
+            status="prospect",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add_all([primary, secondary])
+        await db_session.flush()
+
+        older_primary_customer = StripeCustomer(
+            stripe_customer_id="cus_company_merge_old",
+            company_id=primary.id,
+            email="old-billing@example.com",
+            created_at=datetime(2026, 1, 1, tzinfo=UTC),
+        )
+        newer_secondary_customer = StripeCustomer(
+            stripe_customer_id="cus_company_merge_new",
+            company_id=secondary.id,
+            email="new-billing@example.com",
+            created_at=datetime(2026, 2, 1, tzinfo=UTC),
+        )
+        db_session.add_all([older_primary_customer, newer_secondary_customer])
+        await db_session.flush()
+        older_customer_id = older_primary_customer.id
+        newer_customer_id = newer_secondary_customer.id
+
+        payment = Payment(
+            stripe_payment_intent_id="pi_company_merge_loser",
+            amount=125,
+            currency="USD",
+            status="succeeded",
+            customer_id=older_customer_id,
+        )
+        subscription = Subscription(
+            stripe_subscription_id="sub_company_merge_loser",
+            customer_id=older_customer_id,
+            status="active",
+        )
+        db_session.add_all([payment, subscription])
+        await db_session.flush()
+        payment_id = payment.id
+        subscription_id = subscription.id
+        await db_session.commit()
+
+        await DedupService(db_session).merge_companies(
+            primary.id, secondary.id, user_id=test_user.id
+        )
+        await db_session.commit()
+
+        rows = await db_session.execute(
+            select(StripeCustomer).where(
+                StripeCustomer.company_id == primary.id,
+                StripeCustomer.contact_id.is_(None),
+            )
+        )
+        company_customers = rows.scalars().all()
+        assert [customer.id for customer in company_customers] == [newer_customer_id]
+        assert await db_session.get(StripeCustomer, older_customer_id) is None
+
+        merged_payment = await db_session.get(Payment, payment_id)
+        merged_subscription = await db_session.get(Subscription, subscription_id)
+        assert merged_payment is not None
+        assert merged_subscription is not None
+        assert merged_payment.customer_id == newer_customer_id
+        assert merged_subscription.customer_id == newer_customer_id
+
+    @pytest.mark.asyncio
     async def test_merge_same_id_raises(
         self,
         db_session: AsyncSession,
@@ -887,6 +1008,82 @@ class TestDedupMergeSoftDelete:
 
         with pytest.raises(ValueError, match="itself"):
             await DedupService(db_session).merge_contacts(1, 1)
+
+    @pytest.mark.asyncio
+    async def test_merge_contacts_rejects_already_merged_primary(
+        self,
+        db_session: AsyncSession,
+        test_user: User,
+    ):
+        from src.dedup.service import DedupService
+
+        survivor = Contact(
+            first_name="Canonical",
+            last_name="Winner",
+            email="canonical-winner@example.com",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        merged_primary = Contact(
+            first_name="Merged",
+            last_name="Primary",
+            email="merged-primary-contact@example.com",
+            deleted_at=datetime.now(UTC),
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        secondary = Contact(
+            first_name="Live",
+            last_name="Secondary",
+            email="live-secondary-contact@example.com",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add_all([survivor, merged_primary, secondary])
+        await db_session.flush()
+        merged_primary.merged_into_id = survivor.id
+        await db_session.commit()
+
+        with pytest.raises(ValueError, match="Primary contact"):
+            await DedupService(db_session).merge_contacts(
+                merged_primary.id, secondary.id, user_id=test_user.id
+            )
+
+    @pytest.mark.asyncio
+    async def test_merge_companies_rejects_already_merged_primary(
+        self,
+        db_session: AsyncSession,
+        test_user: User,
+    ):
+        from src.dedup.service import DedupService
+
+        survivor = Company(
+            name="Canonical Company Winner",
+            status="customer",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        merged_primary = Company(
+            name="Merged Company Primary",
+            status="merged",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        secondary = Company(
+            name="Live Company Secondary",
+            status="prospect",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add_all([survivor, merged_primary, secondary])
+        await db_session.flush()
+        merged_primary.merged_into_id = survivor.id
+        await db_session.commit()
+
+        with pytest.raises(ValueError, match="Primary company"):
+            await DedupService(db_session).merge_companies(
+                merged_primary.id, secondary.id, user_id=test_user.id
+            )
 
     @pytest.mark.asyncio
     async def test_merge_leads_soft_deletes(
@@ -1345,6 +1542,56 @@ class TestMergeCluster:
             json={"entity_type": "contacts", "winner_id": 1, "loser_ids": [1, 2]},
         )
         assert resp.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_merge_cluster_rejects_already_merged_winner(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        manager_auth_headers: dict,
+        test_user: User,
+    ):
+        survivor = Contact(
+            first_name="Cluster",
+            last_name="Survivor",
+            email="cluster-survivor@example.com",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        winner = Contact(
+            first_name="Dead",
+            last_name="Winner",
+            email="dead-winner@example.com",
+            deleted_at=datetime.now(UTC),
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        loser = Contact(
+            first_name="Live",
+            last_name="Loser",
+            email="live-loser@example.com",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add_all([survivor, winner, loser])
+        await db_session.flush()
+        winner.merged_into_id = survivor.id
+        await db_session.commit()
+
+        resp = await client.post(
+            "/api/dedup/merge-cluster",
+            headers=manager_auth_headers,
+            json={
+                "entity_type": "contacts",
+                "winner_id": winner.id,
+                "loser_ids": [loser.id],
+            },
+        )
+
+        assert resp.status_code == 400
+        await db_session.refresh(loser)
+        assert loser.deleted_at is None
+        assert loser.merged_into_id is None
 
     @pytest.mark.asyncio
     async def test_merge_cluster_partial_failure_continues(
