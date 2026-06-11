@@ -392,6 +392,14 @@ function FieldCard({
             size="sm"
           />
         )}
+        {isUpload && (
+          <Switch
+            checked={Boolean(field.sensitive)}
+            onChange={(v) => onChange({ sensitive: v })}
+            label="Sensitive (restricted access)"
+            size="sm"
+          />
+        )}
         {isText && field.kind === 'short_text' && (
           <div className="w-44">
             <Select

@@ -87,12 +87,13 @@ def validate_upload_definitions(defs: list[dict]) -> None:
         if not isinstance(field_label, str) or not field_label.strip():
             raise FieldDefinitionError(f"{label}: a non-empty label is required")
 
-        # ``required`` must be a REAL bool — a stringy ``"false"`` is truthy at
-        # fill time and would silently force the upload.
-        if "required" in field and not isinstance(field["required"], bool):
-            raise FieldDefinitionError(
-                f"{label}: required must be true or false"
-            )
+        # These flags must be REAL bools: stringy ``"false"`` is truthy at
+        # fill time, which can silently force an upload or mark it sensitive.
+        for bool_key in ("required", "sensitive"):
+            if bool_key in field and not isinstance(field[bool_key], bool):
+                raise FieldDefinitionError(
+                    f"{label}: {bool_key} must be true or false"
+                )
 
         if field.get("prefill") not in (None, *ALLOWED_PREFILL):
             raise FieldDefinitionError(

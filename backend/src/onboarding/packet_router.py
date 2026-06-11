@@ -158,8 +158,16 @@ async def get_packet(
     service, packet = await _load_packet_checked(
         db, packet_id, current_user, data_scope
     )
-    # Detail view: include the client-uploaded files (D5).
-    return await build_packet_response(db, service, packet, with_uploads=True)
+    # Detail view: include the client-uploaded files (D5). Sensitive upload
+    # metadata is owner/admin-only, mirroring the attachments list gate.
+    include_sensitive = await _may_read_sensitive(db, packet, data_scope)
+    return await build_packet_response(
+        db,
+        service,
+        packet,
+        with_uploads=True,
+        include_sensitive_uploads=include_sensitive,
+    )
 
 
 @router.post("/packets/{packet_id}/revoke", response_model=PacketResponse)
@@ -297,16 +305,16 @@ async def purge_pii(
     return PurgeResult(purged=True)
 
 
-async def _assert_owner_or_admin(db, packet, data_scope: DataScope) -> None:
-    """Owner-or-admin gate for the sensitive-secret read (§D.4 / §F #3).
+async def _may_read_sensitive(db, packet, data_scope: DataScope) -> bool:
+    """True iff the caller may read this packet's sensitive material.
 
     The route already ran ``require_entity_access`` (contact access). For the
-    encrypted F4-password read that is NOT enough: only an admin/manager
-    (``can_see_all``) OR the contact OWNER may decrypt. A shared-list reader is
-    refused.
+    encrypted F4-password read and sensitive upload metadata, that is NOT
+    enough: only an admin/manager (``can_see_all``) OR the contact OWNER may
+    read it. A shared-list reader is refused.
     """
     if data_scope.can_see_all():
-        return
+        return True
     from src.contacts.models import Contact
 
     owner_id = (
@@ -314,7 +322,12 @@ async def _assert_owner_or_admin(db, packet, data_scope: DataScope) -> None:
             select(Contact.owner_id).where(Contact.id == packet.contact_id)
         )
     ).scalar_one_or_none()
-    if owner_id is None or owner_id != data_scope.user_id:
+    return owner_id is not None and owner_id == data_scope.user_id
+
+
+async def _assert_owner_or_admin(db, packet, data_scope: DataScope) -> None:
+    """Owner-or-admin gate for the sensitive-secret read (§D.4 / §F #3)."""
+    if not await _may_read_sensitive(db, packet, data_scope):
         raise HTTPException(
             status_code=HTTPStatus.FORBIDDEN,
             detail="Only the contact owner or an admin may read these values.",
