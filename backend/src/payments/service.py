@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import String, and_, func, or_, select
+from sqlalchemy import String, and_, case, func, or_, select
 from sqlalchemy.orm import selectinload
 
 from src.config import settings
@@ -18,6 +18,7 @@ from src.core.sorting import build_order_clauses
 from src.email.types import EmailAttachment
 from src.payments.amounts import to_stripe_minor_units as _to_stripe_amount
 from src.payments.exceptions import NoRecipientEmailError
+from src.payments.liveness import live_company_filter, live_contact_filter
 from src.payments.models import (
     Payment,
     Product,
@@ -61,12 +62,26 @@ def _stable_stripe_idempotency_key(prefix: str, *parts: object) -> str:
 
 
 logger = logging.getLogger(__name__)
+ACTIVE_SUBSCRIPTION_STATUSES = ("active", "trialing", "past_due")
 
 
-def _company_live_filters(Company):
+def _stripe_customer_recency_order():
+    return (StripeCustomer.created_at.desc().nulls_last(), StripeCustomer.id.desc())
+
+
+def _stripe_customer_recency_key(customer: StripeCustomer) -> tuple[bool, str, int]:
+    created_at = customer.created_at
     return (
-        Company.status != "merged",
-        Company.merged_into_id.is_(None),
+        created_at is not None,
+        created_at.isoformat() if created_at is not None else "",
+        int(customer.id or 0),
+    )
+
+
+def _company_stripe_customer_order():
+    return (
+        case((StripeCustomer.contact_id.is_(None), 0), else_=1),
+        *_stripe_customer_recency_order(),
     )
 
 
@@ -245,14 +260,14 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
 
             query = query.join(Contact, StripeCustomer.contact_id == Contact.id).where(
                 StripeCustomer.contact_id == contact_id,
-                Contact.deleted_at.is_(None),
+                *live_contact_filter(Contact),
             )
         if company_id is not None:
             from src.companies.models import Company
 
             query = query.join(Company, StripeCustomer.company_id == Company.id).where(
                 StripeCustomer.company_id == company_id,
-                *_company_live_filters(Company),
+                *live_company_filter(Company),
             )
 
         if owner_id:
@@ -532,7 +547,7 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
             contact_result = await self.db.execute(
                 select(Contact).where(
                     Contact.id == contact_id,
-                    Contact.deleted_at.is_(None),
+                    *live_contact_filter(Contact),
                 )
             )
             contact = contact_result.scalar_one_or_none()
@@ -547,7 +562,7 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
             company_result = await self.db.execute(
                 select(Company).where(
                     Company.id == company_id,
-                    *_company_live_filters(Company),
+                    *live_company_filter(Company),
                 )
             )
             company = company_result.scalar_one_or_none()
@@ -559,17 +574,33 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         # Check if we already have a StripeCustomer for this live entity
         if contact_id is not None:
             result = await self.db.execute(
-                select(StripeCustomer).where(StripeCustomer.contact_id == contact_id)
+                select(StripeCustomer)
+                .where(StripeCustomer.contact_id == contact_id)
+                .order_by(*_stripe_customer_recency_order())
             )
-            existing = result.scalar_one_or_none()
+            contact_customers = list(result.scalars().all())
+            existing = await self._select_existing_stripe_customer(
+                contact_customers,
+                context=f"contact_id={contact_id}",
+            )
             if existing:
                 return existing
 
         if company_id is not None:
             result = await self.db.execute(
-                select(StripeCustomer).where(StripeCustomer.company_id == company_id)
+                select(StripeCustomer)
+                .where(StripeCustomer.company_id == company_id)
+                .order_by(*_company_stripe_customer_order())
             )
-            existing = result.scalar_one_or_none()
+            company_customers = list(result.scalars().all())
+            company_owned_customers = [
+                customer for customer in company_customers if customer.contact_id is None
+            ]
+            existing = await self._select_existing_stripe_customer(
+                company_owned_customers or company_customers,
+                context=f"company_id={company_id}",
+                matched_count=len(company_customers),
+            )
             if existing:
                 return existing
 
@@ -607,6 +638,81 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         await self.db.flush()
         await self.db.refresh(customer)
         return customer
+
+    async def _select_existing_stripe_customer(
+        self,
+        customers: list[StripeCustomer],
+        *,
+        context: str,
+        matched_count: int | None = None,
+    ) -> StripeCustomer | None:
+        if not customers:
+            return None
+
+        live_counts = await self._stripe_customer_live_link_counts(
+            [int(customer.id) for customer in customers]
+        )
+        active_subscription_customers = [
+            customer
+            for customer in customers
+            if live_counts.get(int(customer.id), {}).get("active_subscriptions", 0) > 0
+        ]
+        if active_subscription_customers:
+            selected = max(active_subscription_customers, key=_stripe_customer_recency_key)
+        else:
+            payment_customers = [
+                customer
+                for customer in customers
+                if live_counts.get(int(customer.id), {}).get("payments", 0) > 0
+            ]
+            selected = max(
+                payment_customers or customers,
+                key=_stripe_customer_recency_key,
+            )
+
+        duplicate_count = matched_count if matched_count is not None else len(customers)
+        if duplicate_count > 1:
+            logger.warning(
+                "Multiple StripeCustomer rows matched %s; selected id=%s "
+                "from candidate_ids=%s",
+                context,
+                selected.id,
+                [customer.id for customer in customers],
+            )
+
+        return selected
+
+    async def _stripe_customer_live_link_counts(
+        self,
+        customer_ids: list[int],
+    ) -> dict[int, dict[str, int]]:
+        counts = {
+            customer_id: {"active_subscriptions": 0, "payments": 0}
+            for customer_id in customer_ids
+        }
+        if not customer_ids:
+            return counts
+
+        subscription_rows = await self.db.execute(
+            select(Subscription.customer_id, func.count(Subscription.id))
+            .where(
+                Subscription.customer_id.in_(customer_ids),
+                Subscription.status.in_(ACTIVE_SUBSCRIPTION_STATUSES),
+            )
+            .group_by(Subscription.customer_id)
+        )
+        for customer_id, count in subscription_rows.all():
+            counts[int(customer_id)]["active_subscriptions"] = int(count or 0)
+
+        payment_rows = await self.db.execute(
+            select(Payment.customer_id, func.count(Payment.id))
+            .where(Payment.customer_id.in_(customer_ids))
+            .group_by(Payment.customer_id)
+        )
+        for customer_id, count in payment_rows.all():
+            counts[int(customer_id)]["payments"] = int(count or 0)
+
+        return counts
 
     async def process_webhook(self, payload: bytes, sig_header: str) -> dict:
         """Process a Stripe webhook event.
@@ -1482,11 +1588,11 @@ class StripeCustomerService:
             .where(
                 or_(
                     StripeCustomer.contact_id.is_(None),
-                    Contact.deleted_at.is_(None),
+                    *live_contact_filter(Contact),
                 ),
                 or_(
                     StripeCustomer.company_id.is_(None),
-                    and_(*_company_live_filters(Company)),
+                    and_(*live_company_filter(Company)),
                 ),
             )
         )
@@ -1501,23 +1607,23 @@ class StripeCustomerService:
                 or_(
                     and_(
                         StripeCustomer.contact_id == contact_id,
-                        Contact.deleted_at.is_(None),
+                        *live_contact_filter(Contact),
                     ),
                     and_(
                         StripeCustomer.company_id == company_id,
-                        *_company_live_filters(Company),
+                        *live_company_filter(Company),
                     ),
                 )
             )
         elif contact_id is not None:
             query = query.where(
                 StripeCustomer.contact_id == contact_id,
-                Contact.deleted_at.is_(None),
+                *live_contact_filter(Contact),
             )
         elif company_id is not None:
             query = query.where(
                 StripeCustomer.company_id == company_id,
-                *_company_live_filters(Company),
+                *live_company_filter(Company),
             )
 
         count_query = select(func.count()).select_from(query.subquery())

@@ -16,6 +16,8 @@ from src.leads.models import Lead
 
 logger = logging.getLogger(__name__)
 
+ACTIVE_SUBSCRIPTION_STATUSES = ("active", "trialing", "past_due")
+
 
 # Company suffixes to strip for normalization
 COMPANY_SUFFIXES = re.compile(
@@ -40,6 +42,15 @@ def normalize_company_name(name: str) -> str:
 def normalize_phone(phone: str) -> str:
     """Normalize phone number by stripping non-digit characters."""
     return re.sub(r"\D", "", phone)
+
+
+def _stripe_customer_recency_key(customer: Any) -> tuple[bool, str, int]:
+    created_at = getattr(customer, "created_at", None)
+    return (
+        created_at is not None,
+        created_at.isoformat() if created_at is not None else "",
+        int(getattr(customer, "id", 0) or 0),
+    )
 
 
 def names_are_similar(name1: str, name2: str) -> bool:
@@ -170,8 +181,11 @@ class DedupService:
         if not name:
             return []
 
-        # Fetch all companies and compare normalized names
-        query = select(Company)
+        # Fetch live companies and compare normalized names
+        query = select(Company).where(
+            Company.status != "merged",
+            Company.merged_into_id.is_(None),
+        )
         if exclude_id:
             query = query.where(Company.id != exclude_id)
 
@@ -324,6 +338,7 @@ class DedupService:
         invoice history that must survive the merge.
         """
         primary, secondary = await self._load_merge_pair(Contact, primary_id, secondary_id)
+        self._ensure_primary_can_accept_merge("contact", primary)
 
         await self._transfer_contact_fks(secondary_id, primary_id)
         await self._transfer_entity_links("contacts", secondary_id, primary_id)
@@ -350,11 +365,12 @@ class DedupService:
         """Merge ``secondary`` company into ``primary``.
 
         Repoints every child FK (contacts, opportunities, quotes,
-        proposals, contracts) + polymorphic links + soft-deletes the
-        secondary with ``status="merged"`` and a ``merged_into_id``
-        forwarding pointer. Writes an audit log entry.
+        proposals, contracts, Stripe customers) + polymorphic links +
+        soft-deletes the secondary with ``status="merged"`` and a
+        ``merged_into_id`` forwarding pointer. Writes an audit log entry.
         """
         primary, secondary = await self._load_merge_pair(Company, primary_id, secondary_id)
+        self._ensure_primary_can_accept_merge("company", primary)
 
         await self._transfer_company_fks(secondary_id, primary_id)
         await self._transfer_entity_links("companies", secondary_id, primary_id)
@@ -388,6 +404,7 @@ class DedupService:
         beyond the polymorphic link transfer.
         """
         primary, secondary = await self._load_merge_pair(Lead, primary_id, secondary_id)
+        self._ensure_primary_can_accept_merge("lead", primary)
 
         await self._transfer_entity_links("leads", secondary_id, primary_id)
 
@@ -425,6 +442,22 @@ class DedupService:
             raise ValueError(f"Secondary {model.__tablename__[:-1]} {secondary_id} not found")
 
         return primary, secondary
+
+    @staticmethod
+    def _ensure_primary_can_accept_merge(entity_type: str, primary: Any) -> None:
+        """Reject tombstone winners so merge output cannot point at dead rows."""
+        if entity_type == "contact":
+            if primary.deleted_at is not None or primary.merged_into_id is not None:
+                raise ValueError(f"Primary contact {primary.id} has already been merged")
+            return
+        if entity_type == "company":
+            if primary.status == "merged" or primary.merged_into_id is not None:
+                raise ValueError(f"Primary company {primary.id} has already been merged")
+            return
+        if entity_type == "lead" and (
+            primary.status == "merged" or primary.merged_into_id is not None
+        ):
+            raise ValueError(f"Primary lead {primary.id} has already been merged")
 
     def _soft_delete_merged(self, contact: Contact, primary_id: int) -> None:
         """Mark a merged-away contact as soft-deleted and free its email slot."""
@@ -497,6 +530,144 @@ class DedupService:
             await self.db.execute(
                 update(model).where(column == from_id).values(company_id=to_id)
             )
+
+        await self._repoint_company_stripe_customers(from_id, to_id)
+
+    async def _repoint_company_stripe_customers(self, from_id: int, to_id: int) -> None:
+        """Move company-owned Stripe customers and collapse duplicates.
+
+        Contact-linked Stripe customers keep their row identity because they
+        can represent a separate payer, but their company pointer still follows
+        the surviving company.
+        """
+        from src.payments.models import Payment, StripeCustomer, Subscription
+
+        await self.db.execute(
+            update(StripeCustomer)
+            .where(
+                StripeCustomer.company_id == from_id,
+                StripeCustomer.contact_id.isnot(None),
+            )
+            .values(company_id=to_id)
+        )
+
+        result = await self.db.execute(
+            select(StripeCustomer)
+            .where(
+                StripeCustomer.company_id.in_([from_id, to_id]),
+                StripeCustomer.contact_id.is_(None),
+            )
+        )
+        company_customers = list(result.scalars().all())
+        if not company_customers:
+            return
+
+        live_counts = await self._stripe_customer_live_link_counts(
+            [int(customer.id) for customer in company_customers]
+        )
+        keep, skip_reason = self._choose_stripe_customer_to_keep(
+            company_customers,
+            live_counts,
+        )
+        if keep is None:
+            for customer in company_customers:
+                customer.company_id = to_id
+            logger.warning(
+                "Skipped StripeCustomer coalesce for company merge %s->%s: %s "
+                "(candidate_ids=%s)",
+                from_id,
+                to_id,
+                skip_reason,
+                [customer.id for customer in company_customers],
+            )
+            return
+
+        loser_ids = [customer.id for customer in company_customers if customer.id != keep.id]
+        if loser_ids:
+            await self.db.execute(
+                update(Payment)
+                .where(Payment.customer_id.in_(loser_ids))
+                .values(customer_id=keep.id)
+            )
+            await self.db.execute(
+                update(Subscription)
+                .where(Subscription.customer_id.in_(loser_ids))
+                .values(customer_id=keep.id)
+            )
+            for customer in company_customers:
+                if customer.id != keep.id:
+                    customer.company_id = None
+                    customer.contact_id = None
+
+        keep.company_id = to_id
+
+    async def _stripe_customer_live_link_counts(
+        self,
+        customer_ids: list[int],
+    ) -> dict[int, dict[str, int]]:
+        from src.payments.models import Payment, Subscription
+
+        counts = {
+            customer_id: {"active_subscriptions": 0, "payments": 0}
+            for customer_id in customer_ids
+        }
+        if not customer_ids:
+            return counts
+
+        subscription_rows = await self.db.execute(
+            select(Subscription.customer_id, func.count(Subscription.id))
+            .where(
+                Subscription.customer_id.in_(customer_ids),
+                Subscription.status.in_(ACTIVE_SUBSCRIPTION_STATUSES),
+            )
+            .group_by(Subscription.customer_id)
+        )
+        for customer_id, count in subscription_rows.all():
+            counts[int(customer_id)]["active_subscriptions"] = int(count or 0)
+
+        payment_rows = await self.db.execute(
+            select(Payment.customer_id, func.count(Payment.id))
+            .where(Payment.customer_id.in_(customer_ids))
+            .group_by(Payment.customer_id)
+        )
+        for customer_id, count in payment_rows.all():
+            counts[int(customer_id)]["payments"] = int(count or 0)
+
+        return counts
+
+    @staticmethod
+    def _choose_stripe_customer_to_keep(
+        customers: list[Any],
+        live_counts: dict[int, dict[str, int]],
+    ) -> tuple[Any | None, str | None]:
+        live_customers = [
+            customer
+            for customer in customers
+            if (
+                live_counts.get(int(customer.id), {}).get("active_subscriptions", 0) > 0
+                or live_counts.get(int(customer.id), {}).get("payments", 0) > 0
+            )
+        ]
+        if len(live_customers) > 1:
+            return None, "multiple StripeCustomer rows have live billing links"
+
+        active_subscription_customers = [
+            customer
+            for customer in customers
+            if live_counts.get(int(customer.id), {}).get("active_subscriptions", 0) > 0
+        ]
+        if active_subscription_customers:
+            return max(active_subscription_customers, key=_stripe_customer_recency_key), None
+
+        payment_customers = [
+            customer
+            for customer in customers
+            if live_counts.get(int(customer.id), {}).get("payments", 0) > 0
+        ]
+        if payment_customers:
+            return max(payment_customers, key=_stripe_customer_recency_key), None
+
+        return max(customers, key=_stripe_customer_recency_key), None
 
     async def _log_merge_audit(
         self,
@@ -640,6 +811,8 @@ class DedupService:
         query = select(model)
         if hasattr(model, "deleted_at"):
             query = query.where(model.deleted_at.is_(None))
+        if hasattr(model, "status"):
+            query = query.where(model.status != "merged")
         if hasattr(model, "merged_into_id"):
             query = query.where(model.merged_into_id.is_(None))
         result = await self.db.execute(query)
@@ -795,6 +968,7 @@ class DedupService:
             "companies": self.merge_companies,
             "leads": self.merge_leads,
         }[entity_type]
+        await self._ensure_cluster_winner_can_accept_merge(entity_type, winner_id)
 
         merged: list[int] = []
         failures: list[dict[str, Any]] = []
@@ -827,3 +1001,18 @@ class DedupService:
             "merged_ids": merged,
             "failures": failures,
         }
+
+    async def _ensure_cluster_winner_can_accept_merge(
+        self,
+        entity_type: str,
+        winner_id: int,
+    ) -> None:
+        model = {"contacts": Contact, "companies": Company, "leads": Lead}[entity_type]
+        singular = {"contacts": "contact", "companies": "company", "leads": "lead"}[
+            entity_type
+        ]
+        result = await self.db.execute(select(model).where(model.id == winner_id))
+        winner = result.scalar_one_or_none()
+        if winner is None:
+            raise ValueError(f"Primary {singular} {winner_id} not found")
+        self._ensure_primary_can_accept_merge(singular, winner)

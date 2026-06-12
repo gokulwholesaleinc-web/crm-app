@@ -12,7 +12,7 @@ import { HelpLink, Spinner, StatusBadge } from '../ui';
 import { usePayments, useSubscriptions } from '../../hooks/usePayments';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { PaymentForLink } from '../../features/payments/PaymentsPage';
-import type { Payment, SubscriptionItem } from '../../types';
+import type { ApiError, Payment, SubscriptionItem } from '../../types';
 
 type EntityType = 'contact' | 'company';
 
@@ -37,8 +37,25 @@ export function EntityPaymentsTab({ entityType, entityId }: Props) {
 
   const payments = paymentsData?.items ?? [];
   const subscriptions = subsData?.items ?? [];
+  const entityUnavailable =
+    isEntityUnavailable(paymentsError) || isEntityUnavailable(subsError);
   const hasNothing =
-    !paymentsLoading && !subsLoading && payments.length === 0 && subscriptions.length === 0;
+    !entityUnavailable
+    && !paymentsLoading
+    && !subsLoading
+    && payments.length === 0
+    && subscriptions.length === 0;
+
+  if (entityUnavailable) {
+    return (
+      <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-5 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
+        <h3 className="font-semibold">Payment history unavailable</h3>
+        <p className="mt-1 text-amber-800 dark:text-amber-200">
+          This {entityType} is archived or merged, so billing history is no longer shown here.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -108,6 +125,10 @@ export function EntityPaymentsTab({ entityType, entityId }: Props) {
       )}
     </div>
   );
+}
+
+function isEntityUnavailable(error: unknown): boolean {
+  return (error as Partial<ApiError> | null)?.status_code === 404;
 }
 
 function PaymentsTable({ payments }: { payments: Payment[] }) {

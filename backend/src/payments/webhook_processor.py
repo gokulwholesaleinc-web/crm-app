@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.payments.amounts import from_stripe_minor_units
 from src.payments.exceptions import NoRecipientEmailError
+from src.payments.liveness import live_owner_id
 from src.payments.models import (
     Payment,
     Price,
@@ -44,27 +45,6 @@ def _payment_context(payment: Payment | None) -> dict | None:
         "quote_id": payment.quote_id,
         "opportunity_id": payment.opportunity_id,
     }
-
-
-def _live_owner_id(customer_row: StripeCustomer | None) -> int | None:
-    """Owner from the linked contact/company, mirroring the router-side
-    liveness rules: a soft-deleted contact (``deleted_at`` set) or a
-    merged-away company contributes nothing, so webhook-created rows never
-    resurrect a dead owner on per-user dashboards."""
-    if customer_row is None:
-        return None
-    contact = customer_row.contact
-    if contact is not None and contact.deleted_at is None and contact.owner_id:
-        return contact.owner_id
-    company = customer_row.company
-    if (
-        company is not None
-        and company.status != "merged"
-        and company.merged_into_id is None
-        and company.owner_id
-    ):
-        return company.owner_id
-    return None
 
 
 class WebhookProcessor:
@@ -522,7 +502,7 @@ class WebhookProcessor:
         # Derive owner_id from the linked contact/company so admin lists
         # still work with the new row — skipping dead links per the
         # soft-delete rules (gap (c) of the soft-delete brief).
-        owner_id = _live_owner_id(customer_row)
+        owner_id = live_owner_id(customer_row)
 
         # Optional: resolve local Price if we happen to have one matching
         # the Stripe price id. `price_id` is now nullable (migration 003)
@@ -694,7 +674,7 @@ class WebhookProcessor:
         if owner_id is None:
             # Liveness-aware fallback (gap (c)): never derive an owner from a
             # soft-deleted contact or merged-away company.
-            owner_id = _live_owner_id(customer_row)
+            owner_id = live_owner_id(customer_row)
 
         if owner_id is None:
             # Per-user dashboard KPIs filter by Payment.owner_id, so an

@@ -398,6 +398,54 @@ class TestStripeCustomer:
         assert resp1.json()["id"] == resp2.json()["id"]
 
     @pytest.mark.asyncio
+    async def test_sync_customer_tolerates_duplicate_company_rows(
+        self,
+        db_session: AsyncSession,
+        test_company,
+        test_contact,
+        caplog,
+    ):
+        """Duplicate company rows should not raise MultipleResultsFound."""
+        older_company_customer = StripeCustomer(
+            stripe_customer_id="cus_sync_company_old",
+            company_id=test_company.id,
+            email="old-company-sync@example.com",
+            created_at=datetime(2026, 1, 1, tzinfo=UTC),
+        )
+        newer_company_customer = StripeCustomer(
+            stripe_customer_id="cus_sync_company_new",
+            company_id=test_company.id,
+            email="new-company-sync@example.com",
+            created_at=datetime(2026, 2, 1, tzinfo=UTC),
+        )
+        newer_contact_customer = StripeCustomer(
+            stripe_customer_id="cus_sync_company_contact",
+            company_id=test_company.id,
+            contact_id=test_contact.id,
+            email="contact-company-sync@example.com",
+            created_at=datetime(2026, 3, 1, tzinfo=UTC),
+        )
+        db_session.add_all([
+            older_company_customer,
+            newer_company_customer,
+            newer_contact_customer,
+        ])
+        await db_session.flush()
+        expected_id = newer_company_customer.id
+        await db_session.commit()
+
+        with caplog.at_level("WARNING", logger="src.payments.service"):
+            customer = await PaymentService(db_session).sync_customer(
+                company_id=test_company.id
+            )
+
+        assert customer.id == expected_id
+        assert any(
+            "Multiple StripeCustomer rows matched company_id" in record.message
+            for record in caplog.records
+        )
+
+    @pytest.mark.asyncio
     async def test_sync_customer_admin_blocked_on_soft_deleted_contact(
         self, client: AsyncClient, test_superuser, test_contact, db_session: AsyncSession,
     ):
